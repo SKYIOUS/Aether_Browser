@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Aether Browser - Settings</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg: oklch(12% 0.01 250);
+            --surface: oklch(18% 0.01 250);
+            --fg: oklch(98% 0.005 250);
+            --muted: oklch(60% 0.01 250);
+            --border: oklch(25% 0.01 250);
+            --accent: oklch(75% 0.12 255);
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+        .settings-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .settings-card:hover {
+            border-color: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .toggle-active {
+            background: var(--accent);
+            transform: translateX(100%);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="flex">
+
+    <!-- Settings Navigation -->
+    <aside class="w-72 h-full border-r border-white/5 flex flex-col p-8 gap-12 bg-[#0a0b0c]">
+        <div>
+            <h1 class="text-xl font-semibold tracking-tighter mb-1">Settings</h1>
+            <p class="text-[10px] uppercase tracking-widest text-zinc-500">Core Configuration</p>
+        </div>
+
+        <nav class="flex flex-col gap-2">
+            <div class="px-4 py-3 rounded-xl bg-white/5 text-accent font-medium flex items-center gap-4 cursor-pointer">
+                <span class="material-symbols-outlined text-[20px]">person</span>
+                <span class="text-sm">Account</span>
+            </div>
+            <div class="px-4 py-3 rounded-xl hover:bg-white/5 text-zinc-400 hover:text-white font-medium flex items-center gap-4 cursor-pointer transition-all">
+                <span class="material-symbols-outlined text-[20px]">security</span>
+                <span class="text-sm">Privacy & Security</span>
+            </div>
+            <div class="px-4 py-3 rounded-xl hover:bg-white/5 text-zinc-400 hover:text-white font-medium flex items-center gap-4 cursor-pointer transition-all">
+                <span class="material-symbols-outlined text-[20px]">palette</span>
+                <span class="text-sm">Appearance</span>
+            </div>
+            <div class="px-4 py-3 rounded-xl hover:bg-white/5 text-zinc-400 hover:text-white font-medium flex items-center gap-4 cursor-pointer transition-all">
+                <span class="material-symbols-outlined text-[20px]">extension</span>
+                <span class="text-sm">Extensions</span>
+            </div>
+            <div class="px-4 py-3 rounded-xl hover:bg-white/5 text-zinc-400 hover:text-white font-medium flex items-center gap-4 cursor-pointer transition-all">
+                <span class="material-symbols-outlined text-[20px]">bolt</span>
+                <span class="text-sm">High Performance</span>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Settings Content -->
+    <main class="flex-1 overflow-y-auto p-16 max-w-4xl">
+        <section class="mb-16">
+            <h2 class="text-3xl font-medium mb-8">Personalization</h2>
+            
+            <div class="grid grid-cols-1 gap-4">
+                <!-- Silent Mode -->
+                <div class="settings-card p-6 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center text-accent">
+                            <span class="material-symbols-outlined text-2xl">visibility_off</span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-white">Enable Silent Flow</p>
+                            <p class="text-xs text-zinc-500">Auto-hide UI chrome when focusing on content</p>
+                        </div>
+                    </div>
+                    <div class="w-12 h-6 bg-zinc-800 rounded-full p-1 cursor-pointer flex items-center">
+                        <div class="w-4 h-4 bg-zinc-400 rounded-full transition-all toggle-active"></div>
+                    </div>
+                </div>
+
+                <!-- Accent Color -->
+                <div class="settings-card p-6 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center gap-5">
+                        <div class="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center text-zinc-400">
+                            <span class="material-symbols-outlined text-2xl">colorize</span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-white">Visual Foundation</p>
+                            <p class="text-xs text-zinc-500">Currently using 'Modern Minimal' palette</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="w-6 h-6 rounded-full bg-[#a5c9ff] border-2 border-white/20"></div>
+                        <div class="w-6 h-6 rounded-full bg-[#ffb4ab] border-2 border-transparent"></div>
+                        <div class="w-6 h-6 rounded-full bg-[#d3bcfc] border-2 border-transparent"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <h2 class="text-3xl font-medium mb-8">Security Context</h2>
+            
+            <div class="space-y-4">
+                <div class="settings-card p-6 rounded-2xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <p class="font-medium text-white">Hardened Sandbox</p>
+                        <span class="text-[10px] font-mono text-accent bg-accent/10 px-2 py-1 rounded">ACTIVE</span>
+                    </div>
+                    <p class="text-sm text-zinc-400 mb-6 leading-relaxed">Aether uses a multi-process architecture with strict memory isolation for every tab. Local data is encrypted using AES-256 by default.</p>
+                    <button class="text-xs text-accent font-medium hover:underline">Manage Security Keys →</button>
+                </div>
+            </div>
+        </section>
+
+        <footer class="pt-16 border-t border-white/5 text-zinc-600 text-xs flex justify-between">
+            <p>Aether Browser v1.4.2-alpha</p>
+            <p>Built with Rust & Love</p>
+        </footer>
+    </main>
+
+</body>
+</html>
