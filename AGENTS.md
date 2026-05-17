@@ -44,6 +44,12 @@ fetch_page_content() — async, runs on Iced background thread via Task::perform
 - Per-tag top margins: h1=24px, h2=20px, h3-h6=16px, p=12px, li=8px, a=4px, _=2px
 - ureq HTTP timeout: 15s global (`timeout_global(Some(Duration::from_secs(15)))`)
 
+## Sync to Local Files
+When told "write to local files", copy all sandbox changes to `C:\Users\nanda\Desktop\KUBUNTU\Browser\Aether_Browser\aether_browser`:
+- Use `robocopy <sandbox> <target> /MIR /XD .git target`
+- Or manually copy the specific changed files
+- This is the canonical project directory; the worktree is a sandbox for testing
+
 ## Important Gotchas
 - **Stratus silently truncates CSS** at 30,000 chars (MAX_INPUT_LENGTH) and 50,000 iterations (MAX_ITERATIONS) — check parser logs
 - **External CSS is capped at 50KB** in browser.rs before being sent to Stratus
