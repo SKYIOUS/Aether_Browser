@@ -8,6 +8,7 @@ pub enum SettingsMessage {
     Back,
     NavItem(usize),
     ToggleSilentFlow,
+    ToggleLogging,
     AccentSelected(usize),
 }
 
@@ -22,18 +23,24 @@ const NAV_ITEMS: [(&str, &str); 5] = [
 pub struct SettingsScreen {
     pub active_nav: usize,
     pub silent_flow: bool,
+    pub logging_enabled: bool,
     pub accent_selected: usize,
 }
 
 impl SettingsScreen {
     pub fn new() -> Self {
-        Self { active_nav: 0, silent_flow: true, accent_selected: 0 }
+        crate::logging::set_enabled(true);
+        Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0 }
     }
 
     pub fn update(&mut self, msg: SettingsMessage) -> Task<SettingsMessage> {
         match msg {
             SettingsMessage::NavItem(i) => self.active_nav = i,
             SettingsMessage::ToggleSilentFlow => self.silent_flow = !self.silent_flow,
+            SettingsMessage::ToggleLogging => {
+                self.logging_enabled = !self.logging_enabled;
+                crate::logging::set_enabled(self.logging_enabled);
+            }
             SettingsMessage::AccentSelected(i) => self.accent_selected = i,
             _ => {}
         }
@@ -117,6 +124,14 @@ impl SettingsScreen {
             self.accent_card(),
         ];
 
+        // Developer section
+        let section_dev = column![
+            text("Developer").size(28).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(24),
+            self.logging_card(),
+        ];
+
         // Security section
         let section_2 = column![
             text("Security Context").size(28).color(C::FG)
@@ -144,6 +159,8 @@ impl SettingsScreen {
             container(
                 column![
                     section_1,
+                    Space::with_height(48),
+                    section_dev,
                     Space::with_height(48),
                     section_2,
                     Space::with_height(48),
@@ -222,6 +239,66 @@ impl SettingsScreen {
         .into()
     }
 
+    fn logging_card(&self) -> Element<'_, SettingsMessage> {
+        let toggle_color = if self.logging_enabled { C::ACCENT } else { C::MUTED };
+        let toggle_text = if self.logging_enabled { "ON" } else { "OFF" };
+
+        let left = row![
+            container(text("⚡").size(22).color(C::ACCENT))
+                .width(48).height(48)
+                .center_x(Length::Fixed(48.0))
+                .center_y(Length::Fixed(48.0))
+                .style(|_| container::Style {
+                    background: Some(iced::Background::Color(C::ACCENT_DIM)),
+                    border: iced::Border { radius: 12.0.into(), ..Default::default() },
+                    ..Default::default()
+                }),
+            column![
+                text("Pipeline Logging").size(14).color(C::FG)
+                    .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+                Space::with_height(4),
+                text("Log all pipeline stages to logs/pipeline_*.log").size(12).color(C::MUTED),
+            ]
+            .spacing(0),
+        ]
+        .spacing(16)
+        .align_y(Alignment::Center);
+
+        let toggle = container(
+            text(toggle_text).size(11).color(toggle_color)
+                .font(iced::Font { weight: iced::font::Weight::Bold, ..Default::default() }),
+        )
+        .padding([6, 12])
+        .style(|_| container::Style {
+            background: Some(iced::Background::Color(C::ACCENT_DIM)),
+            border: iced::Border { color: C::ACCENT_BORDER, width: 1.0, radius: 8.0.into() },
+            ..Default::default()
+        });
+
+        button(
+            row![left, Space::with_width(Length::Fill), toggle]
+                .align_y(Alignment::Center)
+        )
+        .width(Length::Fill)
+        .padding(20)
+        .style(|_, status| {
+            let bg = match status {
+                iced::widget::button::Status::Hovered => {
+                    iced::Color::from_rgba(1.0, 1.0, 1.0, 0.04)
+                }
+                _ => iced::Color::from_rgba(1.0, 1.0, 1.0, 0.02),
+            };
+            iced::widget::button::Style {
+                background: Some(iced::Background::Color(bg)),
+                border: iced::Border { color: C::BORDER, width: 1.0, radius: 16.0.into() },
+                text_color: C::FG,
+                ..Default::default()
+            }
+        })
+        .on_press(SettingsMessage::ToggleLogging)
+        .into()
+    }
+
     fn accent_card(&self) -> Element<'_, SettingsMessage> {
         let accent_colors = [
             iced::Color::from_rgb(0.647, 0.788, 1.0),
@@ -232,21 +309,26 @@ impl SettingsScreen {
         let swatches = row(
             accent_colors.iter().enumerate().map(|(i, &color)| {
                 let selected = i == self.accent_selected;
-                container(Space::with_width(0.0))
-                    .width(24).height(24)
-                    .style(move |_| container::Style {
-                        background: Some(iced::Background::Color(color)),
-                        border: iced::Border {
-                            color: if selected {
-                                iced::Color::WHITE
-                            } else {
-                                iced::Color::TRANSPARENT
+                button(
+                    container(Space::with_width(0.0))
+                        .width(24).height(24)
+                        .style(move |_| container::Style {
+                            background: Some(iced::Background::Color(color)),
+                            border: iced::Border {
+                                color: if selected {
+                                    iced::Color::WHITE
+                                } else {
+                                    iced::Color::TRANSPARENT
+                                },
+                                width: if selected { 2.0 } else { 0.0 },
+                                radius: 999.0.into(),
                             },
-                            width: if selected { 2.0 } else { 0.0 },
-                            radius: 999.0.into(),
-                        },
-                        ..Default::default()
-                    })
+                            ..Default::default()
+                        }),
+                )
+                    .padding(0)
+                    .style(|_, _| iced::widget::button::Style::default())
+                    .on_press(SettingsMessage::AccentSelected(i))
                     .into()
             })
             .collect::<Vec<_>>(),

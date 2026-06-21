@@ -1,11 +1,13 @@
 mod ui;
 pub mod engine;
+mod logging;
 
 use ui::AetherApp;
 use iced::{window, Size};
 
 pub fn main() -> iced::Result {
     iced::application("Aether Browser", AetherApp::update, AetherApp::view)
+        .subscription(AetherApp::subscription)
         .window(window::Settings {
             size: Size::new(1440.0, 900.0),
             min_size: Some(Size::new(900.0, 600.0)),

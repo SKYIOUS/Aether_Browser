@@ -36,7 +36,9 @@ impl PaletteScreen {
     pub fn update(&mut self, msg: PaletteMessage) -> Task<PaletteMessage> {
         match msg {
             PaletteMessage::QueryChanged(s) => self.query = s,
-            _ => {}
+            PaletteMessage::ActionSelected(_index) => {},
+            PaletteMessage::HistorySelected(_index) => {},
+            PaletteMessage::Close => {},
         }
         Task::none()
     }

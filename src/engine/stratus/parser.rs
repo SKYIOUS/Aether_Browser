@@ -3,8 +3,8 @@
 
 use super::style_value::{Color, LengthValue};
 
-const MAX_INPUT_LENGTH: usize = 30000;
-const MAX_ITERATIONS: usize = 50000;
+const MAX_INPUT_LENGTH: usize = 100_000;
+const MAX_ITERATIONS: usize = 200_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stylesheet {

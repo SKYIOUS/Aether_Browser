@@ -1,5 +1,6 @@
 pub mod engine;
 pub mod ui;
+pub mod logging;
 
 #[cfg(test)]
 mod tests {

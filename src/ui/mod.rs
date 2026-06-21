@@ -1,7 +1,7 @@
 pub mod screens;
 pub mod style;
 
-use iced::{Element, Task};
+use iced::{Element, Task, Subscription};
 use screens::browser::{BrowserMessage, BrowserScreen};
 use screens::palette::{PaletteMessage, PaletteScreen};
 use screens::settings::{SettingsMessage, SettingsScreen};
@@ -83,6 +83,13 @@ impl AetherApp {
                     }
                 }
             }
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        match self.current_screen {
+            Screen::Browser => self.browser.subscription().map(Message::Browser),
+            _ => Subscription::none(),
         }
     }
 

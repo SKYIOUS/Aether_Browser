@@ -128,7 +128,8 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
     }
 
     if url.starts_with("//") {
-        return format!("https:{}", url);
+        let stripped = url.trim_start_matches('/');
+        return format!("https://{}", stripped);
     }
 
     let base = normalize_url(base_url);

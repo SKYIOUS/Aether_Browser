@@ -1,4 +1,9 @@
+pub mod js_bridge;
+
+use std::sync::{Arc, Mutex};
 use rquickjs::{Context, Runtime as QuickJSRuntime};
+
+pub use js_bridge::JsBridge;
 
 pub struct JSEngine {
     runtime: QuickJSRuntime,
@@ -17,6 +22,25 @@ impl JSEngine {
                 Ok(result) => Ok(result),
                 Err(e) => Err(format!("JS Error: {:?}", e)),
             }
+        })
+    }
+
+    pub fn execute_with_bridge(&mut self, code: &str, bridge: &Arc<Mutex<JsBridge>>) -> Result<String, String> {
+        let ctx = Context::full(&self.runtime).unwrap();
+        ctx.with(|ctx| {
+            let _ = js_bridge::register_browser_api(&ctx, bridge);
+            match ctx.eval::<String, _>(code) {
+                Ok(result) => Ok(result),
+                Err(e) => Err(format!("JS Error: {:?}", e)),
+            }
+        })
+    }
+
+    pub fn execute_source(&mut self, source: &str, bridge: &Arc<Mutex<JsBridge>>) -> Result<(), String> {
+        let ctx = Context::full(&self.runtime).unwrap();
+        ctx.with(|ctx| {
+            let _ = js_bridge::register_browser_api(&ctx, bridge);
+            ctx.eval::<(), _>(source).map_err(|e| format!("JS Error: {:?}", e))
         })
     }
 }

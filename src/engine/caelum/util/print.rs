@@ -50,18 +50,6 @@ pub fn write_tree(mut writer: impl io::Write, tree: &impl PrintTree, root: NodeI
                 pb = layout.padding.bottom,
                 key = node_id,
             )?;
-        writeln!(
-            writer,
-            "{lines}{fork} {display} [x: {x:<4} y: {y:<4} width: {width:<4} height: {height:<4}] ({key:?})",
-            lines = lines_string,
-            fork = fork_string,
-            display = display,
-            x = layout.location.x,
-            y = layout.location.y,
-            width = layout.size.width,
-            height = layout.size.height,
-            key = node_id,
-        );
         let bar = if has_sibling { "│   " } else { "    " };
         let new_string = lines_string + bar;
 

@@ -5,28 +5,39 @@ use super::matcher::{match_rules, ElementData, Specificity};
 use super::parser::{Declaration, PropertyValue, Stylesheet};
 use super::style_value::{
     AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexWrap,
-    JustifyContent, Position, Transform, Transition,
+    JustifyContent, LengthValue, Position, Transform, Transition, Unit,
 };
 
 pub fn resolve_style(element: &ElementData, stylesheet: &Stylesheet) -> ComputedStyle {
+    resolve_style_vp(element, stylesheet, 800.0, 600.0)
+}
+
+pub fn resolve_style_vp(element: &ElementData, stylesheet: &Stylesheet, viewport_w: f32, viewport_h: f32) -> ComputedStyle {
     let mut style = ComputedStyle::default_style();
 
     let matched = match_rules(element, stylesheet);
 
     for (declarations, specificity) in matched {
-        apply_declarations(&mut style, declarations, specificity);
+        apply_declarations_vp(&mut style, declarations, specificity, viewport_w, viewport_h);
     }
 
     style
 }
 
-fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], _specificity: Specificity) {
+#[allow(dead_code)]
+fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], spec: Specificity) {
+    apply_declarations_vp(style, declarations, spec, 800.0, 600.0)
+}
+
+fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration], _specificity: Specificity, viewport_w: f32, viewport_h: f32) {
     for decl in declarations {
+        let vw = viewport_w;
+        let vh = viewport_h;
         match decl.name.as_str() {
             "color" => style.color = parse_color(&decl.value),
             "background" => style.background_color = parse_background(&decl.value),
             "background-color" => style.background_color = parse_color(&decl.value),
-            "font-size" => style.font_size = parse_length(&decl.value),
+            "font-size" => style.font_size = parse_length_vp(&decl.value, vw, vh),
             "font-weight" => style.font_weight = parse_keyword(&decl.value),
             "font-family" => style.font_family = parse_keyword(&decl.value),
             "text-align" => style.text_align = parse_keyword(&decl.value),
@@ -34,41 +45,41 @@ fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], _
             "position" => style.position = parse_position(&decl.value),
             "overflow" => style.overflow = parse_keyword(&decl.value),
             "visibility" => style.visibility = parse_keyword(&decl.value),
-            "opacity" => style.opacity = parse_length(&decl.value).map(|v| v / 100.0),
-            "z-index" => style.z_index = parse_length(&decl.value).map(|v| v as i32),
+            "opacity" => style.opacity =         parse_length_vp(&decl.value, vw, vh).map(|v| v / 100.0),
+            "z-index" => style.z_index =         parse_length_vp(&decl.value, vw, vh).map(|v| v as i32),
 
             "margin" | "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => {
-                apply_sides(&mut style.margin_top, &mut style.margin_right, &mut style.margin_bottom, &mut style.margin_left, &decl.name, &decl.value);
+                apply_sides_vp(&mut style.margin_top, &mut style.margin_right, &mut style.margin_bottom, &mut style.margin_left, &decl.name, &decl.value, vw, vh);
             }
             "padding" | "padding-top" | "padding-right" | "padding-bottom" | "padding-left" => {
-                apply_sides(&mut style.padding_top, &mut style.padding_right, &mut style.padding_bottom, &mut style.padding_left, &decl.name, &decl.value);
+                apply_sides_vp(&mut style.padding_top, &mut style.padding_right, &mut style.padding_bottom, &mut style.padding_left, &decl.name, &decl.value, vw, vh);
             }
             "border-width" | "border-top-width" | "border-right-width" | "border-bottom-width" | "border-left-width" => {
-                apply_sides(&mut style.border_top_width, &mut style.border_right_width, &mut style.border_bottom_width, &mut style.border_left_width, &decl.name, &decl.value);
+                apply_sides_vp(&mut style.border_top_width, &mut style.border_right_width, &mut style.border_bottom_width, &mut style.border_left_width, &decl.name, &decl.value, vw, vh);
             }
             "border-color" | "border-top-color" | "border-right-color" | "border-bottom-color" | "border-left-color" => {
                 apply_border_colors(&mut style.border_top_color, &mut style.border_right_color, &mut style.border_bottom_color, &mut style.border_left_color, &decl.name, &decl.value);
             }
 
-            "width" => style.width = parse_length(&decl.value),
-            "height" => style.height = parse_length(&decl.value),
-            "min-width" => style.min_width = parse_length(&decl.value),
-            "min-height" => style.min_height = parse_length(&decl.value),
-            "max-width" => style.max_width = parse_length(&decl.value),
-            "max-height" => style.max_height = parse_length(&decl.value),
-            "top" => style.top = parse_length(&decl.value),
-            "right" => style.right = parse_length(&decl.value),
-            "bottom" => style.bottom = parse_length(&decl.value),
-            "left" => style.left = parse_length(&decl.value),
+            "width" => style.width =         parse_length_vp(&decl.value, vw, vh),
+            "height" => style.height =         parse_length_vp(&decl.value, vw, vh),
+            "min-width" => style.min_width =         parse_length_vp(&decl.value, vw, vh),
+            "min-height" => style.min_height =         parse_length_vp(&decl.value, vw, vh),
+            "max-width" => style.max_width =         parse_length_vp(&decl.value, vw, vh),
+            "max-height" => style.max_height =         parse_length_vp(&decl.value, vw, vh),
+            "top" => style.top =         parse_length_vp(&decl.value, vw, vh),
+            "right" => style.right =         parse_length_vp(&decl.value, vw, vh),
+            "bottom" => style.bottom =         parse_length_vp(&decl.value, vw, vh),
+            "left" => style.left =         parse_length_vp(&decl.value, vw, vh),
 
             "flex-direction" => style.flex.flex_direction = parse_flex_direction(&decl.value),
             "flex-wrap" => style.flex.flex_wrap = parse_flex_wrap(&decl.value),
             "justify-content" => style.flex.justify_content = parse_justify_content(&decl.value),
             "align-items" => style.flex.align_items = parse_align_items(&decl.value),
             "align-self" => style.flex.align_self = parse_align_self(&decl.value),
-            "flex-grow" => style.flex.flex_grow = parse_length(&decl.value).unwrap_or(0.0),
-            "flex-shrink" => style.flex.flex_shrink = parse_length(&decl.value).unwrap_or(1.0),
-            "flex-basis" => style.flex.flex_basis = parse_length(&decl.value),
+            "flex-grow" => style.flex.flex_grow =         parse_length_vp(&decl.value, vw, vh).unwrap_or(0.0),
+            "flex-shrink" => style.flex.flex_shrink =         parse_length_vp(&decl.value, vw, vh).unwrap_or(1.0),
+            "flex-basis" => style.flex.flex_basis =         parse_length_vp(&decl.value, vw, vh),
 
             "transform" => style.transform = parse_transform(&decl.value),
             "transition" => style.transition = parse_transition(&decl.value),
@@ -92,12 +103,63 @@ fn parse_background(value: &PropertyValue) -> Option<Color> {
     parse_color(value)
 }
 
+// ── Viewport-resolution helpers ──
+// These functions resolve vw/vh/percent units using the given viewport dimensions.
+// parse_length is retained for backward compat (uses default 800×600 viewport).
+
+fn lv_to_px(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
+    match lv.unit {
+        Unit::Px => lv.value,
+        Unit::Vw => lv.value * vw / 100.0,
+        Unit::Vh => lv.value * vh / 100.0,
+        Unit::Percent => lv.value * vw / 100.0,
+        Unit::Em | Unit::Rem => lv.value * 16.0,
+        _ => lv.value,
+    }
+}
+
 fn parse_length(value: &PropertyValue) -> Option<f32> {
+    parse_length_vp(value, 800.0, 600.0)
+}
+
+#[allow(dead_code)]
+fn resolve_length_for_unit(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
+    lv_to_px(lv, vw, vh)
+}
+
+fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
     match value {
-        PropertyValue::Length(lv) => Some(lv.value),
+        PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
+}
+
+fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[Option<f32>; 4]> {
+    let s = match value {
+        PropertyValue::Keyword(s) => s,
+        _ => return None,
+    };
+    let parts: Vec<&str> = s.split_whitespace().collect();
+    if parts.is_empty() || parts.len() > 4 { return None; }
+
+    let mut vals: Vec<Option<f32>> = Vec::with_capacity(parts.len());
+    for p in &parts {
+        if *p == "auto" { vals.push(None); continue; }
+        if let Some(lv) = LengthValue::from_str(p) {
+            vals.push(Some(lv_to_px(&lv, vw, vh)));
+        } else if let Ok(n) = p.parse::<f32>() {
+            vals.push(Some(n));
+        } else { return None; }
+    }
+
+    Some(match vals.len() {
+        1 => [vals[0], vals[0], vals[0], vals[0]],
+        2 => [vals[0], vals[1], vals[0], vals[1]],
+        3 => [vals[0], vals[1], vals[2], vals[1]],
+        4 => [vals[0], vals[1], vals[2], vals[3]],
+        _ => return None,
+    })
 }
 
 fn parse_keyword(value: &PropertyValue) -> Option<String> {
@@ -199,6 +261,7 @@ fn parse_transition(value: &PropertyValue) -> Option<Transition> {
     }
 }
 
+/// Parse a space-separated CSS shorthand (1-4 values) into side values.
 fn apply_sides(
     top: &mut Option<f32>,
     right: &mut Option<f32>,
@@ -207,42 +270,57 @@ fn apply_sides(
     name: &str,
     value: &PropertyValue,
 ) {
-    let len = parse_length(value);
-    if len.is_none() { return; }
-    let len = len.unwrap();
+    apply_sides_vp(top, right, bottom, left, name, value, 800.0, 600.0)
+}
 
-    match name {
-        "margin-top" => *top = Some(len),
-        "margin-right" => *right = Some(len),
-        "margin-bottom" => *bottom = Some(len),
-        "margin-left" => *left = Some(len),
-        "margin" => {
-            *top = Some(len);
-            *right = Some(len);
-            *bottom = Some(len);
-            *left = Some(len);
+fn apply_sides_vp(
+    top: &mut Option<f32>,
+    right: &mut Option<f32>,
+    bottom: &mut Option<f32>,
+    left: &mut Option<f32>,
+    name: &str,
+    value: &PropertyValue,
+    vw: f32,
+    vh: f32,
+) {
+    // First try single length
+    if let Some(len) = parse_length_vp(value, vw, vh) {
+        match name {
+            "margin-top" => *top = Some(len),
+            "margin-right" => *right = Some(len),
+            "margin-bottom" => *bottom = Some(len),
+            "margin-left" => *left = Some(len),
+            "margin" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            "padding-top" => *top = Some(len),
+            "padding-right" => *right = Some(len),
+            "padding-bottom" => *bottom = Some(len),
+            "padding-left" => *left = Some(len),
+            "padding" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            "border-top-width" => *top = Some(len),
+            "border-right-width" => *right = Some(len),
+            "border-bottom-width" => *bottom = Some(len),
+            "border-left-width" => *left = Some(len),
+            "border-width" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            _ => {}
         }
-        "padding-top" => *top = Some(len),
-        "padding-right" => *right = Some(len),
-        "padding-bottom" => *bottom = Some(len),
-        "padding-left" => *left = Some(len),
-        "padding" => {
-            *top = Some(len);
-            *right = Some(len);
-            *bottom = Some(len);
-            *left = Some(len);
+        return;
+    }
+
+    // Try shorthand (e.g. "5em auto" → [5em, auto, 5em, auto])
+    if let Some(quads) = parse_side_shorthand_vp(value, vw, vh) {
+        let is_shorthand = matches!(name, "margin" | "padding" | "border-width");
+        if is_shorthand || name == "margin-top" || name == "padding-top" || name == "border-top-width" {
+            if let Some(v) = quads[0] { *top = Some(v); }
         }
-        "border-top-width" => *top = Some(len),
-        "border-right-width" => *right = Some(len),
-        "border-bottom-width" => *bottom = Some(len),
-        "border-left-width" => *left = Some(len),
-        "border-width" => {
-            *top = Some(len);
-            *right = Some(len);
-            *bottom = Some(len);
-            *left = Some(len);
+        if is_shorthand || name == "margin-right" || name == "padding-right" || name == "border-right-width" {
+            if let Some(v) = quads[1] { *right = Some(v); }
         }
-        _ => {}
+        if is_shorthand || name == "margin-bottom" || name == "padding-bottom" || name == "border-bottom-width" {
+            if let Some(v) = quads[2] { *bottom = Some(v); }
+        }
+        if is_shorthand || name == "margin-left" || name == "padding-left" || name == "border-left-width" {
+            if let Some(v) = quads[3] { *left = Some(v); }
+        }
     }
 }
 
