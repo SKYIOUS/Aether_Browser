@@ -1,38 +1,55 @@
 Component BrowserApp {
     state url: String = "aether://design/spatial-minimalism"
-    state bg: String = "#F4F4F7"
+    state bg_hex: String = "#F0F0F3"
 
-    Container(background: bg) {
+    Container(background: bg_hex) {
         Row {
+            // Elegant Vertical Sidebar
             Column {
-                padding: 30
+                padding: 40
                 width: 280
-                spacing: 25
+                spacing: 35
 
-                Text(text: "AETHER") { size: 22 }
+                Text(text: "AETHER") { size: 24 }
 
                 Column {
                     spacing: 12
-                    Button(text: "⬡ Spaces")
-                    Button(text: "⬡ Lab")
-                    Button(text: "⬡ Archive")
+                    Button(text: "⬡ Design")
+                    Button(text: "⬡ Research")
+                    Button(text: "⬡ Work")
+                    Button(text: "⬡ Labs")
                 }
+
+                Space() { height: 200 }
 
                 Button(text: "⚙ Settings") { on_click: "settings" }
             }
 
+            // Unified Content area
             Column {
                 padding: 10
-                Row {
-                    padding: 20
-                    spacing: 15
-                    Button(text: "←") { on_click: "back" }
-                    Button(text: "⟳") { on_click: "reload" }
-                    TextInput(placeholder: "Search or enter address", value: bind url) { width: 800 }
+
+                // Translucent Header bar
+                Container(padding: 15, background: "#FFFFFF", radius: 10) {
+                    Row {
+                        spacing: 20
+                        Row {
+                            spacing: 10
+                            Button(text: "←") { on_click: "back" }
+                            Button(text: "⟳") { on_click: "reload" }
+                        }
+
+                        TextInput(placeholder: "Search the web with Aether...", value: bind url) { width: 850 }
+
+                        Button(text: "⠿")
+                    }
                 }
 
-                Container(padding: 40, background: "#FFFFFF", radius: 12) {
-                    Text(text: "Welcome to the Future of Browsing") { size: 16 }
+                Space() { height: 10 }
+
+                // Spatial Viewport
+                Container(padding: 4, background: "#FFFFFF", radius: 8) {
+                    Text(text: "Aether Rendering Core Active") { size: 12 }
                 }
             }
         }
