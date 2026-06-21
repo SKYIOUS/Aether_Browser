@@ -21,7 +21,7 @@ pub use traits::LayoutGridContainer;
 
 pub use traits::LayoutBlockContainer;
 
-mod Caelum_tree;
-pub use Caelum_tree::{CaelumError, CaelumResult, CaelumTree};
+mod caelum_tree;
+pub use caelum_tree::{CaelumError, CaelumResult, CaelumTree};
 
 pub use layout::DetailedLayoutInfo;

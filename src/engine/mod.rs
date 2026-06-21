@@ -2,6 +2,7 @@ pub mod events;
 pub mod css;
 pub mod dom;
 pub mod image;
+pub mod media;
 pub mod js;
 pub mod layout;
 pub mod net;
