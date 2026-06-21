@@ -15,7 +15,7 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
     let obj = obj_arc.lock().unwrap();
     match obj.tag.as_str() {
         "Row" => {
-            let spacing = get_number(&obj.properties, "spacing").unwrap_or(10.0);
+            let spacing = get_number(&obj.properties, "spacing").unwrap_or(0.0);
             let padding = get_number(&obj.properties, "padding").unwrap_or(0.0);
             let mut r = row![].spacing(spacing).padding(padding).align_y(Alignment::Center);
             for child in &obj.children {
@@ -24,7 +24,7 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
             r.into()
         }
         "Column" => {
-            let spacing = get_number(&obj.properties, "spacing").unwrap_or(10.0);
+            let spacing = get_number(&obj.properties, "spacing").unwrap_or(0.0);
             let padding = get_number(&obj.properties, "padding").unwrap_or(0.0);
             let width = get_number(&obj.properties, "width").map(Length::Fixed).unwrap_or(Length::Shrink);
             let mut c = column![].spacing(spacing).padding(padding).width(width);
@@ -49,23 +49,21 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
                 .style(move |_| container::Style {
                     background: Some(Background::Color(bg_color)),
                     border: Border { radius: radius.into(), ..Default::default() },
-                    shadow: Shadow { color: Color::from_rgba(0.0, 0.0, 0.0, 0.1), offset: Vector::new(0.0, 2.0), blur_radius: 10.0 },
                     ..Default::default()
                 })
                 .into()
         }
         "Button" => {
             let label = if let Some(Value::String(s)) = obj.properties.get("text") { s.clone() } else { "Button".to_string() };
-            let mut b = button(text(label).size(13)).padding([10, 20]);
+            let mut b = button(text(label).size(14)).padding([10, 20]);
             if let Some(Value::String(handler)) = obj.properties.get("on_click") {
                 match handler.as_str() {
                     "back" => b = b.on_press(BrowserMessage::NavBack),
-                    "forward" => b = b.on_press(BrowserMessage::NavForward),
                     "reload" => b = b.on_press(BrowserMessage::Refresh),
                     "settings" => b = b.on_press(BrowserMessage::OpenSettings),
                     _ => b = b.on_press(BrowserMessage::None),
                 }
-            } else { b = b.on_press(BrowserMessage::Refresh); }
+            }
             b.into()
         }
         "Text" => {
@@ -76,18 +74,19 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
         "TextInput" => {
             let val = if let Some(Value::String(s)) = obj.properties.get("value") { s.clone() } else { "".to_string() };
             let ph = if let Some(Value::String(s)) = obj.properties.get("placeholder") { s.clone() } else { "Search...".to_string() };
-            text_input(&ph, &val).on_input(BrowserMessage::UrlChanged).on_submit(BrowserMessage::UrlSubmit).padding(12).into()
+            let width = get_number(&obj.properties, "width").map(Length::Fixed).unwrap_or(Length::Fill);
+            text_input(&ph, &val).on_input(BrowserMessage::UrlChanged).on_submit(BrowserMessage::UrlSubmit).width(width).padding(12).into()
         }
         "Space" => Space::with_height(Length::Fixed(get_number(&obj.properties, "height").unwrap_or(0.0))).into(),
         _ => text(format!("Unknown: {}", obj.tag)).into()
     }
 }
 
-fn get_number(props: &std::collections::HashMap<String, Value>, name: &str) -> Option<f32> {
-    if let Some(Value::Number(n)) = props.get(name) { Some(*n as f32) } else { None }
+fn get_number(props: &std::collections::HashMap<String, korlang::vm::Value>, name: &str) -> Option<f32> {
+    if let Some(korlang::vm::Value::Number(n)) = props.get(name) { Some(*n as f32) } else { None }
 }
-fn get_string(props: &std::collections::HashMap<String, Value>, name: &str) -> Option<String> {
-    if let Some(Value::String(s)) = props.get(name) { Some(s.clone()) } else { None }
+fn get_string(props: &std::collections::HashMap<String, korlang::vm::Value>, name: &str) -> Option<String> {
+    if let Some(korlang::vm::Value::String(s)) = props.get(name) { Some(s.clone()) } else { None }
 }
 fn hex_to_color(hex: &str) -> Option<Color> {
     if !hex.starts_with('#') || (hex.len() != 7 && hex.len() != 4) { return None; }
