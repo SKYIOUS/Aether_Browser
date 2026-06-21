@@ -1,0 +1,40 @@
+Component BrowserApp {
+    state url: String = "aether://design/spatial-minimalism"
+    state bg: String = "#F4F4F7"
+
+    Container(background: bg) {
+        Row {
+            Column {
+                padding: 30
+                width: 280
+                spacing: 25
+
+                Text(text: "AETHER") { size: 22 }
+
+                Column {
+                    spacing: 12
+                    Button(text: "⬡ Spaces")
+                    Button(text: "⬡ Lab")
+                    Button(text: "⬡ Archive")
+                }
+
+                Button(text: "⚙ Settings") { on_click: "settings" }
+            }
+
+            Column {
+                padding: 10
+                Row {
+                    padding: 20
+                    spacing: 15
+                    Button(text: "←") { on_click: "back" }
+                    Button(text: "⟳") { on_click: "reload" }
+                    TextInput(placeholder: "Search or enter address", value: bind url) { width: 800 }
+                }
+
+                Container(padding: 40, background: "#FFFFFF", radius: 12) {
+                    Text(text: "Welcome to the Future of Browsing") { size: 16 }
+                }
+            }
+        }
+    }
+}

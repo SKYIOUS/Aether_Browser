@@ -1,21 +1,21 @@
+[workspace]
+members = ["korlang"]
 [package]
 name = "aether-browser"
 version = "0.1.0"
 edition = "2021"
-
 [lib]
 path = "src/lib.rs"
-
 [dependencies]
 iced = { version = "0.13", features = ["canvas", "image", "tiny-skia", "wgpu", "tokio"] }
 rquickjs = "0.11.0"
 ureq = { version = "3.3.0", features = ["native-tls"] }
 wgpu = "29.0.3"
 image = "0.25"
-
+korlang = { path = "./korlang" }
+symphonia = "0.5"
 slotmap = "1.0"
 chrono = "0.4"
-
 [features]
 default = ["content_size"]
 content_size = []
