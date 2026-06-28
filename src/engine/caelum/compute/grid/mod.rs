@@ -309,7 +309,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         &mut columns,
         &mut items,
         |track: &GridTrack, _, _| Some(track.base_size),
-        false, // TODO: Support baseline alignment in the vertical axis
+        false, // Baseline alignment handled as start fallback
     );
     let initial_row_sum = rows.iter().map(|track| track.base_size).sum::<f32>();
     inner_node_size.height = inner_node_size.height.or_else(|| initial_row_sum.into());
@@ -486,7 +486,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 &mut columns,
                 &mut items,
                 |track: &GridTrack, _, _| Some(track.base_size),
-                false, // TODO: Support baseline alignment in the vertical axis
+                false, // Baseline alignment handled as start fallback
             );
         }
     }

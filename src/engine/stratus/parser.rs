@@ -70,6 +70,7 @@ pub struct Declaration {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue {
+    Number(f32),
     Keyword(String),
     Length(LengthValue),
     Color(Color),
@@ -284,6 +285,11 @@ impl Parser {
 
     fn parse_property_value(&self, s: &str) -> PropertyValue {
         let s = s.trim();
+
+        if let Ok(n) = s.parse::<f32>() {
+            return PropertyValue::Number(n);
+        }
+
 
         if s.starts_with('#') {
             if let Some(color) = Color::from_hex(s) {

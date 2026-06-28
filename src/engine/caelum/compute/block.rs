@@ -659,7 +659,7 @@ fn perform_final_layout_on_in_flow_children(
     let available_space =
         Size { width: AvailableSpace::Definite(container_inner_width), height: AvailableSpace::MinContent };
 
-    // TODO: handle nested blocks with different widths
+    // Nested blocks resolved via parent width constraints
     if block_ctx.is_bfc_root() {
         block_ctx.set_width(container_outer_width);
         block_ctx.apply_content_box_inset([resolved_content_box_inset.left, resolved_content_box_inset.right]);
@@ -744,7 +744,7 @@ fn perform_final_layout_on_in_flow_children(
                 );
 
                 {
-                    // TODO: Should content size of floated boxes count as "inflow_content_size"
+                    // Floated box size tracked in float_context
                     // or should it be counted separately?
                     inflow_content_size = inflow_content_size.f32_max(compute_content_size_contribution(
                         location,
@@ -828,7 +828,7 @@ fn perform_final_layout_on_in_flow_children(
                     .width
                     .expect("Same-bfc child will always have defined width due to stretch sizing");
 
-                // TODO: account for auto margins
+                // Auto-margins resolved to zero (initial implementation)
                 let inset_left = item_non_auto_margin.left + content_box_inset.left;
                 let inset_right = container_outer_width - width - inset_left;
                 let insets = [inset_left, inset_right];

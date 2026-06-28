@@ -897,6 +897,21 @@ const SHIM_JS: &str = r#"
 (function() {
     if (window.__domShimLoaded) return;
     window.__domShimLoaded = true;
+    window.location = {
+        href: "",
+        reload: function() { __window_reload(); }
+    };
+    window.navigator = {
+        userAgent: "Aether/1.0 (Spatial; Proprietary)",
+        platform: "AetherOS"
+    };
+    window.fetch = function(url) {
+        return Promise.resolve({
+            json: function() { return Promise.resolve(JSON.parse(__window_fetch(url))); },
+            text: function() { return Promise.resolve(__window_fetch(url)); }
+        });
+    };
+
 
     function makeStyleObject(id) {
         var style = {};
@@ -944,6 +959,33 @@ const SHIM_JS: &str = r#"
             set innerHTML(val) {
                 __dom_setInnerHTML(id, String(val));
             },
+            addEventListener: function(type, listener) {
+                __dom_addEventListener(id, type, listener);
+            },
+            removeEventListener: function(type, listener) {
+                __dom_removeEventListener(id, type, listener);
+            },
+            getBoundingClientRect: function() {
+                var rect = __dom_getBoundingClientRect(id);
+                return {
+                    x: rect.x, y: rect.y,
+                    width: rect.width, height: rect.height,
+                    top: rect.y, left: rect.x,
+                    right: rect.x + rect.width, bottom: rect.y + rect.height
+                };
+            },
+            get children() {
+                var ids = __dom_getChildren(id);
+                return ids.map(childId => makeElement(childId));
+            },
+            get parentNode() {
+                var pid = __dom_getParent(id);
+                return pid !== null ? makeElement(pid) : null;
+            },
+            click: function() {
+                __dom_dispatch_click(id);
+            }
+
             get id() {
                 return __dom_getAttribute(id, "id") || "";
             },
@@ -1675,5 +1717,14 @@ pub fn register_browser_api(
     // ── Inject JS shim ──────────────────────────────────────────────
     let _ = ctx.eval::<(), _>(SHIM_JS);
 
-    Ok(())
+
+    let b_v1 = Arc::clone(bridge);
+    let fn_save_pw = Function::new(ctx.clone(), move |url: String, user: String, pass: String| {
+        // We'd need a vault instance in JsBridge or similar
+        // For now, JsBridge is ephemeral per page, but vault is global.
+        // Let's just log it or use a placeholder for now since vault isn't in JsBridge yet.
+        println!("[VAULT] Saving password for {} / {}", url, user);
+    })?;
+    globals.set("__vault_savePassword", fn_save_pw)?;
+Ok(())
 }
