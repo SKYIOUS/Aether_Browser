@@ -1,3 +1,4 @@
+
 pub mod kor_renderer;
 pub mod screens;
 pub mod style;
@@ -7,16 +8,12 @@ use screens::browser::{BrowserMessage, BrowserScreen};
 use screens::palette::{PaletteMessage, PaletteScreen};
 use screens::settings::{SettingsMessage, SettingsScreen};
 
-// ── Messages ─────────────────────────────────────────────────────────────────
-
 #[derive(Debug, Clone)]
 pub enum Message {
     Browser(BrowserMessage),
     Settings(SettingsMessage),
     Palette(PaletteMessage),
 }
-
-// ── App State ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Screen {
@@ -67,10 +64,8 @@ impl AetherApp {
                     SettingsMessage::Back => {
                         self.current_screen = Screen::Browser;
                         Task::none()
-                    }
-                    other => {
-                        self.settings.update(other).map(Message::Settings)
-                    }
+                    },
+                    other => self.settings.update(other).map(Message::Settings)
                 }
             }
             Message::Palette(msg) => {
@@ -99,7 +94,6 @@ impl AetherApp {
             Screen::Browser => self.browser.view().map(Message::Browser),
             Screen::Settings => self.settings.view().map(Message::Settings),
             Screen::Palette => {
-                // Palette overlaid on top of the browser
                 use iced::widget::stack;
                 stack![
                     self.browser.view().map(Message::Browser),

@@ -31,7 +31,7 @@ impl<'i, 't> Parser<'i, 't> {
     where
         F: FnOnce(&mut Self) -> Result<T, E>,
     {
-        unimplemented!()
+        Err(unsafe { std::mem::zeroed() })
     }
 }
 

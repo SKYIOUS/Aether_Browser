@@ -45,7 +45,7 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
             "position" => style.position = parse_position(&decl.value),
             "overflow" => style.overflow = parse_keyword(&decl.value),
             "visibility" => style.visibility = parse_keyword(&decl.value),
-            "opacity" => style.opacity =         parse_length_vp(&decl.value, vw, vh).map(|v| v / 100.0),
+            "opacity" => style.opacity =         parse_keyword(&decl.value).and_then(|v| v.parse::<f32>().ok()),
             "z-index" => style.z_index =         parse_length_vp(&decl.value, vw, vh).map(|v| v as i32),
 
             "margin" | "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => {

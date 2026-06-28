@@ -370,6 +370,11 @@ impl_parse_for_keyword_enum!(Direction,
 /// If the behavior does not match the flexbox layout algorithm on the web, please file a bug!
 #[derive(Clone, PartialEq, Debug)]
 pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
+    /// The stack order of the element
+    pub z_index: i32,
+    /// The opacity of the element
+    pub opacity: f32,
+
     /// This is a dummy field which is necessary to make Caelum compile with the `grid` feature disabled
     /// It should always be set to `core::marker::PhantomData`.
     pub dummy: core::marker::PhantomData<S>,
@@ -493,6 +498,9 @@ pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
 impl<S: CheapCloneStr> Style<S> {
     /// The [`Default`] layout, in a form that can be used in const functions
     pub const DEFAULT: Style<S> = Style {
+        opacity: 1.0,
+        z_index: 0,
+
         dummy: core::marker::PhantomData,
         display: Display::DEFAULT,
         item_is_table: false,
@@ -1046,7 +1054,9 @@ mod tests {
     fn defaults_match() {
         use super::GridPlacement;
 
-        let old_defaults: Style<DefaultCheapStr> = Style {
+        let old_defaults: Style<DefaultCheapStr> = Style {            opacity: 1.0,
+            z_index: 0,
+
             dummy: core::marker::PhantomData,
             display: Default::default(),
             item_is_table: false,
@@ -1159,12 +1169,12 @@ mod tests {
         assert_type_size::<GridTemplateComponent<String>>(56);
         assert_type_size::<GridPlacement<String>>(32);
         assert_type_size::<Line<GridPlacement<String>>>(64);
-        assert_type_size::<Style<String>>(536);
+        assert_type_size::<Style<String>>(544);
 
         // String-type dependent (Arc<str>)
         assert_type_size::<GridTemplateComponent<Arc<str>>>(56);
         assert_type_size::<GridPlacement<Arc<str>>>(24);
         assert_type_size::<Line<GridPlacement<Arc<str>>>>(48);
-        assert_type_size::<Style<Arc<str>>>(504);
+        assert_type_size::<Style<Arc<str>>>(512);
     }
 }

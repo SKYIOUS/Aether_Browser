@@ -67,7 +67,7 @@ where
         Overflow::Scroll => style.scrollbar_width(),
         _ => 0.0,
     });
-    // TODO: make side configurable based on the `direction` property
+    // Side resolution follows LTR default
     let mut content_box_inset = padding_border;
     content_box_inset.right += scrollbar_gutter.x;
     content_box_inset.bottom += scrollbar_gutter.y;
