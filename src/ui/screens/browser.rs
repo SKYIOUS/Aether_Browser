@@ -1081,12 +1081,9 @@ pub struct BrowserScreen {
     pub loading: bool,
     pub bridge: Option<Arc<Mutex<JsBridge>>>,
     pub js_engine: Option<JSEngine>,
-    pub private_mode: bool,
-    pub devtools_open: bool,
     history: Vec<String>,
     history_index: usize,
-    is_history_nav: bool,
-}
+    is_history_nav: bool,}
 
 #[derive(Debug, Clone)]
 pub struct StyledElement {
@@ -1265,8 +1262,6 @@ impl BrowserScreen {
             loading: false,
             bridge: None,
             js_engine: None,
-            private_mode: false,
-            devtools_open: false,
             history: vec![default_url],
             history_index: 0,
             is_history_nav: false,
@@ -1277,6 +1272,7 @@ impl BrowserScreen {
         match msg {
             BrowserMessage::UrlChanged(s) => { self.url = s; Task::none() }
             BrowserMessage::UrlSubmit => {
+                plog!("NAV", "UrlSubmit: {}", self.url);
                 let target = normalize_nav_url(&self.url);
                 self.url = target.clone();
                 self.loading = true;
@@ -1285,6 +1281,7 @@ impl BrowserScreen {
                 Task::perform(fetch_page_content(target), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
             }
             BrowserMessage::LinkClicked(url) => {
+                plog!("NAV", "LinkClicked: {}", url);
                 let target = normalize_nav_url(&url);
                 self.url = target.clone();
                 self.loading = true;
@@ -1296,6 +1293,7 @@ impl BrowserScreen {
                 if self.history_index > 0 {
                     self.history_index -= 1;
                     let url = self.history[self.history_index].clone();
+                    plog!("NAV", "NavBack to index={} url={}", self.history_index, url);
                     self.url = url.clone();
                     self.is_history_nav = true;
                     self.loading = true;
@@ -1308,6 +1306,7 @@ impl BrowserScreen {
                 if self.history_index + 1 < self.history.len() {
                     self.history_index += 1;
                     let url = self.history[self.history_index].clone();
+                    plog!("NAV", "NavForward to index={} url={}", self.history_index, url);
                     self.url = url.clone();
                     self.is_history_nav = true;
                     self.loading = true;
@@ -1317,6 +1316,7 @@ impl BrowserScreen {
                 Task::none()
             }
             BrowserMessage::Refresh => {
+                plog!("NAV", "Refresh: {}", self.url);
                 self.loading = true;
                 self.bridge = None;
                 self.is_history_nav = false;
@@ -1324,6 +1324,8 @@ impl BrowserScreen {
             }
             BrowserMessage::PageLoaded(page_url, elements, bridge_opt) => {
                 self.loading = false;
+                let count = elements.len();
+                plog!("PAGE", "PageLoaded: URL={} elements={}", page_url, count);
                 self.url = page_url.clone();
                 if !self.is_history_nav {
                     self.history.truncate(self.history_index + 1);
@@ -1334,52 +1336,27 @@ impl BrowserScreen {
                 self.styled_elements = elements;
                 self.bridge = bridge_opt;
                 self.js_engine = Some(JSEngine::new());
-                self.content = format!("Loaded ({} elements)", self.styled_elements.len());
+                self.content = format!("Loaded ({} elements)", count);
                 Task::none()
             }
-            BrowserMessage::ElementClicked(idx) => {
-                if let Some(el) = self.styled_elements.get(idx) {
-                    if let Some(ref bridge_arc) = self.bridge {
-                        let listeners = {
-                            let b = bridge_arc.lock().unwrap();
-                            // Attempt to find node by index or tag (simplified matching)
-                            // We use bubbling to handle the event correctly
-                            let node_id = idx as u32; // Assuming direct mapping for now
-                            b.get_event_listeners_bubbling(node_id, "click")
-                        };
-                        if !listeners.is_empty() {
-                            let mut js = JSEngine::new();
-                            for (source, _node_id) in listeners {
-                                let _ = js.execute_source(&source, bridge_arc);
-                            }
-                        }
-                    }
-                }
-                Task::none()
-            }
-            BrowserMessage::CanvasClick(_) => Task::none(),
-            BrowserMessage::TogglePrivate => {
-                self.private_mode = !self.private_mode;
-                Task::none()
-            }
-            BrowserMessage::ToggleDevTools => {
-                self.devtools_open = !self.devtools_open;
+            BrowserMessage::ElementClicked(i) => {
+                plog!("NAV", "ElementClicked({}): tag={} text=\"{}\"", i, self.styled_elements.get(i).map(|e| e.tag.as_str()).unwrap_or("?"), self.styled_elements.get(i).map(|e| e.text.chars().take(40).collect::<String>()).unwrap_or_default());
                 Task::none()
             }
             BrowserMessage::TimerTick => {
-                if let Some(ref bridge_arc) = self.bridge {
+                if let Some(ref bridge) = self.bridge {
                     let ready = {
-                        let mut b = bridge_arc.lock().unwrap();
+                        let mut b = bridge.lock().unwrap();
                         b.poll_timers()
                     };
                     if !ready.is_empty() {
                         let mut js = JSEngine::new();
                         for (_timer_id, source) in ready {
-                            let _ = js.execute_source(&source, bridge_arc);
+                            let _ = js.execute_source(&source, bridge);
                         }
                     }
                     let nav = {
-                        let mut b = bridge_arc.lock().unwrap();
+                        let mut b = bridge.lock().unwrap();
                         b.pending_navigation.take()
                     };
                     if let Some(url) = nav {
@@ -1391,20 +1368,46 @@ impl BrowserScreen {
                 }
                 Task::none()
             }
+            BrowserMessage::ElementClicked(idx) => {
+                if let Some(ref bridge) = self.bridge {
+                    let el = &self.styled_elements[idx];
+                    let listeners = {
+                        let b = bridge.lock().unwrap();
+                        let tag = el.tag.to_lowercase();
+                        let mut all = vec![];
+                        if let Some(body) = b.body_id {
+                            let candidates = b.query_selector_all(body, &tag);
+                            for cid in candidates {
+                                let els = b.get_event_listeners(cid, "click");
+                                all.extend(els.into_iter().map(|s| (cid, s)));
+                            }
+                        }
+                        all
+                    };
+                    if !listeners.is_empty() {
+                        let mut js = JSEngine::new();
+                        for (_node_id, source) in listeners {
+                            let _ = js.execute_source(&source, bridge);
+                        }
+                    }
+                }
+                Task::none()
+            }
             BrowserMessage::WorkspaceSelected(i) => { self.active_workspace = i; Task::none() }
             _ => Task::none(),
         }
     }
 
     pub fn subscription(&self) -> iced::Subscription<BrowserMessage> {
-        if let Some(ref bridge_arc) = self.bridge {
-             let has_timers = bridge_arc.lock().unwrap().has_pending_timers();
-             if has_timers {
-                 return iced::time::every(std::time::Duration::from_millis(100)).map(|_| BrowserMessage::TimerTick);
-             }
+        let has_timers = self.bridge.as_ref().map_or(false, |b| b.lock().unwrap().has_pending_timers());
+        if has_timers {
+            iced::time::every(std::time::Duration::from_millis(100)).map(|_| BrowserMessage::TimerTick)
+        } else {
+            iced::Subscription::none()
         }
-        iced::Subscription::none()
     }
+
+    // ── View ──────────────────────────────────────────────────────────────────
 
     pub fn view(&self) -> Element<'_, BrowserMessage> {
         let sidebar = self.sidebar();

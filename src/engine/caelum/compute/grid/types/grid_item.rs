@@ -491,7 +491,7 @@ impl GridItem {
                 let item_axis_tracks = &axis_tracks[self.track_range_excluding_lines(axis)];
 
                 // it is not a scroll container
-                // Overflow property integration pending renderer-side clipping
+                // TODO: support overflow property
 
                 // it spans at least one track in that axis whose min track sizing function is auto
                 let spans_auto_min_track = axis_tracks
