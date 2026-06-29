@@ -547,7 +547,7 @@ mod tests {
                 flow,
                 AlignSelf::Start,
                 AlignSelf::Start,
-                // Named line resolution verified via grid placement tests
+                // TODO: actually test named line resolution
                 &name_resolver,
             );
 

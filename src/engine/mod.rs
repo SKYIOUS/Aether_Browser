@@ -13,4 +13,3 @@ pub mod style;
 pub mod stratus;
 
 pub mod caelum;
-pub mod standards;

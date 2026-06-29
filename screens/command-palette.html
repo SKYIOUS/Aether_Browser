@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Aether Browser - Command Palette</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg: oklch(12% 0.01 250);
+            --surface: oklch(18% 0.01 250);
+            --fg: oklch(98% 0.005 250);
+            --muted: oklch(60% 0.01 250);
+            --border: oklch(25% 0.01 250);
+            --accent: oklch(75% 0.12 255);
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .glass-palette {
+            background: rgba(25, 27, 28, 0.7);
+            backdrop-filter: blur(50px);
+            -webkit-backdrop-filter: blur(50px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .result-item:hover {
+            background: rgba(165, 201, 255, 0.1);
+        }
+        .result-item:hover .icon-box {
+            background: var(--accent);
+            color: var(--bg);
+        }
+    </style>
+</head>
+<body class="flex items-start justify-center pt-32">
+
+    <!-- Background Content (Blurred) -->
+    <div class="fixed inset-0 z-0 flex flex-col items-center justify-center opacity-30 grayscale blur-2xl pointer-events-none">
+        <div class="text-[120px] font-thin text-white mb-8">21:45</div>
+        <div class="w-full max-w-2xl h-16 bg-white/10 rounded-full border border-white/5"></div>
+        <div class="grid grid-cols-4 gap-8 mt-20">
+            <div class="w-16 h-16 bg-white/10 rounded-2xl"></div>
+            <div class="w-16 h-16 bg-white/10 rounded-2xl"></div>
+            <div class="w-16 h-16 bg-white/10 rounded-2xl"></div>
+            <div class="w-16 h-16 bg-white/10 rounded-2xl"></div>
+        </div>
+    </div>
+
+    <!-- Command Palette -->
+    <div class="glass-palette w-full max-w-2xl rounded-3xl overflow-hidden flex flex-col z-50 animate-in fade-in zoom-in-95 duration-300">
+        <!-- Search Input -->
+        <div class="px-8 py-6 flex items-center gap-4 border-b border-white/5">
+            <span class="material-symbols-outlined text-accent text-3xl">terminal</span>
+            <input autofocus class="bg-transparent border-none focus:ring-0 w-full text-2xl font-light text-white placeholder:text-zinc-600 outline-none" placeholder="What is the mission?" type="text"/>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Esc</span>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="flex-1 overflow-y-auto max-h-[440px] py-4">
+            <div class="px-6 mb-4">
+                <p class="px-4 text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-bold mb-2">Suggested Actions</p>
+
+                <div class="result-item px-4 py-4 rounded-2xl flex items-center justify-between cursor-pointer transition-all group mx-2">
+                    <div class="flex items-center gap-5">
+                        <div class="icon-box w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-accent transition-all">
+                            <span class="material-symbols-outlined">auto_awesome</span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-white group-hover:text-accent transition-colors">Generate Research Summary</p>
+                            <p class="text-xs text-zinc-500">Synthesize current workspace with Aether AI</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span class="text-[10px] font-mono text-zinc-500 bg-white/5 px-2 py-1 rounded">CMD</span>
+                        <span class="text-[10px] font-mono text-zinc-500 bg-white/5 px-2 py-1 rounded">G</span>
+                    </div>
+                </div>
+
+                <div class="result-item px-4 py-4 rounded-2xl flex items-center justify-between cursor-pointer transition-all group mx-2">
+                    <div class="flex items-center gap-5">
+                        <div class="icon-box w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-accent transition-all">
+                            <span class="material-symbols-outlined">layers</span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-white group-hover:text-accent transition-colors">Switch to 'Rust Backend' Workspace</p>
+                            <p class="text-xs text-zinc-500">4 active tabs • Last seen 2h ago</p>
+                        </div>
+                    </div>
+                    <span class="material-symbols-outlined text-zinc-600">keyboard_return</span>
+                </div>
+            </div>
+
+            <div class="px-6 border-t border-white/5 pt-4">
+                <p class="px-4 text-[10px] uppercase tracking-[0.3em] text-zinc-600 font-bold mb-2">History</p>
+
+                <div class="result-item px-4 py-3 rounded-xl flex items-center gap-5 cursor-pointer transition-all group mx-2">
+                    <span class="material-symbols-outlined text-zinc-600 group-hover:text-accent">history</span>
+                    <span class="text-sm text-zinc-400 group-hover:text-white transition-colors">spatial design principles in browsers</span>
+                </div>
+                <div class="result-item px-4 py-3 rounded-xl flex items-center gap-5 cursor-pointer transition-all group mx-2">
+                    <span class="material-symbols-outlined text-zinc-600 group-hover:text-accent">history</span>
+                    <span class="text-sm text-zinc-400 group-hover:text-white transition-colors">iced rust ui framework documentation</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Info -->
+        <div class="px-8 py-4 bg-white/[0.02] border-t border-white/5 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm text-zinc-600">swap_vert</span>
+                    <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Navigate</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm text-zinc-600">keyboard_return</span>
+                    <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Select</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
+                <span class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">AI Agent Ready</span>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

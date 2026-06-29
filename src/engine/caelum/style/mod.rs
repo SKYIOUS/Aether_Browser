@@ -498,8 +498,8 @@ pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
 impl<S: CheapCloneStr> Style<S> {
     /// The [`Default`] layout, in a form that can be used in const functions
     pub const DEFAULT: Style<S> = Style {
-        opacity: 1.0,
         z_index: 0,
+        opacity: 1.0,
 
         dummy: core::marker::PhantomData,
         display: Display::DEFAULT,
@@ -1054,9 +1054,7 @@ mod tests {
     fn defaults_match() {
         use super::GridPlacement;
 
-        let old_defaults: Style<DefaultCheapStr> = Style {            opacity: 1.0,
-            z_index: 0,
-
+        let old_defaults: Style<DefaultCheapStr> = Style {
             dummy: core::marker::PhantomData,
             display: Default::default(),
             item_is_table: false,
@@ -1169,12 +1167,12 @@ mod tests {
         assert_type_size::<GridTemplateComponent<String>>(56);
         assert_type_size::<GridPlacement<String>>(32);
         assert_type_size::<Line<GridPlacement<String>>>(64);
-        assert_type_size::<Style<String>>(544);
+        assert_type_size::<Style<String>>(536);
 
         // String-type dependent (Arc<str>)
         assert_type_size::<GridTemplateComponent<Arc<str>>>(56);
         assert_type_size::<GridPlacement<Arc<str>>>(24);
         assert_type_size::<Line<GridPlacement<Arc<str>>>>(48);
-        assert_type_size::<Style<Arc<str>>>(512);
+        assert_type_size::<Style<Arc<str>>>(504);
     }
 }
