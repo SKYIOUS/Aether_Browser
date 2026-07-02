@@ -12,8 +12,6 @@ impl Parser {
     }
 
     pub fn parse_document(&mut self) -> Node {
-        let doc = Node::new_document();
-        
         // Skip doctype if present
         if self.starts_with("<!DOCTYPE") || self.starts_with("<!doctype") {
             self.consume_while(|c| c != '>');

@@ -28,7 +28,15 @@ impl PaletteScreen {
     pub fn new() -> Self {
         Self { query: String::new() }
     }
+}
 
+impl Default for PaletteScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PaletteScreen {
     pub fn reset(&mut self) {
         self.query.clear();
     }

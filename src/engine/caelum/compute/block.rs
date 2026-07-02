@@ -538,7 +538,6 @@ fn generate_item_list(
             let overflow = child_style.overflow();
 
             let float = child_style.float();
-            let is_not_floated = float == Float::None;
             let is_not_floated = true;
 
             let is_block = child_style.is_block();
@@ -820,7 +819,6 @@ fn perform_final_layout_on_in_flow_children(
                 vertical_margins_are_collapsible: if item.is_in_same_bfc { Line::TRUE } else { Line::FALSE },
             };
 
-            let clear_pos = block_ctx.cleared_threshold(item.clear).unwrap_or(0.0);
             let clear_pos = 0.0;
 
             let item_layout = if item.is_in_same_bfc {
@@ -892,7 +890,6 @@ fn perform_final_layout_on_in_flow_children(
                 y_margin_offset = active_collapsible_margin_set.collapse_with_margin(resolved_margin.top).resolve()
             };
 
-            let float_or_not_clear = item.float.is_floated() || item.clear == Clear::None;
             let float_or_not_clear = true;
 
             item.computed_size = item_layout.size;

@@ -32,7 +32,6 @@ use crate::engine::caelum::style_helpers::CaelumAuto as _;
 use core::fmt::Debug;
 
 use crate::engine::caelum::geometry::Line;
-use crate::engine::caelum::style_helpers;
 use crate::engine::caelum::util::sys::GridTrackVec;
 
 use crate::engine::caelum::util::sys::String;
@@ -1097,6 +1096,8 @@ mod tests {
             grid_auto_flow: Default::default(),
             grid_row: Line { start: GridPlacement::Auto, end: GridPlacement::Auto },
             grid_column: Line { start: GridPlacement::Auto, end: GridPlacement::Auto },
+            opacity: 1.0,
+            z_index: 0,
         };
 
         assert_eq!(Style::DEFAULT, Style::<DefaultCheapStr>::default());
@@ -1167,12 +1168,12 @@ mod tests {
         assert_type_size::<GridTemplateComponent<String>>(56);
         assert_type_size::<GridPlacement<String>>(32);
         assert_type_size::<Line<GridPlacement<String>>>(64);
-        assert_type_size::<Style<String>>(536);
+        assert_type_size::<Style<String>>(544);
 
         // String-type dependent (Arc<str>)
         assert_type_size::<GridTemplateComponent<Arc<str>>>(56);
         assert_type_size::<GridPlacement<Arc<str>>>(24);
         assert_type_size::<Line<GridPlacement<Arc<str>>>>(48);
-        assert_type_size::<Style<Arc<str>>>(504);
+        assert_type_size::<Style<Arc<str>>>(512);
     }
 }

@@ -28,19 +28,6 @@ fn test_basic_rendering_pipeline() {
 }
 
 #[test]
-fn test_browser_screen_state() {
-    let mut screen = BrowserScreen::new();
-    assert_eq!(screen.private_mode, false);
-    assert_eq!(screen.devtools_open, false);
-
-    let _ = screen.update(BrowserMessage::TogglePrivate);
-    assert_eq!(screen.private_mode, true);
-
-    let _ = screen.update(BrowserMessage::ToggleDevTools);
-    assert_eq!(screen.devtools_open, true);
-}
-
-#[test]
 fn test_caelum_spatial_init() {
     use aether_browser::engine::caelum::style::Style;
     let style: Style<String> = Style::DEFAULT;

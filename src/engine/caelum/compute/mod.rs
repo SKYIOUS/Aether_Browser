@@ -290,31 +290,31 @@ mod tests {
 
     #[test]
     fn hidden_layout_should_hide_recursively() {
-        let mut Caelum: CaelumTree<()> = CaelumTree::new();
+        let mut caelum: CaelumTree<()> = CaelumTree::new();
 
         let style: Style = Style { display: Display::Flex, size: Size::from_lengths(50.0, 50.0), ..Default::default() };
 
-        let grandchild_00 = Caelum.new_leaf(style.clone()).unwrap();
-        let grandchild_01 = Caelum.new_leaf(style.clone()).unwrap();
-        let child_00 = Caelum.new_with_children(style.clone(), &[grandchild_00, grandchild_01]).unwrap();
+        let grandchild_00 = caelum.new_leaf(style.clone()).unwrap();
+        let grandchild_01 = caelum.new_leaf(style.clone()).unwrap();
+        let child_00 = caelum.new_with_children(style.clone(), &[grandchild_00, grandchild_01]).unwrap();
 
-        let grandchild_02 = Caelum.new_leaf(style.clone()).unwrap();
-        let child_01 = Caelum.new_with_children(style.clone(), &[grandchild_02]).unwrap();
+        let grandchild_02 = caelum.new_leaf(style.clone()).unwrap();
+        let child_01 = caelum.new_with_children(style.clone(), &[grandchild_02]).unwrap();
 
-        let root = Caelum
+        let root = caelum
             .new_with_children(
                 Style { display: Display::None, size: Size::from_lengths(50.0, 50.0), ..Default::default() },
                 &[child_00, child_01],
             )
             .unwrap();
 
-        compute_hidden_layout(&mut Caelum.as_layout_tree(), root);
+        compute_hidden_layout(&mut caelum.as_layout_tree(), root);
 
         // Whatever size and display-mode the nodes had previously,
         // all layouts should resolve to ZERO due to the root's DISPLAY::NONE
 
         for node in [root, child_00, child_01, grandchild_00, grandchild_01, grandchild_02] {
-            let layout = Caelum.layout(node).unwrap();
+            let layout = caelum.layout(node).unwrap();
             assert_eq!(layout.size, Size::zero());
             assert_eq!(layout.location, Point::zero());
         }

@@ -1,0 +1,13 @@
+Component BrowserHeader {
+    state url: String = "aether://design/spatial-minimalism"
+
+    Column(width: 800) {
+        Row(padding: 10, spacing: 12) {
+            Button(text: "←") { on_click: "back" }
+            TextInput(placeholder: "Search or enter address...", value: bind url, width: 800) {}
+            Button(text: "⟳") { on_click: "reload" }
+            Button(text: "⚙") { on_click: "settings" }
+        }
+        WebView() {}
+    }
+}

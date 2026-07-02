@@ -1,8 +1,48 @@
-/// Networking module for fetching web resources.
-
+//! Networking module for fetching web resources.
 use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::Duration;
+use std::time::Instant;
 use ureq;
+
+// ── HTTP cache ────────────────────────────────────────────────────────
+
+type Cache = HashMap<String, (String, Instant)>;
+
+fn cache() -> &'static Mutex<Cache> {
+    static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+const CACHE_TTL: Duration = Duration::from_secs(60);
+
+fn cache_get(url: &str) -> Option<String> {
+    let map = cache().lock().ok()?;
+    if let Some((body, time)) = map.get(url) {
+        if time.elapsed() < CACHE_TTL {
+            return Some(body.clone());
+        }
+    }
+    None
+}
+
+fn cache_set(url: &str, body: &str) {
+    if let Ok(mut map) = cache().lock() {
+        map.insert(url.to_string(), (body.to_string(), Instant::now()));
+    }
+}
+
+// ── CSP ───────────────────────────────────────────────────────────────
+
+/// Checks Content-Security-Policy headers.
+/// Currently warn-only: returns true (permissive) but logs violations.
+pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
+    if let Some(csp) = headers.get("content-security-policy") {
+        eprintln!("[CSP] Content-Security-Policy for {}: {}", url, csp);
+    }
+    true
+}
 
 pub struct Response {
     pub body: String,
@@ -19,10 +59,18 @@ impl Response {
 
 /// Fetches the HTML content from the given URL.
 pub fn fetch(url: &str) -> String {
-    match fetch_with_redirects(url, 5) {
+    if let Some(cached) = cache_get(url) {
+        println!("[CACHE] HIT: {}", url);
+        return cached;
+    }
+    let result = match fetch_with_redirects(url, 5) {
         Ok(resp) => resp.body,
         Err(e) => format!("Error: {}", e),
+    };
+    if !result.starts_with("Error") {
+        cache_set(url, &result);
     }
+    result
 }
 
 /// Fetches content with automatic redirect handling.
@@ -34,7 +82,7 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, String> {
     let final_url = normalize_url(url);
     println!("Fetching: {}", final_url);
 
-    let start = std::time::Instant::now();
+    let _start = std::time::Instant::now();
 
     match ureq::get(&final_url)
         .config()
@@ -54,7 +102,9 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, String> {
                     }
                 }
             }
-            
+
+            check_csp(&final_url, &headers);
+
             let body = match response.body_mut().read_to_string() {
                 Ok(b) => {
                     println!("Body length: {}", b.len());

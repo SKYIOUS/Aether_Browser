@@ -86,6 +86,11 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
 
             "box-sizing" => style.box_sizing = parse_keyword(&decl.value),
 
+            "line-height" => style.line_height = parse_length_vp(&decl.value, vw, vh),
+            "text-decoration" => style.text_decoration = parse_keyword(&decl.value),
+            "cursor" => style.cursor = parse_keyword(&decl.value),
+            "border-radius" => style.border_radius = parse_length_vp(&decl.value, vw, vh),
+
             _ => {}
         }
     }
@@ -171,49 +176,49 @@ fn parse_keyword(value: &PropertyValue) -> Option<String> {
 
 fn parse_display(value: &PropertyValue) -> Display {
     match value {
-        PropertyValue::Keyword(s) => Display::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => Display::Inline,
     }
 }
 
 fn parse_position(value: &PropertyValue) -> Position {
     match value {
-        PropertyValue::Keyword(s) => Position::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => Position::Static,
     }
 }
 
 fn parse_flex_direction(value: &PropertyValue) -> FlexDirection {
     match value {
-        PropertyValue::Keyword(s) => FlexDirection::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => FlexDirection::Row,
     }
 }
 
 fn parse_flex_wrap(value: &PropertyValue) -> FlexWrap {
     match value {
-        PropertyValue::Keyword(s) => FlexWrap::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => FlexWrap::NoWrap,
     }
 }
 
 fn parse_justify_content(value: &PropertyValue) -> JustifyContent {
     match value {
-        PropertyValue::Keyword(s) => JustifyContent::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => JustifyContent::FlexStart,
     }
 }
 
 fn parse_align_items(value: &PropertyValue) -> AlignItems {
     match value {
-        PropertyValue::Keyword(s) => AlignItems::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => AlignItems::Stretch,
     }
 }
 
 fn parse_align_self(value: &PropertyValue) -> AlignSelf {
     match value {
-        PropertyValue::Keyword(s) => AlignSelf::from_str(s),
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => AlignSelf::Auto,
     }
 }

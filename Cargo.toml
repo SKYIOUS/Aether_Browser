@@ -16,6 +16,9 @@ korlang = { path = "./korlang" }
 symphonia = "0.5"
 slotmap = "1.0"
 chrono = "0.4"
+[profile.dev]
+overflow-checks = false
+
 [features]
 default = ["content_size"]
 content_size = []

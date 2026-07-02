@@ -1,5 +1,6 @@
 //! Stratus Style Value Types
 //! Strongly-typed representation of CSS properties
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Display {
@@ -14,8 +15,12 @@ pub enum Display {
 }
 
 impl Display {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+}
+
+impl FromStr for Display {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "block" => Display::Block,
             "inline-block" => Display::InlineBlock,
             "flex" => Display::Flex,
@@ -23,7 +28,7 @@ impl Display {
             "grid" => Display::Grid,
             "none" => Display::None,
             _ => Display::Inline,
-        }
+        })
     }
 }
 
@@ -111,6 +116,7 @@ pub enum Unit {
 }
 
 impl Unit {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<(f32, Unit)> {
         let s = s.trim();
         for (suffix, unit) in [("px", Unit::Px), ("em", Unit::Em), ("rem", Unit::Rem),
@@ -133,6 +139,7 @@ pub struct LengthValue {
 }
 
 impl LengthValue {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<LengthValue> {
         Unit::from_str(s).map(|(value, unit)| LengthValue { value, unit })
     }
@@ -152,15 +159,16 @@ pub enum Position {
     Sticky,
 }
 
-impl Position {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for Position {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "relative" => Position::Relative,
             "absolute" => Position::Absolute,
             "fixed" => Position::Fixed,
             "sticky" => Position::Sticky,
             _ => Position::Static,
-        }
+        })
     }
 }
 
@@ -173,16 +181,19 @@ pub enum FlexDirection {
     ColumnReverse,
 }
 
-impl FlexDirection {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for FlexDirection {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "row-reverse" => FlexDirection::RowReverse,
             "column" => FlexDirection::Column,
             "column-reverse" => FlexDirection::ColumnReverse,
             _ => FlexDirection::Row,
-        }
+        })
     }
+}
 
+impl FlexDirection {
     pub fn is_row(&self) -> bool {
         matches!(self, FlexDirection::Row | FlexDirection::RowReverse)
     }
@@ -196,13 +207,14 @@ pub enum FlexWrap {
     WrapReverse,
 }
 
-impl FlexWrap {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for FlexWrap {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "wrap" => FlexWrap::Wrap,
             "wrap-reverse" => FlexWrap::WrapReverse,
             _ => FlexWrap::NoWrap,
-        }
+        })
     }
 }
 
@@ -217,16 +229,17 @@ pub enum JustifyContent {
     SpaceEvenly,
 }
 
-impl JustifyContent {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for JustifyContent {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "flex-end" => JustifyContent::FlexEnd,
             "center" => JustifyContent::Center,
             "space-between" => JustifyContent::SpaceBetween,
             "space-around" => JustifyContent::SpaceAround,
             "space-evenly" => JustifyContent::SpaceEvenly,
             _ => JustifyContent::FlexStart,
-        }
+        })
     }
 }
 
@@ -240,15 +253,16 @@ pub enum AlignItems {
     Baseline,
 }
 
-impl AlignItems {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for AlignItems {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "flex-start" => AlignItems::FlexStart,
             "flex-end" => AlignItems::FlexEnd,
             "center" => AlignItems::Center,
             "baseline" => AlignItems::Baseline,
             _ => AlignItems::Stretch,
-        }
+        })
     }
 }
 
@@ -263,16 +277,17 @@ pub enum AlignSelf {
     Stretch,
 }
 
-impl AlignSelf {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for AlignSelf {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "flex-start" => AlignSelf::FlexStart,
             "flex-end" => AlignSelf::FlexEnd,
             "center" => AlignSelf::Center,
             "baseline" => AlignSelf::Baseline,
             "stretch" => AlignSelf::Stretch,
             _ => AlignSelf::Auto,
-        }
+        })
     }
 }
 
@@ -349,6 +364,10 @@ pub struct ComputedStyle {
     pub transform: Option<Transform>,
     pub transition: Option<Transition>,
     pub box_sizing: Option<String>,
+    pub line_height: Option<f32>,
+    pub text_decoration: Option<String>,
+    pub cursor: Option<String>,
+    pub border_radius: Option<f32>,
 }
 
 impl ComputedStyle {
@@ -407,6 +426,10 @@ impl ComputedStyle {
             transform: None,
             transition: None,
             box_sizing: Some("content-box".to_string()),
+            line_height: None,
+            text_decoration: None,
+            cursor: None,
+            border_radius: None,
         }
     }
 }
@@ -437,9 +460,9 @@ mod tests {
 
     #[test]
     fn test_display_from_str() {
-        assert_eq!(Display::from_str("flex"), Display::Flex);
-        assert_eq!(Display::from_str("none"), Display::None);
-        assert_eq!(Display::from_str("block"), Display::Block);
+        assert_eq!("flex".parse::<Display>().unwrap(), Display::Flex);
+        assert_eq!("none".parse::<Display>().unwrap(), Display::None);
+        assert_eq!("block".parse::<Display>().unwrap(), Display::Block);
     }
 
     #[test]

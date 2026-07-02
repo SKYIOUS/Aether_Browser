@@ -10,9 +10,6 @@ use crate::engine::caelum::util::sys::{DefaultCheapStr, Vec};
 use core::cmp::{max, min};
 use core::fmt::Debug;
 
-use crate::engine::caelum::util::parse::{
-    parse_css_str_entirely, CssParseResult, FromCss, ParseError, Parser, Token,
-};
 
 /// Defines a grid area
 #[derive(Debug, Clone, PartialEq)]

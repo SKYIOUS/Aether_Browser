@@ -133,8 +133,8 @@ fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
     match sel {
         SimpleSel::Universal => true,
         SimpleSel::Tag(t) => node.tag == *t,
-        SimpleSel::Class(c) => node.attrs.get("class").map_or(false, |v| v.split_whitespace().any(|p| p == c)),
-        SimpleSel::Id(id) => node.attrs.get("id").map_or(false, |v| v == id),
+        SimpleSel::Class(c) => node.attrs.get("class").is_some_and(|v| v.split_whitespace().any(|p| p == c)),
+        SimpleSel::Id(id) => node.attrs.get("id").is_some_and(|v| v == id),
     }
 }
 
@@ -156,7 +156,7 @@ fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
                     false
                 }
                 Combinator::Child => {
-                    node.parent.map_or(false, |pid| matches_complex(nodes, pid, rest))
+                    node.parent.is_some_and(|pid| matches_complex(nodes, pid, rest))
                 }
             }
         } else { true }
@@ -209,9 +209,9 @@ fn parse_url(url: &str) -> UrlParts {
     let rest = if let Some(pos) = s.find("://") {
         parts.protocol = s[..pos+1].to_string();
         &s[pos+3..]
-    } else if s.starts_with("//") {
+    } else if let Some(rest) = s.strip_prefix("//") {
         parts.protocol = "https:".into();
-        &s[2..]
+        rest
     } else {
         parts.protocol = "https:".into();
         s
@@ -258,9 +258,14 @@ pub struct JsBridge {
     pub body_id: Option<u32>,
     pub current_url: String,
     pub pending_navigation: Option<String>,
+    pub doc_title: String,
+    pub history_state: String,
+    pub pending_history_delta: Option<i32>,
     next_timer_id: u32,
     timers: Vec<TimerEntry>,
     event_listeners: Vec<EventListenerEntry>,
+    cookies: HashMap<String, String>,
+    local_storage: HashMap<String, String>,
 }
 
 impl JsBridge {
@@ -271,9 +276,14 @@ impl JsBridge {
             body_id: None,
             current_url: url.to_string(),
             pending_navigation: None,
+            doc_title: String::new(),
+            history_state: String::new(),
+            pending_history_delta: None,
             next_timer_id: 1,
             timers: vec![],
             event_listeners: vec![],
+            cookies: HashMap::new(),
+            local_storage: HashMap::new(),
         }
     }
 
@@ -326,7 +336,7 @@ impl JsBridge {
             Self::flatten(root, &mut n);
             n
         };
-        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, next_timer_id: 1, timers: vec![], event_listeners: vec![] };
+        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![], cookies: HashMap::new(), local_storage: HashMap::new() };
         bridge.body_id = bridge.find_body();
         bridge
     }
@@ -453,10 +463,8 @@ impl JsBridge {
         let mut stack = vec![start];
         while let Some(id) = stack.pop() {
             if let Some(node) = self.nodes.get(id as usize) {
-                if !node.is_text && !node.is_document {
-                    if node.attrs.get(attr).map_or(false, |v| v == value) {
-                        return Some(id);
-                    }
+                if !node.is_text && !node.is_document && node.attrs.get(attr).is_some_and(|v| v == value) {
+                    return Some(id);
                 }
                 for &child in &node.children {
                     stack.push(child);
@@ -522,7 +530,7 @@ impl JsBridge {
                     pos += 1;
                     continue;
                 }
-                let tag_end = html[pos..].find(|c: char| c == '>' || c == ' ' || c == '\t' || c == '\n');
+                let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
                     let tag_name = html[pos+1..pos+tag_end].to_lowercase();
                     let is_self_closing = ["br", "hr", "img", "input", "meta", "link"];
@@ -677,7 +685,7 @@ impl JsBridge {
 
     pub fn get_children(&self, node_id: u32) -> Vec<u32> {
         self.nodes.get(node_id as usize).map(|n|
-            n.children.iter().filter(|&&id| self.nodes.get(id as usize).map_or(false, |c| !c.is_text)).copied().collect()
+            n.children.iter().filter(|&&id| self.nodes.get(id as usize).is_some_and(|c| !c.is_text)).copied().collect()
         ).unwrap_or_default()
     }
 
@@ -792,6 +800,55 @@ impl JsBridge {
         results
     }
 
+    // ── Cookie methods ─────────────────────────────────────────────
+
+    pub fn get_cookie(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        for (key, value) in &self.cookies {
+            parts.push(format!("{}={}", key, value));
+        }
+        parts.join("; ")
+    }
+
+    pub fn set_cookie(&mut self, cookie_str: &str) {
+        if let Some(eq_pos) = cookie_str.find('=') {
+            let key = cookie_str[..eq_pos].trim().to_string();
+            let value = cookie_str[eq_pos + 1..].trim().to_string();
+            if !key.is_empty() {
+                self.cookies.insert(key, value);
+            }
+        }
+    }
+
+    // ── LocalStorage methods ────────────────────────────────────────
+
+    pub fn local_storage_get_item(&self, key: &str) -> Option<String> {
+        self.local_storage.get(key).cloned()
+    }
+
+    pub fn local_storage_set_item(&mut self, key: String, value: String) {
+        self.local_storage.insert(key, value);
+    }
+
+    pub fn local_storage_remove_item(&mut self, key: &str) {
+        self.local_storage.remove(key);
+    }
+
+    pub fn local_storage_clear(&mut self) {
+        self.local_storage.clear();
+    }
+
+    pub fn local_storage_key(&self, index: i32) -> Option<String> {
+        if index < 0 {
+            return None;
+        }
+        self.local_storage.keys().nth(index as usize).cloned()
+    }
+
+    pub fn local_storage_length(&self) -> i32 {
+        self.local_storage.len() as i32
+    }
+
     // ── Style methods ───────────────────────────────────────────────
 
     pub fn set_style_property(&mut self, node_id: u32, property: &str, value: &str) {
@@ -859,6 +916,27 @@ impl JsBridge {
 
     pub fn fetch_url(&self, url: &str) -> String {
         let resolved = crate::engine::net::resolve_url(url, &self.current_url);
+        let current = parse_url(&self.current_url);
+        let target = parse_url(&resolved);
+        if current.protocol != target.protocol
+            || current.hostname.to_lowercase() != target.hostname.to_lowercase()
+            || current.port != target.port
+        {
+            let origin = format!(
+                "{}{}{}",
+                current.protocol,
+                current.hostname,
+                if current.port.is_empty() {
+                    String::new()
+                } else {
+                    format!(":{}", current.port)
+                }
+            );
+            eprintln!(
+                "[CSP] Same-origin policy warning: fetching '{}' from origin '{}'",
+                resolved, origin
+            );
+        }
         crate::engine::net::fetch(&resolved)
     }
 
@@ -866,7 +944,7 @@ impl JsBridge {
 
     pub fn element_at_point(&self, x: f32, y: f32, elements: &[crate::ui::screens::browser::StyledElement]) -> Option<u32> {
         let mut best_id = None;
-        let mut best_area = std::f32::MAX;
+        let mut best_area = f32::MAX;
         for el in elements.iter() {
             let ex = el.x.max(0.0);
             let ey = el.y.max(0.0);
@@ -1323,8 +1401,55 @@ const SHIM_JS: &str = r#"
         userAgent: "AetherBrowser/0.1",
         platform: "Rust",
         language: "en-US",
-        cookieEnabled: false
+        cookieEnabled: true
     };
+
+    // ── document.title ─────────────────────────────────────────────
+    Object.defineProperty(document, 'title', {
+        get: function() { return _getTitle(); },
+        set: function(v) { _setTitle(String(v)); },
+        enumerable: true,
+        configurable: true
+    });
+
+    // ── window.history ─────────────────────────────────────────────
+    window.history = {
+        length: 0,
+        state: null,
+        pushState: function(state, title, url) {
+            _pushState(state ? JSON.stringify(state) : null, title || "", url || "");
+        },
+        replaceState: function(state, title, url) {
+            _replaceState(state ? JSON.stringify(state) : null, title || "", url || "");
+        },
+        back: function() { _historyBack(); },
+        forward: function() { _historyForward(); },
+        go: function(delta) { _historyGo(delta || 0); }
+    };
+
+    // ── document.cookie ─────────────────────────────────────────────
+    Object.defineProperty(document, 'cookie', {
+        get: function() { return _getCookie(); },
+        set: function(v) { _setCookie(String(v)); },
+        enumerable: true,
+        configurable: true
+    });
+
+    // ── window.localStorage ─────────────────────────────────────────
+    (function() {
+        var storage = {};
+        Object.defineProperty(storage, 'length', {
+            get: function() { return _localStorageLength(); },
+            enumerable: true,
+            configurable: true
+        });
+        storage.getItem = function(k) { return _localStorageGetItem(String(k)); };
+        storage.setItem = function(k, v) { _localStorageSetItem(String(k), String(v)); };
+        storage.removeItem = function(k) { _localStorageRemoveItem(String(k)); };
+        storage.clear = function() { _localStorageClear(); };
+        storage.key = function(i) { return _localStorageKey(Number(i)); };
+        window.localStorage = storage;
+    })();
 
 })();
 "#;
@@ -1714,12 +1839,157 @@ pub fn register_browser_api(
     fn_fetch.set_name("__fetch")?;
     globals.set("__fetch", fn_fetch)?;
 
+    // ── Cookie functions ───────────────────────────────────────────
+    let b1 = Arc::clone(bridge);
+    let fn_get_cookie = Function::new(ctx.clone(), move || -> String {
+        if let Ok(b) = b1.lock() {
+            b.get_cookie()
+        } else {
+            String::new()
+        }
+    })?;
+    fn_get_cookie.set_name("_getCookie")?;
+    globals.set("_getCookie", fn_get_cookie)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_set_cookie = Function::new(ctx.clone(), move |v: String| {
+        if let Ok(mut b) = b1.lock() {
+            b.set_cookie(&v);
+        }
+    })?;
+    fn_set_cookie.set_name("_setCookie")?;
+    globals.set("_setCookie", fn_set_cookie)?;
+
+    // ── LocalStorage functions ─────────────────────────────────────
+    let b1 = Arc::clone(bridge);
+    let fn_ls_get = Function::new(ctx.clone(), move |k: String| -> Option<String> {
+        if let Ok(b) = b1.lock() {
+            b.local_storage_get_item(&k)
+        } else {
+            None
+        }
+    })?;
+    fn_ls_get.set_name("_localStorageGetItem")?;
+    globals.set("_localStorageGetItem", fn_ls_get)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_ls_set = Function::new(ctx.clone(), move |k: String, v: String| {
+        if let Ok(mut b) = b1.lock() {
+            b.local_storage_set_item(k, v);
+        }
+    })?;
+    fn_ls_set.set_name("_localStorageSetItem")?;
+    globals.set("_localStorageSetItem", fn_ls_set)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_ls_remove = Function::new(ctx.clone(), move |k: String| {
+        if let Ok(mut b) = b1.lock() {
+            b.local_storage_remove_item(&k);
+        }
+    })?;
+    fn_ls_remove.set_name("_localStorageRemoveItem")?;
+    globals.set("_localStorageRemoveItem", fn_ls_remove)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_ls_clear = Function::new(ctx.clone(), move || {
+        if let Ok(mut b) = b1.lock() {
+            b.local_storage_clear();
+        }
+    })?;
+    fn_ls_clear.set_name("_localStorageClear")?;
+    globals.set("_localStorageClear", fn_ls_clear)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_ls_key = Function::new(ctx.clone(), move |i: i32| -> Option<String> {
+        if let Ok(b) = b1.lock() {
+            b.local_storage_key(i)
+        } else {
+            None
+        }
+    })?;
+    fn_ls_key.set_name("_localStorageKey")?;
+    globals.set("_localStorageKey", fn_ls_key)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_ls_len = Function::new(ctx.clone(), move || -> i32 {
+        if let Ok(b) = b1.lock() {
+            b.local_storage_length()
+        } else {
+            0
+        }
+    })?;
+    fn_ls_len.set_name("_localStorageLength")?;
+    globals.set("_localStorageLength", fn_ls_len)?;
+
+    // ── document.title ──────────────────────────────────────────────
+    let b1 = Arc::clone(bridge);
+    let fn_get_title = Function::new(ctx.clone(), move || -> String {
+        if let Ok(b) = b1.lock() { b.doc_title.clone() } else { String::new() }
+    })?;
+    fn_get_title.set_name("_getTitle")?;
+    globals.set("_getTitle", fn_get_title)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_set_title = Function::new(ctx.clone(), move |title: String| {
+        if let Ok(mut b) = b1.lock() { b.doc_title = title; }
+    })?;
+    fn_set_title.set_name("_setTitle")?;
+    globals.set("_setTitle", fn_set_title)?;
+
+    // ── window.history ─────────────────────────────────────────────
+    let b1 = Arc::clone(bridge);
+    let fn_get_history_state = Function::new(ctx.clone(), move || -> String {
+        if let Ok(b) = b1.lock() { b.history_state.clone() } else { String::new() }
+    })?;
+    fn_get_history_state.set_name("_getHistoryState")?;
+    globals.set("_getHistoryState", fn_get_history_state)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_push_state = Function::new(ctx.clone(), move |state: String, _title: String, url: String| {
+        if let Ok(mut b) = b1.lock() {
+            b.history_state = state;
+            if !url.is_empty() { b.pending_navigation = Some(url); }
+        }
+    })?;
+    fn_push_state.set_name("_pushState")?;
+    globals.set("_pushState", fn_push_state)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_replace_state = Function::new(ctx.clone(), move |state: String, _title: String, url: String| {
+        if let Ok(mut b) = b1.lock() {
+            b.history_state = state;
+            if !url.is_empty() { b.current_url = url; }
+        }
+    })?;
+    fn_replace_state.set_name("_replaceState")?;
+    globals.set("_replaceState", fn_replace_state)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_history_back = Function::new(ctx.clone(), move || {
+        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(-1); }
+    })?;
+    fn_history_back.set_name("_historyBack")?;
+    globals.set("_historyBack", fn_history_back)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_history_forward = Function::new(ctx.clone(), move || {
+        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(1); }
+    })?;
+    fn_history_forward.set_name("_historyForward")?;
+    globals.set("_historyForward", fn_history_forward)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_history_go = Function::new(ctx.clone(), move |delta: i32| {
+        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(delta); }
+    })?;
+    fn_history_go.set_name("_historyGo")?;
+    globals.set("_historyGo", fn_history_go)?;
+
     // ── Inject JS shim ──────────────────────────────────────────────
     let _ = ctx.eval::<(), _>(SHIM_JS);
 
 
-    let b_v1 = Arc::clone(bridge);
-    let fn_save_pw = Function::new(ctx.clone(), move |url: String, user: String, pass: String| {
+    let fn_save_pw = Function::new(ctx.clone(), move |url: String, user: String, _pass: String| {
         // We'd need a vault instance in JsBridge or similar
         // For now, JsBridge is ephemeral per page, but vault is global.
         // Let's just log it or use a placeholder for now since vault isn't in JsBridge yet.

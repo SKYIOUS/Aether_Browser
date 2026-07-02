@@ -100,7 +100,7 @@ impl Selector {
     }
 }
 
-pub fn match_element<'a, 'b>(element: &'b ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Rule, &'a Selector)> {
+pub fn match_element<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Rule, &'a Selector)> {
     let mut matched = Vec::new();
 
     for rule in &stylesheet.rules {
@@ -120,7 +120,7 @@ pub fn match_element<'a, 'b>(element: &'b ElementData, stylesheet: &'a Styleshee
     matched
 }
 
-pub fn match_rules<'a, 'b>(element: &'b ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Vec<Declaration>, Specificity)> {
+pub fn match_rules<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Vec<Declaration>, Specificity)> {
     let matched = match_element(element, stylesheet);
 
     matched.iter()

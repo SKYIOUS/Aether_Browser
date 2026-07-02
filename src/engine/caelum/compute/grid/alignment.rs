@@ -7,7 +7,6 @@ use crate::engine::caelum::tree::{Layout, LayoutPartialTreeExt, NodeId, SizingMo
 use crate::engine::caelum::util::sys::f32_max;
 use crate::engine::caelum::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 
-use crate::engine::caelum::compute::common::content_size::compute_content_size_contribution;
 use crate::engine::caelum::{BoxSizing, Direction, LayoutGridContainer};
 
 /// Align the grid tracks within the grid according to the align-content (rows) or
@@ -275,12 +274,6 @@ pub(super) fn align_and_position_item(
         },
     );
 
-    let contribution = compute_content_size_contribution(
-        Point { x: x - grid_area.left, y: y - grid_area.top },
-        Size { width, height },
-        layout_output.content_size,
-        overflow,
-    );
     let contribution = Size::ZERO;
 
     (contribution, y, height)

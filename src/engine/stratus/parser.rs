@@ -156,7 +156,7 @@ impl Parser {
 
             self.skip_whitespace();
             let selector = self.parse_simple_selector()?;
-            if !selector.tag_name.is_none() || selector.id.is_some() || !selector.class.is_empty() {
+            if selector.tag_name.is_some() || selector.id.is_some() || !selector.class.is_empty() {
                 selectors.push(Selector::Simple(selector));
             } else {
                 self.consume_while(|c| c != ',' && c != '{' && c != '}' && c != ';');

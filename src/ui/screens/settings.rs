@@ -32,7 +32,15 @@ impl SettingsScreen {
         crate::logging::set_enabled(true);
         Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0 }
     }
+}
 
+impl Default for SettingsScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SettingsScreen {
     pub fn update(&mut self, msg: SettingsMessage) -> Task<SettingsMessage> {
         match msg {
             SettingsMessage::NavItem(i) => self.active_nav = i,

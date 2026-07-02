@@ -12,7 +12,6 @@ use crate::plog;
 use std::sync::{Arc, Mutex};
 
 const CHAR_W_SCALE: f32 = 0.58;
-const LINE_H_SCALE: f32 = 1.4;
 
 fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
     if max_width <= 0.0 || font_size <= 0.0 || text.is_empty() {
@@ -24,21 +23,29 @@ fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
 
     let mut lines: Vec<String> = vec![];
     let mut current = String::new();
-    for word in text.split_inclusive(|c: char| c.is_whitespace()) {
-        let trimmed = word.trim_end_matches(|c: char| c.is_whitespace());
-        let sep = &word[trimmed.len()..];
-        if current.is_empty() {
-            current = trimmed.to_string();
-        } else {
-            let candidate = format!("{} {}", current, trimmed);
-            if candidate.chars().count() <= max_chars {
-                current = candidate;
-            } else {
+    for paragraph in text.split('\n') {
+        if paragraph.is_empty() {
+            if !current.is_empty() {
                 lines.push(current.clone());
-                current = trimmed.to_string();
+                current.clear();
+            }
+            lines.push(String::new());
+            continue;
+        }
+        for word in paragraph.split_whitespace() {
+            if current.is_empty() {
+                current = word.to_string();
+            } else {
+                let candidate = format!("{} {}", current, word);
+                if candidate.chars().count() <= max_chars {
+                    current = candidate;
+                } else {
+                    lines.push(current.clone());
+                    current = word.to_string();
+                }
             }
         }
-        if !sep.is_empty() && !current.is_empty() {
+        if !current.is_empty() {
             lines.push(current.clone());
             current.clear();
         }
@@ -52,10 +59,10 @@ fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
     lines
 }
 
-fn apply_text_wrapping(elements: &mut Vec<StyledElement>, container_width: f32) {
+fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
     let page_w = container_width;
     for el in elements.iter_mut() {
-        let fs = if el.font_size.is_finite() { el.font_size.max(6.0).min(200.0) } else { 16.0 };
+        let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
         let available = if el.width.is_finite() && el.width > 0.0 { el.width } else { page_w };
         let lines = wrap_text(&el.text, available, fs);
         el.wrapped_lines = lines;
@@ -69,44 +76,38 @@ fn stratus_color(c: &crate::engine::stratus::Color) -> Color {
 // ── Module-level helpers ─────────────────────────────────────────────
 
 fn extract_styles(node: &crate::engine::dom::Node, styles: &mut Vec<String>) {
-    match &node.node_type {
-        NodeType::Element(elem) => {
-            if elem.tag_name.to_lowercase() == "style" {
-                for child in &node.children {
-                    if let NodeType::Text(text) = &child.node_type {
-                        styles.push(text.clone());
-                    }
+    if let NodeType::Element(elem) = &node.node_type {
+        if elem.tag_name.to_lowercase() == "style" {
+            for child in &node.children {
+                if let NodeType::Text(text) = &child.node_type {
+                    styles.push(text.clone());
                 }
             }
-            for child in &node.children {
-                extract_styles(child, styles);
-            }
         }
-        _ => {}
+        for child in &node.children {
+            extract_styles(child, styles);
+        }
     }
 }
 
 fn extract_links(node: &crate::engine::dom::Node, links: &mut Vec<String>) {
-    match &node.node_type {
-        NodeType::Element(elem) => {
-            if elem.tag_name.to_lowercase() == "link" {
-                if let Some(rel) = elem.attributes.get("rel") {
-                    if rel.contains("stylesheet") {
-                        if let Some(href) = elem.attributes.get("href") {
-                            links.push(href.clone());
-                        }
+    if let NodeType::Element(elem) = &node.node_type {
+        if elem.tag_name.to_lowercase() == "link" {
+            if let Some(rel) = elem.attributes.get("rel") {
+                if rel.contains("stylesheet") {
+                    if let Some(href) = elem.attributes.get("href") {
+                        links.push(href.clone());
                     }
                 }
             }
-            for child in &node.children {
-                extract_links(child, links);
-            }
         }
-        _ => {}
+        for child in &node.children {
+            extract_links(child, links);
+        }
     }
 }
 
-fn should_skip_tag(tag: &str) -> bool {
+pub fn should_skip_tag(tag: &str) -> bool {
     matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "input" | "button" | "iframe" | "textarea" | "select" | "option" | "form" | "template")
 }
 
@@ -157,6 +158,10 @@ struct FullStyle {
     min_height: Option<f32>,
     max_height: Option<f32>,
     text_align: Option<String>,
+    line_height: f32,
+    text_decoration: String,
+    text_transform: String,
+    border_radius: [f32; 4],
 }
 
 fn is_html_block_tag(tag: &str) -> bool {
@@ -174,7 +179,7 @@ fn compute_full_style(node: &crate::engine::dom::Node, ss: &crate::engine::css::
     };
     let cs = crate::engine::css::compute_style(node, ss);
     let color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
-    let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.max(6.0).min(200.0)).unwrap_or(16.0);
+    let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.clamp(6.0, 200.0)).unwrap_or(16.0);
     let font_weight = cs.font_weight.unwrap_or_else(|| "normal".to_string());
     let background_color = cs.background_color.as_ref().map(stratus_color);
 
@@ -264,6 +269,13 @@ fn compute_full_style(node: &crate::engine::dom::Node, ss: &crate::engine::css::
         min_height: cs.min_height.filter(|v| v.is_finite()),
         max_height: cs.max_height.filter(|v| v.is_finite()),
         text_align: cs.text_align,
+        line_height: cs.line_height.unwrap_or(1.4),
+        text_decoration: cs.text_decoration.unwrap_or_default(),
+        text_transform: String::new(),
+        border_radius: {
+            let r = cs.border_radius.unwrap_or(0.0);
+            [r, r, r, r]
+        },
     }
 }
 
@@ -323,6 +335,10 @@ fn make_element(tag: &str, text: String, fs: &FullStyle, parent_idx: Option<usiz
         min_height: fs.min_height, max_height: fs.max_height,
         parent_index: parent_idx,
         x: 0.0, y: 0.0, width: 0.0, height: 0.0,
+        line_height: fs.line_height,
+        text_decoration: fs.text_decoration.clone(),
+        text_transform: fs.text_transform.clone(),
+        border_radius: fs.border_radius,
     }
 }
 
@@ -337,7 +353,7 @@ fn extract_elements(
     if depth > 30 || elements.len() >= 300 { return; }
 
     match &node.node_type {
-        NodeType::Document | NodeType::Comment(_) => { return; }
+        NodeType::Document | NodeType::Comment(_) => {}
         NodeType::Text(text) => {
             let txt = text.trim();
             if !txt.is_empty() && txt.len() < 1000 && !txt.chars().all(|c| c.is_whitespace()) {
@@ -499,7 +515,7 @@ fn extract_elements(
     }
 }
 
-fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) {
+fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
     if elements.is_empty() { return; }
     use crate::engine::caelum::prelude::*;
 
@@ -610,8 +626,8 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
         let (min_w, max_w) = dim_min_max(el.min_width, el.max_width);
         let (min_h, max_h) = dim_min_max(el.min_height, el.max_height);
         style.min_size = Size { width: min_w, height: min_h };
-        if el.min_height.is_some() {
-            eprintln!("[CAE] elem[{}] min_h={:.0} → {:?}", i, el.min_height.unwrap(), min_h);
+        if let Some(min_h_val) = el.min_height {
+            eprintln!("[CAE] elem[{}] min_h={:.0} → {:?}", i, min_h_val, min_h);
         }
         style.max_size = Size { width: max_w, height: max_h };
 
@@ -628,9 +644,8 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
             style.flex_basis = Dimension::from_length(basis);
         }
 
-        match tree.new_leaf(style) {
-            Ok(nid) => node_ids[i] = Some(nid),
-            _ => {}
+        if let Ok(nid) = tree.new_leaf(style) {
+            node_ids[i] = Some(nid);
         }
     }
 
@@ -652,7 +667,6 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
     }
 
     if elements.len() > 1 {
-        let viewport_h = 6000.0;
         let _ = tree.compute_layout(root_node, Size {
             width: AvailableSpace::Definite(container_width),
             height: AvailableSpace::Definite(viewport_h),
@@ -692,16 +706,26 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
     // Override widths for inline elements (a, span, etc.) based on text content
     for el in elements.iter_mut() {
         if el.display == "inline" && !el.text.is_empty() {
-            let fs = el.font_size.max(6.0).min(200.0);
-            let text_w = el.text.chars().count() as f32 * fs * CHAR_W_SCALE;
-            if text_w > 0.0 {
-                el.width = text_w.min(container_width);
+            let fs = el.font_size.clamp(6.0, 200.0);
+            let char_w = fs * CHAR_W_SCALE;
+            // Use the widest wrapped line as the element width, fallback to full text
+            let max_line_w = if el.wrapped_lines.is_empty() {
+                el.text.chars().count() as f32 * char_w
+            } else {
+                el.wrapped_lines.iter()
+                    .map(|l| l.chars().count() as f32 * char_w)
+                    .fold(0.0f32, f32::max)
+            };
+            if max_line_w > 0.0 {
+                el.width = max_line_w.min(container_width);
             }
         }
     }
 
+    // Wrap text NOW so bottom-up height computation uses correct line counts
+    apply_text_wrapping(elements, container_width);
+
     // ── Manual vertical flow with Inline Formatting Context ──
-    const LHS: f32 = 1.4;
     let n = elements.len();
 
     // Helper: pack consecutive inline children into horizontal line boxes.
@@ -741,15 +765,16 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
         (cy + line_h) - origin_y
     }
 
-    // Bottom-up pass: compute heights
+    // Bottom-up pass: compute heights (account for wrapped lines)
     let mut h = vec![0.0; n];
     let mut is_inline = vec![false; n];
     for i in (0..n).rev() {
         let own_height = if elements[i].height > 0.0 {
             elements[i].height
         } else if !elements[i].text.is_empty() {
-            let fs = elements[i].font_size.max(6.0).min(200.0);
-            fs * LHS
+            let fs = elements[i].font_size.clamp(6.0, 200.0);
+            let line_count = elements[i].wrapped_lines.len().max(1);
+            fs * elements[i].line_height.max(0.1) * line_count as f32
         } else {
             0.0
         };
@@ -772,8 +797,8 @@ fn apply_caelum_layout(elements: &mut Vec<StyledElement>, container_width: f32) 
 
     // Build children-per-parent lists (document-order traversal)
     let mut children_of: Vec<Vec<usize>> = vec![vec![]; n];
-    for i in 0..n {
-        if let Some(pidx) = elements[i].parent_index {
+    for (i, el) in elements.iter().enumerate() {
+        if let Some(pidx) = el.parent_index {
             if pidx < n {
                 children_of[pidx].push(i);
             }
@@ -872,7 +897,7 @@ fn inject_js_output(dom: &mut crate::engine::dom::Node, text: &str) {
 
 use crate::engine::js::{JsBridge, JSEngine};
 
-async fn fetch_page_content(url: String) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     use crate::engine::net::fetch;
     use crate::engine::parser::Parser;
 
@@ -946,6 +971,7 @@ async fn fetch_page_content(url: String) -> (String, Vec<StyledElement>, Option<
     extract_scripts(&dom_node, &mut scripts);
     plog!("JS", "Found {} script blocks", scripts.len());
     let bridge = Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)));
+    let mut js_engine = JSEngine::new();
     for (si, script) in scripts.iter().enumerate() {
         let code = match script {
             ScriptSource::Inline(s) => {
@@ -960,8 +986,7 @@ async fn fetch_page_content(url: String) -> (String, Vec<StyledElement>, Option<
                 fetched
             }
         };
-        let mut js = JSEngine::new();
-        let _ = js.execute_with_bridge(&code, &bridge);
+        let _ = js_engine.execute_with_bridge(&code, &bridge);
     }
     let (modified_dom, js_output) = {
         let mut guard = bridge.lock().unwrap();
@@ -1013,12 +1038,12 @@ async fn fetch_page_content(url: String) -> (String, Vec<StyledElement>, Option<
     }
     plog!("IMAGES", "Loaded {} images", img_count);
 
-    apply_caelum_layout(&mut elements, 800.0);
+    apply_caelum_layout(&mut elements, content_width, viewport_h);
     plog!("CAELUM", "Layout computed for {} elements", elements.len());
 
-    apply_text_wrapping(&mut elements, 800.0);
     plog!("FINAL", "Done. URL={} elements={}", url, elements.len());
 
+    // ponytail: one engine per page-load script batch; dropped here, timer/event engine created on main thread in PageLoaded
     (url, elements, Some(bridge))
 }
 
@@ -1083,7 +1108,8 @@ pub struct BrowserScreen {
     pub js_engine: Option<JSEngine>,
     history: Vec<String>,
     history_index: usize,
-    is_history_nav: bool,}
+    is_history_nav: bool,
+    pub bounds: (f32, f32),}
 
 #[derive(Debug, Clone)]
 pub struct StyledElement {
@@ -1125,6 +1151,10 @@ pub struct StyledElement {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    pub line_height: f32,
+    pub text_decoration: String,
+    pub text_transform: String,
+    pub border_radius: [f32; 4],
 }
 
 struct PageCanvas<'a> {
@@ -1163,7 +1193,7 @@ impl Program<BrowserMessage> for PageCanvas<'_> {
             let ex = if el.x.is_finite() { el.x.max(0.0) } else { 0.0 };
             let ey = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
             let ew = if el.width.is_finite() { el.width.max(1.0) } else { 1.0 };
-            let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { let f = if el.font_size.is_finite() { el.font_size.max(6.0).min(200.0) } else { 16.0 }; f * 1.4 };
+            let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { let f = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 }; f * el.line_height.max(1.0) };
 
             if bg.is_some() || bc.is_some() {
                 let fill = bg.unwrap_or(iced::Color::TRANSPARENT);
@@ -1186,8 +1216,8 @@ impl Program<BrowserMessage> for PageCanvas<'_> {
             }
 
             let weight = if el.font_weight == "bold" { iced::font::Weight::Bold } else { iced::font::Weight::Normal };
-            let fs = if el.font_size.is_finite() { el.font_size.max(6.0).min(200.0) } else { 16.0 };
-            let line_h = fs * LINE_H_SCALE;
+            let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
+            let line_h = fs * el.line_height.max(1.0);
             let px0 = el.x.max(0.0) + bw[3];
             let py0 = el.y.max(0.0) + bw[0];
             let lines: Vec<&str> = if el.wrapped_lines.is_empty() {
@@ -1205,6 +1235,7 @@ impl Program<BrowserMessage> for PageCanvas<'_> {
                         color: el.color,
                         size: iced::Pixels(fs),
                         font: iced::Font { weight, ..Default::default() },
+                        shaping: iced::widget::text::Shaping::Advanced,
                         ..Default::default()
                     });
                 }
@@ -1265,6 +1296,7 @@ impl BrowserScreen {
             history: vec![default_url],
             history_index: 0,
             is_history_nav: false,
+            bounds: (1440.0, 900.0),
         }
     }
 
@@ -1278,7 +1310,8 @@ impl BrowserScreen {
                 self.loading = true;
                 self.bridge = None;
                 self.is_history_nav = false;
-                Task::perform(fetch_page_content(target), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
+                let (bw, bh) = self.bounds;
+                Task::perform(fetch_page_content(target, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
             }
             BrowserMessage::LinkClicked(url) => {
                 plog!("NAV", "LinkClicked: {}", url);
@@ -1287,7 +1320,8 @@ impl BrowserScreen {
                 self.loading = true;
                 self.bridge = None;
                 self.is_history_nav = false;
-                Task::perform(fetch_page_content(target), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
+                let (bw, bh) = self.bounds;
+                Task::perform(fetch_page_content(target, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
             }
             BrowserMessage::NavBack => {
                 if self.history_index > 0 {
@@ -1298,7 +1332,8 @@ impl BrowserScreen {
                     self.is_history_nav = true;
                     self.loading = true;
                     self.bridge = None;
-                    return Task::perform(fetch_page_content(url), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    let (bw, bh) = self.bounds;
+                    return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
             }
@@ -1311,7 +1346,8 @@ impl BrowserScreen {
                     self.is_history_nav = true;
                     self.loading = true;
                     self.bridge = None;
-                    return Task::perform(fetch_page_content(url), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    let (bw, bh) = self.bounds;
+                    return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
             }
@@ -1320,7 +1356,8 @@ impl BrowserScreen {
                 self.loading = true;
                 self.bridge = None;
                 self.is_history_nav = false;
-                Task::perform(fetch_page_content(self.url.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
+                let (bw, bh) = self.bounds;
+                Task::perform(fetch_page_content(self.url.clone(), bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
             }
             BrowserMessage::PageLoaded(page_url, elements, bridge_opt) => {
                 self.loading = false;
@@ -1339,10 +1376,6 @@ impl BrowserScreen {
                 self.content = format!("Loaded ({} elements)", count);
                 Task::none()
             }
-            BrowserMessage::ElementClicked(i) => {
-                plog!("NAV", "ElementClicked({}): tag={} text=\"{}\"", i, self.styled_elements.get(i).map(|e| e.tag.as_str()).unwrap_or("?"), self.styled_elements.get(i).map(|e| e.text.chars().take(40).collect::<String>()).unwrap_or_default());
-                Task::none()
-            }
             BrowserMessage::TimerTick => {
                 if let Some(ref bridge) = self.bridge {
                     let ready = {
@@ -1350,9 +1383,10 @@ impl BrowserScreen {
                         b.poll_timers()
                     };
                     if !ready.is_empty() {
-                        let mut js = JSEngine::new();
-                        for (_timer_id, source) in ready {
-                            let _ = js.execute_source(&source, bridge);
+                        if let Some(ref mut js) = self.js_engine {
+                            for (_timer_id, source) in ready {
+                                let _ = js.execute_source(&source, bridge);
+                            }
                         }
                     }
                     let nav = {
@@ -1363,7 +1397,25 @@ impl BrowserScreen {
                         self.url = url;
                         self.loading = true;
                         self.bridge = None;
-                        return Task::perform(fetch_page_content(self.url.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                        let (bw, bh) = self.bounds;
+                        return Task::perform(fetch_page_content(self.url.clone(), bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    }
+                    let hist_delta = {
+                        let mut b = bridge.lock().unwrap();
+                        b.pending_history_delta.take()
+                    };
+                    if let Some(delta) = hist_delta {
+                        let idx = (self.history_index as i32 + delta).clamp(0, self.history.len() as i32 - 1) as usize;
+                        if idx < self.history.len() && idx != self.history_index {
+                            self.history_index = idx;
+                            let url = self.history[idx].clone();
+                            self.url = url.clone();
+                            self.is_history_nav = true;
+                            self.loading = true;
+                            self.bridge = None;
+                            let (bw, bh) = self.bounds;
+                            return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                        }
                     }
                 }
                 Task::none()
@@ -1385,9 +1437,10 @@ impl BrowserScreen {
                         all
                     };
                     if !listeners.is_empty() {
-                        let mut js = JSEngine::new();
-                        for (_node_id, source) in listeners {
-                            let _ = js.execute_source(&source, bridge);
+                        if let Some(ref mut js) = self.js_engine {
+                            for (_node_id, source) in listeners {
+                                let _ = js.execute_source(&source, bridge);
+                            }
                         }
                     }
                 }
@@ -1399,7 +1452,7 @@ impl BrowserScreen {
     }
 
     pub fn subscription(&self) -> iced::Subscription<BrowserMessage> {
-        let has_timers = self.bridge.as_ref().map_or(false, |b| b.lock().unwrap().has_pending_timers());
+        let has_timers = self.bridge.as_ref().is_some_and(|b| b.lock().unwrap().has_pending_timers());
         if has_timers {
             iced::time::every(std::time::Duration::from_millis(100)).map(|_| BrowserMessage::TimerTick)
         } else {
@@ -1444,7 +1497,7 @@ impl BrowserScreen {
             let total_h = self.styled_elements.iter()
                 .map(|el| {
                     let ey = if el.y.is_finite() { el.y } else { 0.0 };
-                    ey + el.height.max(el.font_size.max(6.0).min(200.0)) + 40.0
+                    ey + el.height.max(el.font_size.clamp(6.0, 200.0)) + 40.0
                 })
                 .fold(0.0, f32::max);
             let total_h = if total_h.is_finite() { total_h.max(100.0) } else { 800.0 };
@@ -1452,7 +1505,7 @@ impl BrowserScreen {
             let pg = PageCanvas { elements: &self.styled_elements };
 
             container(
-                scrollable(canvas(pg).width(Length::Fixed(800.0)).height(Length::Fixed(total_h)))
+                scrollable(canvas(pg).width(Length::Fixed(self.bounds.0)).height(Length::Fixed(total_h)))
                     .width(Length::Fill)
                     .height(Length::Fill)
             )
@@ -1766,6 +1819,10 @@ mod tests {
             y: 0.0,
             width: 0.0,
             height: 0.0,
+            line_height: 1.4,
+            text_decoration: String::new(),
+            text_transform: String::new(),
+            border_radius: [0.0; 4],
         }
     }
 
@@ -1778,7 +1835,7 @@ mod tests {
             make_test("span", "Hello", "inline", Some(0)),
             make_test("span", "World", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0);
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
         assert!((elements[1].x - 0.0).abs() < EPS, "span0 x={}", elements[1].x);
         let expected_x = 5.0 * 16.0 * CHAR_W_SCALE;
         assert!((elements[2].x - expected_x).abs() < EPS, "span1 x={} expected={}", elements[2].x, expected_x);
@@ -1792,7 +1849,7 @@ mod tests {
             make_test("div", "", "block", None),
             make_test("span", "Hi", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0);
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
         let text_w = 2.0 * 16.0 * CHAR_W_SCALE;
         assert!((elements[1].x - 0.0).abs() < EPS, "x={}", elements[1].x);
         assert!((elements[1].width - text_w).abs() < EPS, "width={} expected={}", elements[1].width, text_w);
@@ -1807,7 +1864,7 @@ mod tests {
         ];
         // container width is 800, each span text width ≈ 8*16*0.58=74.24
         // both fit on one line (74.24+74.24=148.48 < 800), so no wrap expected
-        apply_caelum_layout(&mut elements, 800.0);
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
         let text_w = 8.0 * 16.0 * CHAR_W_SCALE;
         assert!((elements[1].x - 0.0).abs() < EPS, "span0 x={}", elements[1].x);
         assert!((elements[2].x - text_w).abs() < EPS, "span1 x={} expected={}", elements[2].x, text_w);
@@ -1823,8 +1880,8 @@ mod tests {
             make_test("p", "Block", "block", Some(0)),
             make_test("span", "World", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0);
-        let text_w = 5.0 * 16.0 * CHAR_W_SCALE;
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        let _text_w = 5.0 * 16.0 * CHAR_W_SCALE;
         // span0 on line 1
         assert!((elements[1].x - 0.0).abs() < EPS, "span0 x={}", elements[1].x);
         assert!((elements[1].y - 0.0).abs() < EPS, "span0 y={}", elements[1].y);
@@ -1842,7 +1899,7 @@ mod tests {
             make_test("span", "Outer ", "inline", Some(0)),
             make_test("span", "Inner", "inline", Some(1)),
         ];
-        apply_caelum_layout(&mut elements, 800.0);
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
         // Outer span width = 6 * 16 * 0.58
         // Inner span width = 5 * 16 * 0.58
         // Both should be on same line (nested spans flow inline)
@@ -1864,7 +1921,7 @@ mod tests {
                 ..make_test("div", "", "inline-block", Some(0))
             },
         ];
-        apply_caelum_layout(&mut elements, 800.0);
+        apply_caelum_layout(&mut elements, 800.0, 6000.0);
         // inline-block height = 50 + margins (10+10) = 70 contributed to line height
         assert!((elements[1].y - 0.0).abs() < EPS, "ib y={}", elements[1].y);
         let line_h = 50.0 + 10.0 + 10.0;

@@ -252,7 +252,7 @@ where
         FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
 {
     /// A reference to the CaelumTree
-    pub(crate) Caelum: &'t mut CaelumTree<NodeContext>,
+    pub(crate) caelum: &'t mut CaelumTree<NodeContext>,
     /// The context provided for passing to measure functions if layout is run over this struct
     pub(crate) measure_function: MeasureFunction,
 }
@@ -284,7 +284,7 @@ where
         //
         // If there was no cache match and a new result needs to be computed then that result will be added to the cache
         compute_cached_layout(self, node_id, inputs, |tree, node_id, inputs| {
-            let display_mode = tree.Caelum.nodes[node_id.into()].style.display;
+            let display_mode = tree.caelum.nodes[node_id.into()].style.display;
             let has_children = tree.child_count(node_id) > 0;
 
             debug_log!(display_mode);
@@ -298,9 +298,9 @@ where
                 (Display::Grid, true) => compute_grid_layout(tree, node_id, inputs),
                 (_, false) => {
                     let node_key = node_id.into();
-                    let style = &tree.Caelum.nodes[node_key].style;
-                    let has_context = tree.Caelum.nodes[node_key].has_context;
-                    let node_context = has_context.then(|| tree.Caelum.node_context_data.get_mut(node_key)).flatten();
+                    let style = &tree.caelum.nodes[node_key].style;
+                    let has_context = tree.caelum.nodes[node_key].has_context;
+                    let node_context = has_context.then(|| tree.caelum.node_context_data.get_mut(node_key)).flatten();
                     let measure_function = |known_dimensions, available_space| {
                         (tree.measure_function)(known_dimensions, available_space, node_id, node_context, style)
                     };
@@ -324,17 +324,17 @@ where
 
     #[inline(always)]
     fn child_ids(&self, parent_node_id: NodeId) -> Self::ChildIter<'_> {
-        self.Caelum.child_ids(parent_node_id)
+        self.caelum.child_ids(parent_node_id)
     }
 
     #[inline(always)]
     fn child_count(&self, parent_node_id: NodeId) -> usize {
-        self.Caelum.child_count(parent_node_id)
+        self.caelum.child_count(parent_node_id)
     }
 
     #[inline(always)]
     fn get_child_id(&self, parent_node_id: NodeId, child_index: usize) -> NodeId {
-        self.Caelum.get_child_id(parent_node_id, child_index)
+        self.caelum.get_child_id(parent_node_id, child_index)
     }
 }
 
@@ -360,12 +360,12 @@ where
 
     #[inline(always)]
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
-        &self.Caelum.nodes[node_id.into()].style
+        &self.caelum.nodes[node_id.into()].style
     }
 
     #[inline(always)]
     fn set_unrounded_layout(&mut self, node_id: NodeId, layout: &Layout) {
-        self.Caelum.nodes[node_id.into()].unrounded_layout = *layout;
+        self.caelum.nodes[node_id.into()].unrounded_layout = *layout;
     }
 
     #[inline(always)]
@@ -389,15 +389,15 @@ where
         FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
 {
     fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-        self.Caelum.nodes[node_id.into()].cache.get(input)
+        self.caelum.nodes[node_id.into()].cache.get(input)
     }
 
     fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
-        self.Caelum.nodes[node_id.into()].cache.store(input, layout_output)
+        self.caelum.nodes[node_id.into()].cache.store(input, layout_output)
     }
 
     fn cache_clear(&mut self, node_id: NodeId) {
-        self.Caelum.nodes[node_id.into()].cache.clear();
+        self.caelum.nodes[node_id.into()].cache.clear();
     }
 }
 
@@ -452,12 +452,12 @@ where
 
     #[inline(always)]
     fn get_flexbox_container_style(&self, node_id: NodeId) -> Self::FlexboxContainerStyle<'_> {
-        &self.Caelum.nodes[node_id.into()].style
+        &self.caelum.nodes[node_id.into()].style
     }
 
     #[inline(always)]
     fn get_flexbox_child_style(&self, child_node_id: NodeId) -> Self::FlexboxItemStyle<'_> {
-        &self.Caelum.nodes[child_node_id.into()].style
+        &self.caelum.nodes[child_node_id.into()].style
     }
 }
 
@@ -477,17 +477,17 @@ where
 
     #[inline(always)]
     fn get_grid_container_style(&self, node_id: NodeId) -> Self::GridContainerStyle<'_> {
-        &self.Caelum.nodes[node_id.into()].style
+        &self.caelum.nodes[node_id.into()].style
     }
 
     #[inline(always)]
     fn get_grid_child_style(&self, child_node_id: NodeId) -> Self::GridItemStyle<'_> {
-        &self.Caelum.nodes[child_node_id.into()].style
+        &self.caelum.nodes[child_node_id.into()].style
     }
 
     #[inline(always)]
     fn set_detailed_grid_info(&mut self, node_id: NodeId, detailed_grid_info: DetailedGridInfo) {
-        self.Caelum.nodes[node_id.into()].detailed_layout_info = DetailedLayoutInfo::Grid(Box::new(detailed_grid_info));
+        self.caelum.nodes[node_id.into()].detailed_layout_info = DetailedLayoutInfo::Grid(Box::new(detailed_grid_info));
     }
 }
 
@@ -499,12 +499,12 @@ where
 {
     #[inline(always)]
     fn get_unrounded_layout(&self, node: NodeId) -> Layout {
-        self.Caelum.nodes[node.into()].unrounded_layout
+        self.caelum.nodes[node.into()].unrounded_layout
     }
 
     #[inline(always)]
     fn set_final_layout(&mut self, node_id: NodeId, layout: &Layout) {
-        self.Caelum.nodes[node_id.into()].final_layout = *layout;
+        self.caelum.nodes[node_id.into()].final_layout = *layout;
     }
 }
 
@@ -888,10 +888,10 @@ impl<NodeContext> CaelumTree<NodeContext> {
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
     {
         let use_rounding = self.config.use_rounding;
-        let mut Caelum_view = CaelumView { Caelum: self, measure_function };
-        compute_root_layout(&mut Caelum_view, node_id, available_space);
+        let mut caelum_view = CaelumView { caelum: self, measure_function };
+        compute_root_layout(&mut caelum_view, node_id, available_space);
         if use_rounding {
-            round_layout(&mut Caelum_view, node_id);
+            round_layout(&mut caelum_view, node_id);
         }
         Ok(())
     }
@@ -909,7 +909,7 @@ impl<NodeContext> CaelumTree<NodeContext> {
     /// Returns an instance of LayoutTree representing the CaelumTree
     #[cfg(test)]
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
-        CaelumView { Caelum: self, measure_function: |_, _, _, _, _| Size::ZERO }
+        CaelumView { caelum: self, measure_function: |_, _, _, _, _| Size::ZERO }
     }
 }
 

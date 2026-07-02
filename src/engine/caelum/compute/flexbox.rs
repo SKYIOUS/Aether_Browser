@@ -247,12 +247,12 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
     debug_log!("determine_flex_base_size");
     determine_flex_base_size(tree, &constants, available_space, &mut flex_items);
 
-    for item in flex_items.iter() {
-        debug_log!("item.flex_basis", item.flex_basis);
-        debug_log!("item.inner_flex_basis", item.inner_flex_basis);
-        debug_log!("item.hypothetical_outer_size", dbg:item.hypothetical_outer_size);
-        debug_log!("item.hypothetical_inner_size", dbg:item.hypothetical_inner_size);
-        debug_log!("item.resolved_minimum_main_size", dbg:item.resolved_minimum_main_size);
+    for _item in flex_items.iter() {
+        debug_log!("item.flex_basis", _item.flex_basis);
+        debug_log!("item.inner_flex_basis", _item.inner_flex_basis);
+        debug_log!("item.hypothetical_outer_size", dbg:_item.hypothetical_outer_size);
+        debug_log!("item.hypothetical_inner_size", dbg:_item.hypothetical_inner_size);
+        debug_log!("item.resolved_minimum_main_size", dbg:_item.resolved_minimum_main_size);
     }
 
     // 4. Determine the main size of the flex container

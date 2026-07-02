@@ -3,7 +3,7 @@ pub mod kor_renderer;
 pub mod screens;
 pub mod style;
 
-use iced::{Element, Task, Subscription};
+use iced::{Element, Task, Subscription, Event};
 use screens::browser::{BrowserMessage, BrowserScreen};
 use screens::palette::{PaletteMessage, PaletteScreen};
 use screens::settings::{SettingsMessage, SettingsScreen};
@@ -13,6 +13,7 @@ pub enum Message {
     Browser(BrowserMessage),
     Settings(SettingsMessage),
     Palette(PaletteMessage),
+    Event(iced::Event),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -79,13 +80,24 @@ impl AetherApp {
                     }
                 }
             }
+            Message::Event(event) => {
+                if let Event::Window(iced::window::Event::Resized(size)) = event {
+                    self.browser.bounds = (size.width, size.height);
+                }
+                Task::none()
+            }
         }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
+        let event_sub = iced::event::listen().map(Message::Event);
+
         match self.current_screen {
-            Screen::Browser => self.browser.subscription().map(Message::Browser),
-            _ => Subscription::none(),
+            Screen::Browser => Subscription::batch(vec![
+                self.browser.subscription().map(Message::Browser),
+                event_sub,
+            ]),
+            _ => event_sub,
         }
     }
 

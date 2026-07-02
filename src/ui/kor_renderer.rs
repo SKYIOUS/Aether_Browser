@@ -1,7 +1,7 @@
 use korlang::vm::{Value, KorObject, VirtualMachine};
 use iced::widget::{button, column, row, text, text_input, container, Space};
 use crate::ui::screens::browser::BrowserMessage;
-use iced::{Length, Alignment, Color, Background, Border, Shadow, Vector};
+use iced::{Length, Alignment, Color, Background, Border};
 
 pub fn render_kor_vm(vm: &VirtualMachine) -> iced::Element<'static, BrowserMessage> {
     if let Some(Value::Object(root)) = vm.stack.last() {

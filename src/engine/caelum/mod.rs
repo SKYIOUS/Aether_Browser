@@ -1,7 +1,4 @@
-macro_rules! from_str_from_css {
-    ($t:ty) => {};
-}
-
+#[allow(unused_macros)]
 macro_rules! impl_parse_for_keyword_enum {
     ($e:ident, $($rest:tt)*) => {};
 }
