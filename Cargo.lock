@@ -28,15 +28,46 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "aether-browser"
 version = "0.1.0"
 dependencies = [
+ "aether-caelum",
+ "aether-css",
+ "aether-dom",
+ "aether-html",
  "chrono",
  "iced",
  "image 0.25.10",
  "korlang",
  "rquickjs",
  "slotmap",
+ "strum",
  "symphonia",
  "ureq",
  "wgpu 29.0.3",
+]
+
+[[package]]
+name = "aether-caelum"
+version = "0.1.0"
+dependencies = [
+ "slotmap",
+]
+
+[[package]]
+name = "aether-css"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "strum",
+]
+
+[[package]]
+name = "aether-dom"
+version = "0.1.0"
+
+[[package]]
+name = "aether-html"
+version = "0.1.0"
+dependencies = [
+ "aether-dom",
 ]
 
 [[package]]
@@ -4311,6 +4342,28 @@ name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.117",
+]
 
 [[package]]
 name = "subtle"

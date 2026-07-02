@@ -1,0 +1,12 @@
+{
+  // Use Clippy instead of cargo check for real-time feedback
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["--", "-D", "clippy::all", "-W", "clippy::pedantic"],
+
+  // Enable hot-reloading diagnostics so errors clear instantly
+  "rust-analyzer.diagnostics.refreshSupport": true,
+
+  // Drastically speeds up analyzer performance on large multi-crate workspaces
+  "rust-analyzer.cargo.buildScripts.enable": true,
+  "rust-analyzer.procMacro.enable": true
+}
