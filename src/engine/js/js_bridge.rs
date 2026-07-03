@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use crate::plog;
 use crate::engine::dom::{ElementData, Node, NodeType};
@@ -202,6 +202,18 @@ struct UrlParts {
     hash: String,
 }
 
+type OriginStore = HashMap<String, HashMap<String, String>>;
+
+fn cookie_store() -> &'static RwLock<OriginStore> {
+    static COOKIE_STORE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
+    COOKIE_STORE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn local_storage_store() -> &'static RwLock<OriginStore> {
+    static LOCAL_STORAGE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
+    LOCAL_STORAGE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
 impl Default for UrlParts {
     fn default() -> Self {
         Self { protocol: "https:".into(), hostname: String::new(), port: String::new(), pathname: "/".into(), search: String::new(), hash: String::new() }
@@ -257,6 +269,17 @@ fn parse_url(url: &str) -> UrlParts {
     parts
 }
 
+fn origin_key(url: &str) -> String {
+    let parts = parse_url(url);
+    if parts.hostname.is_empty() {
+        "null".to_string()
+    } else if parts.port.is_empty() {
+        format!("{}//{}", parts.protocol, parts.hostname)
+    } else {
+        format!("{}//{}:{}", parts.protocol, parts.hostname, parts.port)
+    }
+}
+
 // ── JsBridge ────────────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -272,11 +295,13 @@ pub struct JsBridge {
     next_timer_id: u32,
     timers: Vec<TimerEntry>,
     event_listeners: Vec<EventListenerEntry>,
-    cookies: HashMap<String, String>,
-    local_storage: HashMap<String, String>,
 }
 
 impl JsBridge {
+    fn current_origin(&self) -> String {
+        origin_key(&self.current_url)
+    }
+
     fn new_internal(url: &str) -> Self {
         Self {
             write_buffer: String::new(),
@@ -290,8 +315,6 @@ impl JsBridge {
             next_timer_id: 1,
             timers: vec![],
             event_listeners: vec![],
-            cookies: HashMap::new(),
-            local_storage: HashMap::new(),
         }
     }
 
@@ -344,7 +367,7 @@ impl JsBridge {
             Self::flatten(root, &mut n);
             n
         };
-        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![], cookies: HashMap::new(), local_storage: HashMap::new() };
+        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![] };
         bridge.body_id = bridge.find_body();
         bridge
     }
@@ -859,7 +882,9 @@ impl JsBridge {
 
     pub fn get_cookie(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
-        for (key, value) in &self.cookies {
+        let origin = self.current_origin();
+        let guard = cookie_store().read().ok();
+        for (key, value) in guard.as_ref().and_then(|g| g.get(&origin)).into_iter().flat_map(|m| m.iter()) {
             parts.push(format!("{}={}", key, value));
         }
         parts.join("; ")
@@ -870,7 +895,9 @@ impl JsBridge {
             let key = cookie_str[..eq_pos].trim().to_string();
             let value = cookie_str[eq_pos + 1..].trim().to_string();
             if !key.is_empty() {
-                self.cookies.insert(key, value);
+                if let Ok(mut guard) = cookie_store().write() {
+                    guard.entry(self.current_origin()).or_default().insert(key, value);
+                }
             }
         }
     }
@@ -878,30 +905,42 @@ impl JsBridge {
     // ── LocalStorage methods ────────────────────────────────────────
 
     pub fn local_storage_get_item(&self, key: &str) -> Option<String> {
-        self.local_storage.get(key).cloned()
+        let origin = self.current_origin();
+        local_storage_store().read().ok().and_then(|guard| guard.get(&origin).and_then(|m| m.get(key)).cloned())
     }
 
     pub fn local_storage_set_item(&mut self, key: String, value: String) {
-        self.local_storage.insert(key, value);
+        if let Ok(mut guard) = local_storage_store().write() {
+            guard.entry(self.current_origin()).or_default().insert(key, value);
+        }
     }
 
     pub fn local_storage_remove_item(&mut self, key: &str) {
-        self.local_storage.remove(key);
+        if let Ok(mut guard) = local_storage_store().write() {
+            if let Some(origin) = guard.get_mut(&self.current_origin()) {
+                origin.remove(key);
+            }
+        }
     }
 
     pub fn local_storage_clear(&mut self) {
-        self.local_storage.clear();
+        if let Ok(mut guard) = local_storage_store().write() {
+            guard.remove(&self.current_origin());
+        }
     }
 
     pub fn local_storage_key(&self, index: i32) -> Option<String> {
         if index < 0 {
             return None;
         }
-        self.local_storage.keys().nth(index as usize).cloned()
+        local_storage_store().read().ok()
+            .and_then(|guard| guard.get(&self.current_origin()).and_then(|m| m.keys().nth(index as usize).cloned()))
     }
 
     pub fn local_storage_length(&self) -> i32 {
-        self.local_storage.len() as i32
+        local_storage_store().read().ok()
+            .and_then(|guard| guard.get(&self.current_origin()).map(|m| m.len() as i32))
+            .unwrap_or(0)
     }
 
     // ── Style methods ───────────────────────────────────────────────
@@ -1007,6 +1046,15 @@ impl JsBridge {
             }
         }
         best_id
+    }
+
+    pub fn find_node_by_path(&self, path: &[usize]) -> Option<u32> {
+        let mut current = 0u32;
+        for &child_index in path {
+            let node = self.nodes.get(current as usize)?;
+            current = *node.children.get(child_index)?;
+        }
+        Some(current)
     }
 
     fn find_node_by_tag_position(&self, tag: &str, _x: f32, _y: f32) -> u32 {

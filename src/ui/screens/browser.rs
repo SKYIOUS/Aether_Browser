@@ -179,14 +179,17 @@ impl BrowserScreen {
         kor_vm.set_builtin("nav_search", korlang::vm::Value::String("Search or navigate".to_string()));
         kor_vm.set_builtin("nav_bookmark", korlang::vm::Value::String("\u{2606}".to_string()));
         kor_vm.set_builtin("nav_palette", korlang::vm::Value::String("\u{229E}".to_string()));
+        kor_vm.set_builtin("status_left", korlang::vm::Value::String("Aether Ready".to_string()));
+        kor_vm.set_builtin("status_mid", korlang::vm::Value::String("Idle".to_string()));
+        kor_vm.set_builtin("status_right", korlang::vm::Value::String("Local shell".to_string()));
         let status_src = r#"
 Component StatusBar {
     Row(spacing: 8) {
-        Text(size: 10, text: "Secure Core")
+        Text(size: 10, text: status_left)
         Text(size: 10, text: " \u{00B7} ")
-        Text(size: 10, text: "Flow Active")
+        Text(size: 10, text: status_mid)
         Text(size: 10, text: " \u{00B7} ")
-        Text(size: 10, text: "1.2ms Latency")
+        Text(size: 10, text: status_right)
     }
 }
 "#;
@@ -290,6 +293,8 @@ Component SidebarWS {
                 let target = normalize_nav_url(&self.url);
                 self.url = target.clone();
                 self.loading = true;
+                self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
+                self.kor_vm.update_state("status_right", korlang::vm::Value::String(target.clone()));
                 self.bridge = None;
                 self.is_history_nav = false;
                 let (bw, bh) = self.bounds;
@@ -300,6 +305,8 @@ Component SidebarWS {
                 let target = normalize_nav_url(&url);
                 self.url = target.clone();
                 self.loading = true;
+                self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
+                self.kor_vm.update_state("status_right", korlang::vm::Value::String(target.clone()));
                 self.bridge = None;
                 self.is_history_nav = false;
                 let (bw, bh) = self.bounds;
@@ -320,6 +327,8 @@ Component SidebarWS {
                     self.url = url.clone();
                     self.is_history_nav = true;
                     self.loading = true;
+                    self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
+                    self.kor_vm.update_state("status_right", korlang::vm::Value::String(url.clone()));
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
@@ -369,8 +378,28 @@ Component SidebarWS {
                 self.is_history_nav = false;
                 self.styled_elements = elements;
                 self.layout_gen += 1;
+                let page_title = bridge_opt.as_ref().and_then(|b| {
+                    b.lock()
+                        .ok()
+                        .map(|guard| guard.doc_title.trim().to_string())
+                        .filter(|title| !title.is_empty())
+                }).unwrap_or_else(|| {
+                    page_url
+                        .split("://")
+                        .nth(1)
+                        .and_then(|rest| rest.split('/').next())
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or(&page_url)
+                        .to_string()
+                });
+                if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+                    tab.title = page_title;
+                }
                 self.bridge = bridge_opt;
                 self.js_engine = Some(JSEngine::new());
+                self.navbar_kor_vm.update_state("url_input", korlang::vm::Value::String(self.url.clone()));
+                self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loaded".to_string()));
+                self.kor_vm.update_state("status_right", korlang::vm::Value::String(format!("{} elements", count)));
                 self.content = format!("Loaded ({} elements)", count);
                 Task::none()
             }
@@ -417,6 +446,8 @@ Component SidebarWS {
                             self.url = url.clone();
                             self.is_history_nav = true;
                             self.loading = true;
+                            self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
+                            self.kor_vm.update_state("status_right", korlang::vm::Value::String(url.clone()));
                             self.bridge = None;
                             let (bw, bh) = self.bounds;
                             return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
@@ -430,20 +461,15 @@ Component SidebarWS {
                     let el = &self.styled_elements[idx];
                     let listeners = {
                         let b = bridge.lock().unwrap_or_else(|e| e.into_inner());
-                        let tag = el.tag.to_lowercase();
                         let mut all = vec![];
-                        if let Some(body) = b.body_id {
-                            let candidates = b.query_selector_all(body, &tag);
-                            for cid in candidates {
-                                let els = b.get_event_listeners(cid, "click");
-                                all.extend(els.into_iter().map(|s| (cid, s)));
-                            }
+                        if let Some(node_id) = b.find_node_by_path(&el.dom_path) {
+                            all.extend(b.get_event_listeners_bubbling(node_id, "click"));
                         }
                         all
                     };
                     if !listeners.is_empty() {
                         if let Some(ref mut js) = self.js_engine {
-                            for (_node_id, source) in listeners {
+                            for (source, _node_id) in listeners {
                                 let _ = js.execute_source(&source, bridge);
                             }
                         }
@@ -615,6 +641,7 @@ mod tests {
     fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> StyledElement {
         StyledElement {
             tag: tag.to_string(), text: text.to_string(), wrapped_lines: vec![],
+            dom_path: vec![],
             is_link: false, href: None, indent_level: 0,
             color: Color::BLACK, font_size: 16.0, font_weight: "normal".to_string(),
             background_color: None, border_widths: [0.0; 4], border_color: None,
@@ -631,8 +658,6 @@ mod tests {
             text_transform: String::new(), border_radius: [0.0; 4],
         }
     }
-
-    const EPS: f32 = 0.01;
 
     #[test]
     fn test_ifc_simple_inline_siblings() {

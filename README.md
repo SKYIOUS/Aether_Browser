@@ -25,7 +25,8 @@ cargo test
 
 ## Limitations
 This is a prototype, not a production browser.
-- No security sandbox, no CSP enforcement, no process isolation
+- No security sandbox or process isolation
+- CSP is only partially enforced for page scripts and styles
 - Images rendered as placeholder rectangles (Iced 0.13 canvas limitation)
 - Single-process, blocking I/O for network requests
 - Maximum 2000 DOM elements per page, 50 style blocks, 500KB CSS limit

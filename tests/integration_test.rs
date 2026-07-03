@@ -72,7 +72,7 @@ fn test_extract_and_layout_pipeline() {
     let stylesheet = stratus::parse(&css);
 
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &stylesheet, None, None);
+    extract_elements(&dom, &mut elements, 0, &stylesheet, None, None, vec![]);
 
     assert!(!elements.is_empty(), "should extract elements");
 

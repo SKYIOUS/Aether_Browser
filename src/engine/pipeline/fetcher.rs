@@ -107,18 +107,38 @@ fn inject_js_output(dom: &mut Node, text: &str) {
     }
 }
 
+fn run_blocking<T, F>(f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    std::thread::spawn(f)
+        .join()
+        .map_err(|_| "blocking task panicked".to_string())
+}
+
 pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     plog!("FETCH", "URL={}", url);
-    let html = match net::fetch(&url) {
-        Ok(html) => {
-            plog!("FETCH", "Status=OK len={}", html.len());
-            html
+    let response = match run_blocking({
+        let url = url.clone();
+        move || net::fetch_with_redirects(&url, 5)
+    }) {
+        Ok(Ok(resp)) => {
+            plog!("FETCH", "Status=OK len={}", resp.body.len());
+            resp
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             plog!("FETCH", "Fetch error: {}", e);
             return (url, vec![], None);
         }
+        Err(e) => {
+            plog!("FETCH", "Fetch task join error: {}", e);
+            return (url, vec![], None);
+        }
     };
+    let net::Response { body: html, headers, .. } = response;
+    let csp_blocks_scripts = net::csp_blocks_scripts(&headers);
+    let csp_blocks_styles = net::csp_blocks_styles(&headers);
 
     let max_html = 1_000_000;
     let html = if html.len() > max_html {
@@ -139,7 +159,13 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     let mut stylesheet = Stylesheet { rules: Vec::new() };
     let style_limit = styles.len().min(50);
     plog!("STYLE", "Processing up to {} style blocks", style_limit);
+    if csp_blocks_styles {
+        plog!("STYLE", "Skipping inline styles due to CSP");
+    }
     for (si, style_content) in styles.iter().take(style_limit).enumerate() {
+        if csp_blocks_styles {
+            break;
+        }
         let max_css_len = 500_000;
         let trimmed = if style_content.len() > max_css_len {
             plog!("CSS", "Truncated inline style {} from {} to {}", si, style_content.len(), max_css_len);
@@ -156,6 +182,9 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     let link_limit = link_urls.len().min(50);
     plog!("CSS", "Found {} external CSS links, processing {}", link_urls.len(), link_limit);
     for link_url in link_urls.iter().take(link_limit) {
+        if csp_blocks_styles {
+            break;
+        }
         let resolved = net::resolve_url(link_url, &url);
         if let Ok(cache) = css_cache().read() {
             if let Some(cached) = cache.get(&resolved) {
@@ -165,8 +194,11 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
             }
         }
         plog!("CSS", "Fetching external CSS from {}", resolved);
-        match net::fetch(&resolved) {
-            Ok(css_content) => {
+        match run_blocking({
+            let resolved = resolved.clone();
+            move || net::fetch(&resolved)
+        }) {
+            Ok(Ok(css_content)) => {
                 let max_css_len = 500_000;
                 let trimmed = if css_content.len() > max_css_len {
                     plog!("CSS", "Truncated external CSS from {} to {}", css_content.len(), max_css_len);
@@ -183,7 +215,8 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                 stylesheet.rules.extend(rules);
                 plog!("CSS", "Parsed {} rules from external CSS", count);
             }
-            Err(e) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
+            Ok(Err(e)) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
+            Err(e) => { plog!("CSS", "Fetch task join error: {}", e); }
         }
     }
     plog!("CSS", "Total stylesheet rules: {}", stylesheet.rules.len());
@@ -193,7 +226,13 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     plog!("JS", "Found {} script blocks", scripts.len());
     let bridge = Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)));
     let mut js_engine = JSEngine::new();
+    if csp_blocks_scripts {
+        plog!("JS", "Skipping script execution due to CSP");
+    }
     for (si, script) in scripts.iter().enumerate() {
+        if csp_blocks_scripts {
+            break;
+        }
         let code = match script {
             ScriptSource::Inline(s) => {
                 plog!("JS", "Executing inline script {}", si);
@@ -202,10 +241,17 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
             ScriptSource::External(src) => {
                 let resolved = net::resolve_url(src, &url);
                 plog!("JS", "Fetching external script from {}", resolved);
-                match net::fetch(&resolved) {
-                    Ok(fetched) => fetched,
-                    Err(e) => {
+                match run_blocking({
+                    let resolved = resolved.clone();
+                    move || net::fetch(&resolved)
+                }) {
+                    Ok(Ok(fetched)) => fetched,
+                    Ok(Err(e)) => {
                         plog!("JS", "Failed to fetch external script: {}", e);
+                        continue;
+                    }
+                    Err(e) => {
+                        plog!("JS", "Fetch task join error: {}", e);
                         continue;
                     }
                 }
@@ -226,7 +272,7 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     }
 
     let mut elements = Vec::new();
-    extract_elements(&dom_node, &mut elements, 0, &stylesheet, None, None);
+    extract_elements(&dom_node, &mut elements, 0, &stylesheet, None, None, vec![]);
     plog!("EXTRACT", "Extracted {} elements", elements.len());
     elements.truncate(2000);
 
@@ -235,10 +281,17 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
         if let Some(ref img_src) = el.image_url.clone() {
             img_count += 1;
             let resolved = net::resolve_url(img_src, &url);
-            let bytes = match net::fetch_bytes(&resolved) {
-                Ok(b) => b,
-                Err(e) => {
+            let bytes = match run_blocking({
+                let resolved = resolved.clone();
+                move || net::fetch_bytes(&resolved)
+            }) {
+                Ok(Ok(b)) => b,
+                Ok(Err(e)) => {
                     plog!("IMAGES", "Failed to fetch image: {}", e);
+                    continue;
+                }
+                Err(e) => {
+                    plog!("IMAGES", "Fetch task join error: {}", e);
                     continue;
                 }
             };

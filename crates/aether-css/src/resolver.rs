@@ -66,14 +66,14 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                 }
 
                 CssPropertyName::Width => style.width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::Height => style.height = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::Height => style.height = parse_length_vp_vertical(&decl.value, vw, vh),
                 CssPropertyName::MinWidth => style.min_width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::MinHeight => style.min_height = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::MinHeight => style.min_height = parse_length_vp_vertical(&decl.value, vw, vh),
                 CssPropertyName::MaxWidth => style.max_width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::MaxHeight => style.max_height = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::Top => style.top = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::MaxHeight => style.max_height = parse_length_vp_vertical(&decl.value, vw, vh),
+                CssPropertyName::Top => style.top = parse_length_vp_vertical(&decl.value, vw, vh),
                 CssPropertyName::Right => style.right = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::Bottom => style.bottom = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::Bottom => style.bottom = parse_length_vp_vertical(&decl.value, vw, vh),
                 CssPropertyName::Left => style.left = parse_length_vp(&decl.value, vw, vh),
 
                 CssPropertyName::FlexDirection => style.flex.flex_direction = parse_flex_direction(&decl.value),
@@ -138,6 +138,21 @@ fn resolve_length_for_unit(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
 fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
     match value {
         PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
+        PropertyValue::Keyword(s) => s.parse().ok(),
+        _ => None,
+    }
+}
+
+fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
+    match value {
+        PropertyValue::Length(lv) => Some(match lv.unit {
+            Unit::Px => lv.value,
+            Unit::Vw => lv.value * vw / 100.0,
+            Unit::Vh => lv.value * vh / 100.0,
+            Unit::Percent => lv.value * vh / 100.0,
+            Unit::Em | Unit::Rem => lv.value * 16.0,
+            _ => lv.value,
+        }),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }

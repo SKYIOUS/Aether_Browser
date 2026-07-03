@@ -93,13 +93,38 @@ fn cache_set(url: &str, body: &str) {
 
 // ── CSP ───────────────────────────────────────────────────────────────
 
-/// Checks Content-Security-Policy headers.
-/// Currently warn-only: returns true (permissive) but logs violations.
+fn header_value<'a>(headers: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
+    headers.iter().find_map(|(k, v)| k.eq_ignore_ascii_case(key).then_some(v.as_str()))
+}
+
+fn csp_directive_blocks(csp: &str, directive: &str) -> bool {
+    csp.split(';').any(|part| {
+        let trimmed = part.trim();
+        trimmed.starts_with(directive) && trimmed.contains("'none'")
+    })
+}
+
+/// Checks Content-Security-Policy headers and applies a conservative block for
+/// pages that explicitly opt out of all content or scripts.
 pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
-    if let Some(csp) = headers.get("content-security-policy") {
+    if let Some(csp) = header_value(headers, "content-security-policy") {
         plog!("csp", "Content-Security-Policy for {}: {}", url, csp);
+        if csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "script-src") {
+            plog!("csp", "Blocking {} due to restrictive CSP", url);
+            return false;
+        }
     }
     true
+}
+
+pub fn csp_blocks_scripts(headers: &HashMap<String, String>) -> bool {
+    header_value(headers, "content-security-policy")
+        .is_some_and(|csp| csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "script-src"))
+}
+
+pub fn csp_blocks_styles(headers: &HashMap<String, String>) -> bool {
+    header_value(headers, "content-security-policy")
+        .is_some_and(|csp| csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "style-src"))
 }
 
 pub struct Response {
@@ -173,12 +198,15 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
         }
     }
 
-    check_csp(&final_url, &headers);
+    if !check_csp(&final_url, &headers) {
+        return Err(FetchError::Network("Blocked by Content-Security-Policy".to_string()));
+    }
 
     if resp.status().is_redirection() && max_redirects > 0 {
         if let Some(location) = headers.get("location") {
             plog!("net", "Redirect to: {}", location);
-            return fetch_inner(location, max_redirects - 1);
+            let next = resolve_url(location, &final_url);
+            return fetch_inner(&next, max_redirects - 1);
         }
     }
 
@@ -190,26 +218,36 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
 
 /// Fetches binary content (images, etc.) from the given URL.
 pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
-    let final_url = normalize_url(url);
     if let Some(bytes) = mock::resolve_binary(url) {
         plog!("mock", "Serving binary for {}", url);
         return Ok(bytes);
     }
-    plog!("net", "Fetching binary: {}", final_url);
+    let mut current_url = normalize_url(url);
+    plog!("net", "Fetching binary: {}", current_url);
 
-    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
-    let resp = match cl.get(&final_url).send() {
-        Ok(r) => r,
-        Err(e) => return Err(FetchError::from(e)),
-    };
-    let status = resp.status().as_u16();
-    plog!("net", "Got binary response, status: {}", status);
-    if status >= 400 {
-        return Err(FetchError::Http(status, format!("HTTP error {}", status)));
+    for _ in 0..5 {
+        let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+        let resp = match cl.get(&current_url).send() {
+            Ok(r) => r,
+            Err(e) => return Err(FetchError::from(e)),
+        };
+        let status = resp.status().as_u16();
+        plog!("net", "Got binary response, status: {}", status);
+        if status >= 400 {
+            return Err(FetchError::Http(status, format!("HTTP error {}", status)));
+        }
+        if resp.status().is_redirection() {
+            let headers = resp.headers().clone();
+            if let Some(location) = headers.get("location").and_then(|v| v.to_str().ok()) {
+                current_url = resolve_url(location, &current_url);
+                continue;
+            }
+        }
+        let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();
+        plog!("net", "Fetched {} bytes", bytes.len());
+        return Ok(bytes);
     }
-    let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();
-    plog!("net", "Fetched {} bytes", bytes.len());
-    Ok(bytes)
+    Err(FetchError::Network("Too many redirects".to_string()))
 }
 
 fn normalize_url(url: &str) -> String {

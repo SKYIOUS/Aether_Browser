@@ -6,6 +6,7 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         tag: tag.to_string(),
         text: String::new(),
         wrapped_lines: vec![],
+        dom_path: vec![],
         is_link: false,
         href: None,
         indent_level: 0,
@@ -173,7 +174,7 @@ fn all_display_types() {
 #[test]
 fn margins_affect_layout() {
     let mut elements = vec![make_el("root", None)];
-    for i in 0..5 {
+    for _ in 0..5 {
         let mut el = make_el("div", Some(0));
         el.margin_top = 20.0;
         el.margin_bottom = 20.0;

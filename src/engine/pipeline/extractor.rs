@@ -44,6 +44,7 @@ pub struct StyledElement {
     pub tag: String,
     pub text: String,
     pub wrapped_lines: Vec<String>,
+    pub dom_path: Vec<usize>,
     pub is_link: bool,
     pub href: Option<String>,
     pub indent_level: usize,
@@ -183,9 +184,16 @@ fn compute_full_style(node: &Node, ss: &Stylesheet) -> FullStyle {
     }
 }
 
-fn make_element(tag: &str, text: String, fs: &FullStyle, parent_idx: Option<usize>) -> StyledElement {
+fn make_element(
+    tag: &str,
+    text: String,
+    fs: &FullStyle,
+    parent_idx: Option<usize>,
+    dom_path: Vec<usize>,
+) -> StyledElement {
     StyledElement {
         tag: tag.to_string(), text, wrapped_lines: vec![],
+        dom_path,
         is_link: false, href: None, indent_level: 0,
         color: fs.color, font_size: fs.font_size, font_weight: fs.font_weight.clone(),
         background_color: fs.background_color,
@@ -217,6 +225,7 @@ pub fn extract_elements(
     ss: &Stylesheet,
     parent_style: Option<FullStyle>,
     parent_idx: Option<usize>,
+    dom_path: Vec<usize>,
 ) {
     if depth > 50 || elements.len() >= 2000 { return; }
 
@@ -226,12 +235,12 @@ pub fn extract_elements(
             let txt = text.trim();
             if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
                 if let Some(ref ps) = parent_style {
-                    let mut el = make_element("text", txt.to_string(), ps, parent_idx);
+                    let mut el = make_element("text", txt.to_string(), ps, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
                 } else {
                     let fs = compute_full_style(node, ss);
-                    let mut el = make_element("text", txt.to_string(), &fs, parent_idx);
+                    let mut el = make_element("text", txt.to_string(), &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
                 }
@@ -241,8 +250,15 @@ pub fn extract_elements(
             let tag = elem.tag_name.to_lowercase();
             if should_skip_tag(&tag) {
                 if !should_skip_content(&tag) && tag != "head" && tag != "meta" && tag != "link" {
+                    let mut visible_idx = 0usize;
                     for child in &node.children {
-                        extract_elements(child, elements, depth + 1, ss, parent_style.clone(), parent_idx);
+                        if matches!(&child.node_type, NodeType::Comment(_)) {
+                            continue;
+                        }
+                        let mut child_path = dom_path.clone();
+                        child_path.push(visible_idx);
+                        visible_idx += 1;
+                        extract_elements(child, elements, depth + 1, ss, parent_style.clone(), parent_idx, child_path);
                     }
                 }
                 return;
@@ -320,7 +336,7 @@ pub fn extract_elements(
             }
 
             let this_idx = if !skip_element {
-                let mut el = make_element(tag_override, text_content, &fs, parent_idx);
+                let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
                 el.is_link = is_link;
                 el.href = href;
                 el.indent_level = indent;
@@ -372,9 +388,16 @@ pub fn extract_elements(
                 }
             };
 
+            let mut visible_idx = 0usize;
             for child in &node.children {
+                if matches!(&child.node_type, NodeType::Comment(_)) {
+                    continue;
+                }
+                let mut child_path = dom_path.clone();
+                child_path.push(visible_idx);
+                visible_idx += 1;
                 if skip_fn(child) { continue; }
-                extract_elements(child, elements, depth + 1, ss, Some(fs.clone()), new_parent);
+                extract_elements(child, elements, depth + 1, ss, Some(fs.clone()), new_parent, child_path);
             }
         }
     }
