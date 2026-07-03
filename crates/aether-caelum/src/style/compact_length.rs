@@ -101,12 +101,14 @@ mod inner {
 
         /// Get the serialized value.
         #[inline(always)]
+        #[allow(dead_code)]
         pub(super) fn serialized(self) -> u64 {
             (self.tagged_ptr as usize as u64).rotate_left(32)
         }
 
         /// Derialized from a value.
         #[inline(always)]
+        #[allow(dead_code)]
         pub(super) fn from_serialized(value: u64) -> Self {
             Self { tagged_ptr: value.rotate_right(32) as usize as *const () }
         }

@@ -1,7 +1,6 @@
 use aether_browser::engine::parser::Parser;
-use aether_browser::engine::css;
+use aether_browser::engine::stratus;
 use aether_browser::engine::dom::NodeType;
-use aether_browser::ui::screens::browser::{BrowserScreen, BrowserMessage};
 
 #[test]
 fn test_basic_rendering_pipeline() {
@@ -22,9 +21,8 @@ fn test_basic_rendering_pipeline() {
     assert_eq!(dom.children.len(), 1);
 
     let css_text = "div { display: block; } p { color: blue; }".to_string();
-    let mut css_parser = css::Parser::new(css_text);
-    let rules = css_parser.parse_rules();
-    assert_eq!(rules.len(), 2);
+    let stylesheet = stratus::parse(&css_text);
+    assert_eq!(stylesheet.rules.len(), 2);
 }
 
 #[test]

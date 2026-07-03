@@ -1,24 +1,82 @@
 //! Networking module for fetching web resources.
+pub mod mock;
+
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
-use ureq;
+use std::fmt;
+
+use crate::plog;
+
+// ── Error type ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub enum FetchError {
+    Http(u16, String),
+    Network(String),
+    Timeout,
+    EmptyBody,
+    CrossOrigin { target: String, origin: String },
+}
+
+impl fmt::Display for FetchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Http(code, msg) => write!(f, "HTTP {}: {}", code, msg),
+            Self::Network(msg) => write!(f, "Network: {}", msg),
+            Self::Timeout => write!(f, "Request timed out"),
+            Self::EmptyBody => write!(f, "Empty response body"),
+            Self::CrossOrigin { target, origin } => {
+                write!(f, "Cross-origin fetch blocked: '{}' ≠ origin '{}'", target, origin)
+            }
+        }
+    }
+}
+
+impl From<reqwest::Error> for FetchError {
+    fn from(e: reqwest::Error) -> Self {
+        if e.is_timeout() {
+            FetchError::Timeout
+        } else if let Some(status) = e.status() {
+            FetchError::Http(status.as_u16(), e.to_string())
+        } else {
+            FetchError::Network(e.to_string())
+        }
+    }
+}
+
+static CLIENT: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
+fn client() -> Option<&'static reqwest::blocking::Client> {
+    let entry = CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|e| format!("reqwest client: {}", e))
+    });
+    match entry {
+        Ok(c) => Some(c),
+        Err(e) => {
+            plog!("net", "Client init failed: {}", e);
+            None
+        }
+    }
+}
 
 // ── HTTP cache ────────────────────────────────────────────────────────
 
 type Cache = HashMap<String, (String, Instant)>;
 
-fn cache() -> &'static Mutex<Cache> {
-    static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+fn cache() -> &'static RwLock<Cache> {
+    static CACHE: OnceLock<RwLock<Cache>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
 
 fn cache_get(url: &str) -> Option<String> {
-    let map = cache().lock().ok()?;
+    let map = cache().read().ok()?;
     if let Some((body, time)) = map.get(url) {
         if time.elapsed() < CACHE_TTL {
             return Some(body.clone());
@@ -28,7 +86,7 @@ fn cache_get(url: &str) -> Option<String> {
 }
 
 fn cache_set(url: &str, body: &str) {
-    if let Ok(mut map) = cache().lock() {
+    if let Ok(mut map) = cache().write() {
         map.insert(url.to_string(), (body.to_string(), Instant::now()));
     }
 }
@@ -39,7 +97,7 @@ fn cache_set(url: &str, body: &str) {
 /// Currently warn-only: returns true (permissive) but logs violations.
 pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
     if let Some(csp) = headers.get("content-security-policy") {
-        eprintln!("[CSP] Content-Security-Policy for {}: {}", url, csp);
+        plog!("csp", "Content-Security-Policy for {}: {}", url, csp);
     }
     true
 }
@@ -58,109 +116,100 @@ impl Response {
 }
 
 /// Fetches the HTML content from the given URL.
-pub fn fetch(url: &str) -> String {
+pub fn fetch(url: &str) -> Result<String, FetchError> {
     if let Some(cached) = cache_get(url) {
-        println!("[CACHE] HIT: {}", url);
-        return cached;
+        plog!("cache", "HIT: {}", url);
+        return Ok(cached);
     }
-    let result = match fetch_with_redirects(url, 5) {
-        Ok(resp) => resp.body,
-        Err(e) => format!("Error: {}", e),
-    };
-    if !result.starts_with("Error") {
-        cache_set(url, &result);
+    if let Some(body) = mock::resolve_html(url) {
+        plog!("mock", "Serving HTML for {}", url);
+        return Ok(body);
     }
-    result
+    if let Some(body) = mock::resolve_css(url) {
+        plog!("mock", "Serving CSS for {}", url);
+        return Ok(body);
+    }
+    match fetch_with_redirects(url, 5) {
+        Ok(resp) => {
+            if resp.body.is_empty() {
+                return Err(FetchError::EmptyBody);
+            }
+            cache_set(url, &resp.body);
+            Ok(resp.body)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// Fetches content with automatic redirect handling.
-pub fn fetch_with_redirects(url: &str, max_redirects: usize) -> Result<Response, String> {
+pub fn fetch_with_redirects(url: &str, max_redirects: usize) -> Result<Response, FetchError> {
     fetch_inner(url, max_redirects)
 }
 
-fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, String> {
+fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> {
     let final_url = normalize_url(url);
-    println!("Fetching: {}", final_url);
+    plog!("net", "Fetching: {}", final_url);
 
     let _start = std::time::Instant::now();
 
-    match ureq::get(&final_url)
-        .config()
-        .timeout_global(Some(std::time::Duration::from_secs(15)))
-        .build()
-        .call()
-    {
-        Ok(mut response) => {
-            let status: u16 = response.status().as_u16();
-            println!("Got response, status: {}", status);
-            
-            let mut headers = HashMap::new();
-            for name in response.headers().keys() {
-                if let Some(value) = response.headers().get(name) {
-                    if let Ok(v) = value.to_str() {
-                        headers.insert(name.to_string(), v.to_string());
-                    }
-                }
-            }
+    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    let resp = match cl.get(&final_url).send() {
+        Ok(r) => r,
+        Err(e) => return Err(FetchError::from(e)),
+    };
+    let status: u16 = resp.status().as_u16();
+    plog!("net", "Got response, status: {}", status);
 
-            check_csp(&final_url, &headers);
+    if status >= 400 {
+        return Err(FetchError::Http(status, format!("HTTP error {}", status)));
+    }
 
-            let body = match response.body_mut().read_to_string() {
-                Ok(b) => {
-                    println!("Body length: {}", b.len());
-                    b
-                }
-                Err(e) => format!("Failed to read body: {}", e),
-            };
-            
-            let status_code = response.status();
-            if status_code.is_redirection() && max_redirects > 0 {
-                if let Some(location) = headers.get("location") {
-                    println!("Redirect to: {}", location);
-                    return fetch_inner(location, max_redirects - 1);
-                }
+    let mut headers = HashMap::new();
+    for name in resp.headers().keys() {
+        if let Some(value) = resp.headers().get(name) {
+            if let Ok(v) = value.to_str() {
+                headers.insert(name.to_string(), v.to_string());
             }
-            
-            Ok(Response {
-                body,
-                status,
-                headers,
-                final_url,
-            })
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-            Err(format!("Error fetching URL: {}", e))
         }
     }
+
+    check_csp(&final_url, &headers);
+
+    if resp.status().is_redirection() && max_redirects > 0 {
+        if let Some(location) = headers.get("location") {
+            plog!("net", "Redirect to: {}", location);
+            return fetch_inner(location, max_redirects - 1);
+        }
+    }
+
+    let body = resp.text().map_err(|e| FetchError::Network(format!("Failed to read body: {}", e)))?;
+    plog!("net", "Body length: {}", body.len());
+
+    Ok(Response { body, status, headers, final_url })
 }
 
 /// Fetches binary content (images, etc.) from the given URL.
-pub fn fetch_bytes(url: &str) -> Vec<u8> {
+pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
     let final_url = normalize_url(url);
-
-    println!("Fetching binary: {}", final_url);
-    
-    match ureq::get(&final_url).call() {
-        Ok(mut response) => {
-            println!("Got response, status: {}", response.status().as_u16());
-            match response.body_mut().read_to_vec() {
-                Ok(bytes) => {
-                    let len = bytes.len();
-                    println!("Fetched {} bytes", len);
-                    bytes
-                }
-                Err(e) => {
-                    println!("Failed to read bytes: {}", e);
-                    Vec::new()
-                }
-            }
-        }
-        Err(e) => {
-            println!("Error fetching binary: {}", e);
-            Vec::new()
-        }
+    if let Some(bytes) = mock::resolve_binary(url) {
+        plog!("mock", "Serving binary for {}", url);
+        return Ok(bytes);
     }
+    plog!("net", "Fetching binary: {}", final_url);
+
+    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    let resp = match cl.get(&final_url).send() {
+        Ok(r) => r,
+        Err(e) => return Err(FetchError::from(e)),
+    };
+    let status = resp.status().as_u16();
+    plog!("net", "Got binary response, status: {}", status);
+    if status >= 400 {
+        return Err(FetchError::Http(status, format!("HTTP error {}", status)));
+    }
+    let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();
+    plog!("net", "Fetched {} bytes", bytes.len());
+    Ok(bytes)
 }
 
 fn normalize_url(url: &str) -> String {
@@ -185,6 +234,7 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
     let base = normalize_url(base_url);
 
     let scheme_end = base.find("://").map(|i| i + 3).unwrap_or(0);
+    if scheme_end == 0 { return base; }
     let host_end = base[scheme_end..]
         .find('/')
         .map(|i| scheme_end + i)

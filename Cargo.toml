@@ -10,19 +10,22 @@ path = "src/lib.rs"
 [dependencies]
 iced = { version = "0.13", features = ["canvas", "image", "tiny-skia", "wgpu", "tokio"] }
 rquickjs = "0.11.0"
-ureq = { version = "3.3.0", features = ["native-tls"] }
-wgpu = "29.0.3"
+reqwest = { version = "0.12", features = ["blocking", "http2", "native-tls"] }
 image = "0.25"
 korlang = { path = "./korlang" }
-symphonia = "0.5"
-slotmap = "1.0"
 chrono = "0.4"
+unicode-width = "0.2"
 strum = { version = "0.26", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 aether-dom = { path = "crates/aether-dom" }
 aether-html = { path = "crates/aether-html" }
 aether-css = { path = "crates/aether-css" }
 aether-caelum = { path = "crates/aether-caelum" }
+
+[build-dependencies]
+serde_json = "1.0"
 
 [profile.dev]
 overflow-checks = false

@@ -1,28 +1,33 @@
 # Aether Browser
 
-Aether is a modern, high-performance web browser featuring a 100% original engine written in Rust. It emphasizes "Spatial Minimalism" and modularity, using a custom-built rendering pipeline and a dedicated UI programming language.
+An experimental/prototype web browser engine written in Rust.
 
-## 🚀 Key Features
+## What Works
+- HTML parsing with basic DOM tree construction
+- CSS parsing and style resolution (via Stratus/aether-css)
+- Layout via Caelum (embedded Taffy-derived engine for flexbox, grid, block)
+- JavaScript runtime via QuickJS (rquickjs) with basic DOM API shim
+- Page rendering via Iced 0.13 canvas (text + colored rectangles)
+- Tab management (multiple tabs with per-tab history)
+- Korlang UI scripting language (experimental, used for status bar and sidebar)
+- Settings and command palette screens
 
-- **Original Engine**: Built from the ground up with no dependency on Blink, WebKit, or Gecko.
-- **Stratus CSSOM**: Advanced CSS3 parser and resolver supporting Grid, Flexbox, and complex styling.
-- **Caelum Layout**: High-fidelity layout engine optimized for modern web standards.
-- **Korlang UI**: A proprietary, lightweight UI language used to script the entire browser interface with reactive data binding and seamless Rust interop.
-- **Modern JS Runtime**: Powered by QuickJS with a robust DOM shim supporting Promises, Fetch, and async site logic.
-- **Media Engine**: Native audio/video playback support using `symphonia`.
+## Architecture
+- src/engine/ — Core engine modules (DOM, CSS parser, JS bridge, networking)
+- src/ui/ — Iced-based shell (browser screen, settings, palette)
+- crates/ — Workspace crates (aether-dom, aether-html, aether-css, aether-caelum)
+- korlang/ — Korlang language compiler and VM
 
-## 📁 Repository Structure
+## Build & Run
+cargo build
+cargo run
+cargo test
 
-- `src/engine/`: Core browser engine (DOM, CSS, Layout, JS Bridge).
-- `korlang/`: The Korlang UI language compiler and virtual machine.
-- `src/ui/`: Browser shell and Korlang-to-Iced renderer.
-- `docs/`: Technical documentation for all engine modules.
-
-## 🛠 Getting Started
-
-Please see [BUILD.md](BUILD.md) for installation and build instructions.
-For details on the UI language, refer to [KORLANG.md](KORLANG.md).
-
-## 📄 License
-
-Proprietary. All rights reserved.
+## Limitations
+This is a prototype, not a production browser.
+- No security sandbox, no CSP enforcement, no process isolation
+- Images rendered as placeholder rectangles (Iced 0.13 canvas limitation)
+- Single-process, blocking I/O for network requests
+- Maximum 2000 DOM elements per page, 50 style blocks, 500KB CSS limit
+- Audio/video playback not implemented
+- HTML5/CSS3 compliance is partial at best

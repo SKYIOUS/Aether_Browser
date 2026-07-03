@@ -2,24 +2,25 @@ use korlang::vm::{Value, KorObject, VirtualMachine};
 use iced::widget::{button, column, row, text, text_input, container, Space};
 use crate::ui::screens::browser::BrowserMessage;
 use iced::{Length, Alignment, Color, Background, Border};
+use std::sync::Arc;
 
 pub fn render_kor_vm(vm: &VirtualMachine) -> iced::Element<'static, BrowserMessage> {
     if let Some(Value::Object(root)) = vm.stack.last() {
-        convert_object(root.clone())
+        convert_object(root.clone(), vm)
     } else {
         text("Empty Korlang UI").into()
     }
 }
 
-fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced::Element<'static, BrowserMessage> {
-    let obj = obj_arc.lock().unwrap();
+fn convert_object(obj_arc: Arc<std::sync::Mutex<KorObject>>, vm: &VirtualMachine) -> iced::Element<'static, BrowserMessage> {
+    let obj = obj_arc.lock().unwrap_or_else(|e| e.into_inner());
     match obj.tag.as_str() {
-        "Row" => {
+        "Row" | "NavBar" => {
             let spacing = get_number(&obj.properties, "spacing").unwrap_or(0.0);
             let padding = get_number(&obj.properties, "padding").unwrap_or(0.0);
             let mut r = row![].spacing(spacing).padding(padding).align_y(Alignment::Center);
             for child in &obj.children {
-                if let Value::Object(c) = child { r = r.push(convert_object(c.clone())); }
+                if let Value::Object(c) = child { r = r.push(convert_object(c.clone(), vm)); }
             }
             r.into()
         }
@@ -29,7 +30,7 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
             let width = get_number(&obj.properties, "width").map(Length::Fixed).unwrap_or(Length::Shrink);
             let mut c = column![].spacing(spacing).padding(padding).width(width);
             for child in &obj.children {
-                if let Value::Object(ch) = child { c = c.push(convert_object(ch.clone())); }
+                if let Value::Object(ch) = child { c = c.push(convert_object(ch.clone(), vm)); }
             }
             c.into()
         }
@@ -41,7 +42,7 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
 
             let mut inner: iced::Element<BrowserMessage> = column![].into();
             if let Some(Value::Object(c)) = obj.children.first() {
-                inner = convert_object(c.clone());
+                inner = convert_object(c.clone(), vm);
             }
 
             container(inner)
@@ -59,8 +60,15 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
             if let Some(Value::String(handler)) = obj.properties.get("on_click") {
                 match handler.as_str() {
                     "back" => b = b.on_press(BrowserMessage::NavBack),
+                    "forward" => b = b.on_press(BrowserMessage::NavForward),
                     "reload" => b = b.on_press(BrowserMessage::Refresh),
+                    "refresh" => b = b.on_press(BrowserMessage::Refresh),
                     "settings" => b = b.on_press(BrowserMessage::OpenSettings),
+                    "palette" => b = b.on_press(BrowserMessage::OpenPalette),
+                    "bookmark" => b = b.on_press(BrowserMessage::Bookmark),
+                    "ws0" => b = b.on_press(BrowserMessage::WorkspaceSelected(0)),
+                    "ws1" => b = b.on_press(BrowserMessage::WorkspaceSelected(1)),
+                    "ws2" => b = b.on_press(BrowserMessage::WorkspaceSelected(2)),
                     _ => b = b.on_press(BrowserMessage::None),
                 }
             }
@@ -72,10 +80,28 @@ fn convert_object(obj_arc: std::sync::Arc<std::sync::Mutex<KorObject>>) -> iced:
             text(content).size(size).into()
         }
         "TextInput" => {
-            let val = if let Some(Value::String(s)) = obj.properties.get("value") { s.clone() } else { "".to_string() };
+            let val = get_string(&obj.properties, "value")
+                .or_else(|| vm.heap.get("url_input").and_then(|v| {
+                    if let Value::String(s) = v { Some(s.clone()) } else { None }
+                }))
+                .unwrap_or_default();
             let ph = if let Some(Value::String(s)) = obj.properties.get("placeholder") { s.clone() } else { "Search...".to_string() };
             let width = get_number(&obj.properties, "width").map(Length::Fixed).unwrap_or(Length::Fill);
             text_input(&ph, &val).on_input(BrowserMessage::UrlChanged).on_submit(BrowserMessage::UrlSubmit).width(width).padding(12).into()
+        }
+        "If" => {
+            let cond = obj.properties.get("condition").and_then(|v| {
+                match v {
+                    Value::Bool(b) => Some(*b),
+                    _ => None,
+                }
+            }).unwrap_or(true);
+            if cond {
+                if let Some(Value::Object(c)) = obj.children.first() {
+                    return convert_object(c.clone(), vm);
+                }
+            }
+            column![].into()
         }
         "Space" => Space::with_height(Length::Fixed(get_number(&obj.properties, "height").unwrap_or(0.0))).into(),
         _ => text(format!("Unknown: {}", obj.tag)).into()

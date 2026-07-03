@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use super::tokenizer::{Token, TagToken, DoctypeToken};
-use aether_dom::{Node, NodeType, ElementData};
+use super::tokenizer::Token;
+use aether_dom::Node;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InsertionMode {

@@ -340,9 +340,7 @@ fn apply_border_colors(
     name: &str,
     value: &PropertyValue,
 ) {
-    let color = parse_color(value);
-    if color.is_none() { return; }
-    let color = color.unwrap();
+    let Some(color) = parse_color(value) else { return; };
 
     match name {
         "border-top-color" => *top = Some(color),

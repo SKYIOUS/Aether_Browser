@@ -5,7 +5,7 @@ use std::path::Path;
 fn main() {
     println!("cargo::rerun-if-changed=css-properties.json");
 
-    let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR must be set by Cargo");
     let dest_path = Path::new(&out_dir).join("css_properties.rs");
 
     let json = fs::read_to_string("css-properties.json")
@@ -23,8 +23,8 @@ fn main() {
     let mut variant_names = Vec::new();
 
     for prop in properties {
-        let name = prop["name"].as_str().unwrap();
-        let enum_name = prop["enum"].as_str().unwrap();
+        let name = prop["name"].as_str().expect("property name missing");
+        let enum_name = prop["enum"].as_str().expect("property enum name missing");
         variant_names.push(enum_name.to_string());
         from_str_arms.push_str(&format!(
             "            {:?} => Ok(Self::{}),\n",
@@ -65,5 +65,5 @@ impl std::fmt::Display for CssPropertyName {{
         display_arms,
     );
 
-    fs::write(&dest_path, &output).unwrap();
+    fs::write(&dest_path, &output).expect("Failed to write css_properties.rs");
 }

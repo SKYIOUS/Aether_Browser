@@ -167,6 +167,7 @@ impl BlockContext<'_> {
 }
 impl BlockContext<'_> {
     #[inline(always)]
+    #[allow(dead_code)]
     /// Returns the height that descendent floats consume (always 0.0 when the float feature is disabled)
     fn float_content_contribution(&self) -> f32 {
         0.0

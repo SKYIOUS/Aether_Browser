@@ -1,24 +1,25 @@
 pub mod js_bridge;
 
 use std::sync::{Arc, Mutex};
-use rquickjs::{Context, Runtime as QuickJSRuntime};
+use rquickjs::Runtime as QuickJSRuntime;
 
 pub use js_bridge::JsBridge;
 
 pub struct JSEngine {
     context: Option<rquickjs::Context>,
-    #[allow(dead_code)]
-    runtime: QuickJSRuntime,
 }
 
 impl JSEngine {
     pub fn new() -> Self {
-        let runtime = QuickJSRuntime::new().unwrap();
-        let ctx = rquickjs::Context::full(&runtime).unwrap();
-        Self {
-            runtime,
-            context: Some(ctx),
-        }
+        let runtime = match QuickJSRuntime::new() {
+            Ok(r) => r,
+            Err(_) => return Self { context: None },
+        };
+        let ctx = match rquickjs::Context::full(&runtime) {
+            Ok(c) => c,
+            Err(_) => return Self { context: None },
+        };
+        Self { context: Some(ctx) }
     }
 }
 
@@ -65,41 +66,5 @@ impl JSEngine {
         } else {
             Err("No JS context".to_string())
         }
-    }
-}
-
-pub struct Runtime {
-    pub runtime: QuickJSRuntime,
-}
-
-impl Runtime {
-    pub fn new() -> Self {
-        let runtime = QuickJSRuntime::new().unwrap();
-        Self { runtime }
-    }
-}
-
-impl Default for Runtime {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Runtime {
-    pub fn execute(&self, code: &str) {
-        let ctx = Context::full(&self.runtime).unwrap();
-        ctx.with(|ctx| {
-            let _: rquickjs::Value = ctx.eval(code).unwrap();
-        });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_runtime_init() {
-        let _runtime = Runtime::new();
     }
 }

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -50,7 +51,9 @@ pub fn set_enabled(enabled: bool) {
     if let Ok(mut log) = LOGGER.lock() {
         log.enabled = enabled;
         if enabled {
-            let _ = writeln!(log.file.as_mut().unwrap(), "═══ Logging ENABLED ═══");
+            if let Some(f) = log.file.as_mut() {
+                let _ = writeln!(f, "═══ Logging ENABLED ═══");
+            }
         }
     }
 }

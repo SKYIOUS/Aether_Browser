@@ -1,6 +1,8 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
-    Component, State, Identifier(String), StringLiteral(String), Number(f64),
+    Component, State, If, Else, For,
+    Identifier(String), StringLiteral(String), InterpolatedString { parts: Vec<String>, vars: Vec<String> },
+    Number(f64),
     Equals, Colon, OpenBrace, CloseBrace, OpenParen, CloseParen, Comma, Dot, Bind,
 }
 pub struct Lexer { input: Vec<char>, pos: usize }
@@ -36,14 +38,34 @@ impl Lexer {
     fn read_identifier(&mut self) -> Token {
         let mut id = String::new();
         while !self.is_eof() && (self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '⬡' || self.peek() == '←' || self.peek() == '⟳' || self.peek() == '⚙') { id.push(self.advance()); }
-        match id.as_str() { "Component" => Token::Component, "state" => Token::State, "bind" => Token::Bind, _ => Token::Identifier(id) }
+        match id.as_str() { "Component" => Token::Component, "state" => Token::State, "bind" => Token::Bind, "if" => Token::If, "else" => Token::Else, "for" => Token::For, _ => Token::Identifier(id) }
     }
     fn read_string(&mut self) -> Token {
         self.advance();
-        let mut s = String::new();
-        while !self.is_eof() && self.peek() != '\"' { s.push(self.advance()); }
+        let mut parts = Vec::new();
+        let mut vars = Vec::new();
+        let mut current = String::new();
+        while !self.is_eof() && self.peek() != '\"' {
+            if self.peek() == '$' && self.pos + 1 < self.input.len() && self.input[self.pos + 1].is_alphabetic() {
+                parts.push(current.clone());
+                current.clear();
+                self.advance();
+                let mut var = String::new();
+                while !self.is_eof() && (self.peek().is_alphanumeric() || self.peek() == '_') {
+                    var.push(self.advance());
+                }
+                vars.push(var);
+            } else {
+                current.push(self.advance());
+            }
+        }
+        parts.push(current);
         if !self.is_eof() { self.advance(); }
-        Token::StringLiteral(s)
+        if vars.is_empty() {
+            Token::StringLiteral(parts.into_iter().next().unwrap_or_default())
+        } else {
+            Token::InterpolatedString { parts, vars }
+        }
     }
     fn read_number(&mut self) -> Token {
         let mut s = String::new();

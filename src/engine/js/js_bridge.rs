@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::plog;
 use crate::engine::dom::{ElementData, Node, NodeType};
 
 // ── Flat DOM node representation ────────────────────────────────────
@@ -54,6 +55,23 @@ struct CompoundSel {
 struct ComplexSel {
     compound: CompoundSel,
     combinator: Option<(Combinator, Box<ComplexSel>)>,
+}
+
+fn simple_sel_to_stratus(sel: &SimpleSel) -> crate::engine::stratus::SimpleSelector {
+    use crate::engine::stratus::SimpleSelector;
+    match sel {
+        SimpleSel::Universal => SimpleSelector { tag_name: None, id: None, class: vec![], attribute: None, pseudo_class: None },
+        SimpleSel::Tag(t) => SimpleSelector { tag_name: Some(t.clone()), id: None, class: vec![], attribute: None, pseudo_class: None },
+        SimpleSel::Class(c) => SimpleSelector { tag_name: None, id: None, class: vec![c.clone()], attribute: None, pseudo_class: None },
+        SimpleSel::Id(id) => SimpleSelector { tag_name: None, id: Some(id.clone()), class: vec![], attribute: None, pseudo_class: None },
+    }
+}
+
+fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
+    if node.is_text || node.is_document { return false; }
+    let element = crate::engine::stratus::ElementData::with_attributes(node.tag.clone(), node.attrs.clone());
+    let ss = simple_sel_to_stratus(sel);
+    ss.matches(&element)
 }
 
 fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
@@ -126,16 +144,6 @@ fn parse_complex(s: &str) -> Option<ComplexSel> {
         })
     } else { None };
     Some(ComplexSel { compound, combinator })
-}
-
-fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
-    if node.is_text || node.is_document { return false; }
-    match sel {
-        SimpleSel::Universal => true,
-        SimpleSel::Tag(t) => node.tag == *t,
-        SimpleSel::Class(c) => node.attrs.get("class").is_some_and(|v| v.split_whitespace().any(|p| p == c)),
-        SimpleSel::Id(id) => node.attrs.get("id").is_some_and(|v| v == id),
-    }
 }
 
 fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
@@ -407,9 +415,39 @@ impl JsBridge {
         }
     }
 
+    fn is_event_handler(name: &str) -> bool {
+        let name = name.to_lowercase();
+        name.starts_with("on")
+            && matches!(&name[2..], "load" | "click" | "dblclick" | "mousedown" | "mouseup"
+                | "mouseover" | "mousemove" | "mouseout" | "mouseenter" | "mouseleave"
+                | "focus" | "blur" | "keydown" | "keyup" | "keypress"
+                | "submit" | "reset" | "change" | "select" | "input" | "invalid"
+                | "error" | "abort" | "contextmenu" | "resize" | "scroll" | "wheel"
+                | "drag" | "dragend" | "dragenter" | "dragexit" | "dragleave" | "dragover" | "dragstart" | "drop"
+                | "pointerdown" | "pointerup" | "pointermove" | "pointerover" | "pointerout"
+                | "pointerenter" | "pointerleave" | "pointercancel"
+                | "touchstart" | "touchend" | "touchmove" | "touchcancel"
+                | "play" | "pause" | "playing" | "ended" | "volumechange" | "waiting"
+                | "canplay" | "canplaythrough" | "seeked" | "seeking" | "stalled"
+                | "suspend" | "emptied" | "ratechange" | "durationchange"
+                | "animationstart" | "animationend" | "animationiteration"
+                | "transitionstart" | "transitionend" | "transitionrun" | "transitioncancel"
+                | "visibilitychange" | "fullscreenchange" | "fullscreenerror")
+    }
+
+    fn is_dangerous_url(value: &str) -> bool {
+        let trimmed = value.trim().to_lowercase();
+        trimmed.starts_with("javascript:") || trimmed.starts_with("data:")
+    }
+
     pub fn set_attribute(&mut self, node_id: u32, name: &str, value: &str) {
         if let Some(node) = self.nodes.get_mut(node_id as usize) {
             if !node.is_text && !node.is_document {
+                if Self::is_event_handler(name) { return; }
+                if name.to_lowercase() == "href" || name.to_lowercase() == "src" {
+                    if Self::is_dangerous_url(value) { return; }
+                }
+                if name.to_lowercase() == "srcdoc" { return; }
                 node.attrs.insert(name.to_string(), value.to_string());
             }
         }
@@ -500,6 +538,15 @@ impl JsBridge {
         }
     }
 
+    fn sanitize_attrs(attrs: &mut HashMap<String, String>) {
+        attrs.retain(|k, v| {
+            if Self::is_event_handler(k) { return false; }
+            if k.to_lowercase() == "srcdoc" { return false; }
+            if (k.to_lowercase() == "href" || k.to_lowercase() == "src") && Self::is_dangerous_url(v) { return false; }
+            true
+        });
+    }
+
     fn parse_html_fragment(&mut self, html: &str) -> Vec<u32> {
         let mut result = vec![];
         let html = html.trim();
@@ -533,6 +580,13 @@ impl JsBridge {
                 let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
                     let tag_name = html[pos+1..pos+tag_end].to_lowercase();
+                    if tag_name == "script" {
+                        let closing = "</script>";
+                        if let Some(closing_pos) = html[pos..].to_lowercase().find(closing) {
+                            pos += closing_pos + closing.len();
+                        } else { pos = chars.len(); }
+                        continue;
+                    }
                     let is_self_closing = ["br", "hr", "img", "input", "meta", "link"];
                     let self_closing = is_self_closing.contains(&tag_name.as_str());
 
@@ -546,7 +600,8 @@ impl JsBridge {
                     if pos + attr_end >= chars.len() { break; }
 
                     let attrs_part = &html[pos+tag_end..pos+attr_end];
-                    let attrs = self.parse_attributes(attrs_part);
+                    let mut attrs = self.parse_attributes(attrs_part);
+                    Self::sanitize_attrs(&mut attrs);
 
                     let el_id = self.nodes.len() as u32;
                     self.nodes.push(FlatNode::element(&tag_name));
@@ -555,7 +610,7 @@ impl JsBridge {
 
                     pos += attr_end + 1;
 
-                    if !self_closing && tag_name != "script" && tag_name != "style" {
+                    if !self_closing && tag_name != "style" {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].find(&closing) {
                             let inner = &html[pos..pos + closing_pos];
@@ -922,27 +977,20 @@ impl JsBridge {
             || current.hostname.to_lowercase() != target.hostname.to_lowercase()
             || current.port != target.port
         {
-            let origin = format!(
-                "{}{}{}",
-                current.protocol,
-                current.hostname,
-                if current.port.is_empty() {
-                    String::new()
-                } else {
-                    format!(":{}", current.port)
-                }
-            );
-            eprintln!(
-                "[CSP] Same-origin policy warning: fetching '{}' from origin '{}'",
-                resolved, origin
-            );
+            let err = format!("Cross-origin fetch blocked: '{}' ≠ origin '{}'", resolved, self.current_url);
+            plog!("csp", "{}", err);
+            return err;
         }
-        crate::engine::net::fetch(&resolved)
+        plog!("net", "Fetching: {}", resolved);
+        match crate::engine::net::fetch(&resolved) {
+            Ok(s) => s,
+            Err(e) => format!("Error: {}", e),
+        }
     }
 
     // ── Get elements at a point (for click dispatch) ────────────────
 
-    pub fn element_at_point(&self, x: f32, y: f32, elements: &[crate::ui::screens::browser::StyledElement]) -> Option<u32> {
+    pub fn element_at_point(&self, x: f32, y: f32, elements: &[crate::engine::pipeline::StyledElement]) -> Option<u32> {
         let mut best_id = None;
         let mut best_area = f32::MAX;
         for el in elements.iter() {
@@ -1470,13 +1518,16 @@ pub fn register_browser_api(
     // ── console ─────────────────────────────────────────────────────
     let console = Object::new(ctx.clone())?;
     console.set("log", Func::new(|args: Rest<String>| {
-        println!("[JS] {}", args.into_inner().join(" "));
+        let msg = args.into_inner().join(" ");
+        plog!("JS", "{}", msg);
     }))?;
     console.set("warn", Func::new(|args: Rest<String>| {
-        eprintln!("[JS WARN] {}", args.into_inner().join(" "));
+        let msg = args.into_inner().join(" ");
+        plog!("JS", "WARN: {}", msg);
     }))?;
     console.set("error", Func::new(|args: Rest<String>| {
-        eprintln!("[JS ERROR] {}", args.into_inner().join(" "));
+        let msg = args.into_inner().join(" ");
+        plog!("JS", "ERROR: {}", msg);
     }))?;
     globals.set("console", console)?;
 
@@ -1989,12 +2040,6 @@ pub fn register_browser_api(
     let _ = ctx.eval::<(), _>(SHIM_JS);
 
 
-    let fn_save_pw = Function::new(ctx.clone(), move |url: String, user: String, _pass: String| {
-        // We'd need a vault instance in JsBridge or similar
-        // For now, JsBridge is ephemeral per page, but vault is global.
-        // Let's just log it or use a placeholder for now since vault isn't in JsBridge yet.
-        println!("[VAULT] Saving password for {} / {}", url, user);
-    })?;
-    globals.set("__vault_savePassword", fn_save_pw)?;
+    // ponytail: __vault_savePassword removed — would need encrypted storage, add when login forms are supported
 Ok(())
 }
