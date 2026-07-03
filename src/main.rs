@@ -1,6 +1,7 @@
 mod ui;
 pub mod engine;
 mod logging;
+mod bridge_gen;
 
 use ui::AetherApp;
 use iced::{window, Size};

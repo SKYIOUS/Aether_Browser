@@ -1,0 +1,75 @@
+{
+  "display": {
+    "stratus_enum": "Display",
+    "caelum_enum": "Display",
+    "default": "Block",
+    "mappings": [
+      { "stratus": "Block", "string": "block", "caelum": "Block" },
+      { "stratus": "Flex", "string": "flex", "caelum": "Flex" },
+      { "stratus": "InlineFlex", "string": "inline-flex", "caelum": "Flex" },
+      { "stratus": "Inline", "string": "inline", "caelum": "Block" },
+      { "stratus": "InlineBlock", "string": "inline-block", "caelum": "Block" },
+      { "stratus": "Grid", "string": "grid", "caelum": "Block" },
+      { "stratus": "None", "string": "none", "caelum": "None" }
+    ]
+  },
+  "flex_direction": {
+    "stratus_enum": "FlexDirection",
+    "caelum_enum": "FlexDirection",
+    "default": "Row",
+    "mappings": [
+      { "stratus": "Row", "string": "row", "caelum": "Row" },
+      { "stratus": "RowReverse", "string": "row-reverse", "caelum": "RowReverse" },
+      { "stratus": "Column", "string": "column", "caelum": "Column" },
+      { "stratus": "ColumnReverse", "string": "column-reverse", "caelum": "ColumnReverse" }
+    ]
+  },
+  "flex_wrap": {
+    "stratus_enum": "FlexWrap",
+    "caelum_enum": "FlexWrap",
+    "default": "NoWrap",
+    "mappings": [
+      { "stratus": "NoWrap", "string": "nowrap", "caelum": "NoWrap" },
+      { "stratus": "Wrap", "string": "wrap", "caelum": "Wrap" },
+      { "stratus": "WrapReverse", "string": "wrap-reverse", "caelum": "WrapReverse" }
+    ]
+  },
+  "justify_content": {
+    "stratus_enum": "JustifyContent",
+    "caelum_enum": "JustifyContent",
+    "default": "FlexStart",
+    "mappings": [
+      { "stratus": "FlexStart", "string": "flex-start", "caelum": "FlexStart" },
+      { "stratus": "FlexEnd", "string": "flex-end", "caelum": "FlexEnd" },
+      { "stratus": "Center", "string": "center", "caelum": "Center" },
+      { "stratus": "SpaceBetween", "string": "space-between", "caelum": "SpaceBetween" },
+      { "stratus": "SpaceAround", "string": "space-around", "caelum": "SpaceAround" },
+      { "stratus": "SpaceEvenly", "string": "space-evenly", "caelum": "SpaceEvenly" }
+    ]
+  },
+  "align_items": {
+    "stratus_enum": "AlignItems",
+    "caelum_enum": "AlignItems",
+    "default": "Stretch",
+    "mappings": [
+      { "stratus": "Stretch", "string": "stretch", "caelum": "Stretch" },
+      { "stratus": "FlexStart", "string": "flex-start", "caelum": "FlexStart" },
+      { "stratus": "FlexEnd", "string": "flex-end", "caelum": "FlexEnd" },
+      { "stratus": "Center", "string": "center", "caelum": "Center" },
+      { "stratus": "Baseline", "string": "baseline", "caelum": "Baseline" }
+    ]
+  },
+  "align_self": {
+    "stratus_enum": "AlignSelf",
+    "caelum_enum": "AlignItems",
+    "default": "Stretch",
+    "mappings": [
+      { "stratus": "Auto", "string": "auto", "caelum": "Stretch" },
+      { "stratus": "Stretch", "string": "stretch", "caelum": "Stretch" },
+      { "stratus": "FlexStart", "string": "flex-start", "caelum": "FlexStart" },
+      { "stratus": "FlexEnd", "string": "flex-end", "caelum": "FlexEnd" },
+      { "stratus": "Center", "string": "center", "caelum": "Center" },
+      { "stratus": "Baseline", "string": "baseline", "caelum": "Baseline" }
+    ]
+  }
+}
