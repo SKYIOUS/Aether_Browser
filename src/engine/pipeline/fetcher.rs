@@ -86,6 +86,7 @@ fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>) {
     }
 }
 
+// ponytail: document.write() output appended as text, not parsed HTML
 fn inject_js_output(dom: &mut Node, text: &str) {
     if text.is_empty() { return; }
     fn is_body(node: &Node) -> bool {
@@ -208,6 +209,10 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                 };
                 let parsed = crate::engine::stratus::parse(&trimmed);
                 if let Ok(mut cache) = css_cache().write() {
+                    if cache.len() > 100 {
+                        cache.clear();
+                        plog!("CSS", "Cache evicted (size > 100)");
+                    }
                     cache.insert(resolved.clone(), parsed.clone());
                 }
                 let rules = parsed.rules;
@@ -316,6 +321,8 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                         el.height = h as f32;
                         el.image_handle = Some(Handle::from_rgba(w, h, rgba.into_raw()));
                     }
+                } else {
+                    plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
                 }
             }
         }

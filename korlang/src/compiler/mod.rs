@@ -1,3 +1,7 @@
+//! Two-phase compiler: lexer → tokens → parser → AST → bytecode.
+//! The public entry point is [`compile()`] which takes Korlang source text
+//! and returns a `Vec<OpCode>` consumable by [`VirtualMachine`](crate::vm::VirtualMachine).
+
 pub mod lexer; pub mod parser;
 use lexer::Lexer;
 use parser::{Parser, Node, Element, Expr};

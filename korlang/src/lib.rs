@@ -1,3 +1,18 @@
+//! Korlang — a minimal UI DSL compiled to stack-based bytecode.
+//!
+//! Inspired by SwiftUI / QML. Korlang components are defined declaratively
+//! and compiled into [`OpCode`](vm::OpCode) instructions that a
+//! [`VirtualMachine`](vm::VirtualMachine) evaluates to produce a tree of
+//! [`KorObject`](vm::KorObject) nodes.
+//!
+//! # Example
+//! ```
+//! # use korlang::{compile, VirtualMachine};
+//! let bc = compile("Component Hello { Text(text: \"world\") }");
+//! let mut vm = VirtualMachine::new();
+//! vm.execute(bc);
+//! ```
+
 pub mod compiler;
 pub mod vm;
 pub use compiler::compile;

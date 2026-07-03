@@ -34,11 +34,22 @@ fn test_color_named() {
     assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
 }
 
-// ponytail: rgb() syntax parsed as Keyword, Color::from_named rejects it → None
 #[test]
-fn test_color_rgb_not_parsed() {
+fn test_color_rgb() {
     let style = resolve("div { color: rgb(0, 255, 0); }", "div");
-    assert_eq!(style.color, None);
+    assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 255 }));
+}
+
+#[test]
+fn test_color_rgba() {
+    let style = resolve("div { color: rgba(255, 0, 0, 0.5); }", "div");
+    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 128 }));
+}
+
+#[test]
+fn test_color_hsl() {
+    let style = resolve("div { color: hsl(120, 100%, 50%); }", "div");
+    assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 255 }));
 }
 
 // ── 2. Background ──
@@ -153,19 +164,16 @@ fn test_line_height() {
     assert_eq!(style.line_height, Some(20.0));
 }
 
-// ── 12. Z-index (bare number not yet parsed by stratus) ──
-
 #[test]
-fn test_z_index_default() {
+fn test_z_index() {
     let style = resolve("div { z-index: 100; }", "div");
-    assert_eq!(style.z_index, None);
+    assert_eq!(style.z_index, Some(100));
 }
 
-// ponytail: bare Number variant not handled by parse_keyword → None
 #[test]
-fn test_opacity_not_parsed() {
+fn test_opacity() {
     let style = resolve("div { opacity: 0.5; }", "div");
-    assert_eq!(style.opacity, None);
+    assert_eq!(style.opacity, Some(0.5));
 }
 
 // ── 14. Text decoration ──

@@ -297,6 +297,10 @@ impl Parser {
             }
         }
 
+        if let Some(color) = parse_color_function(s) {
+            return PropertyValue::Color(color);
+        }
+
         if let Some(lv) = LengthValue::from_str(s) {
             return PropertyValue::Length(lv);
         }
@@ -307,7 +311,97 @@ impl Parser {
 
         PropertyValue::Keyword(s.to_string())
     }
+}
 
+fn parse_color_component(s: &str) -> Option<u8> {
+    let s = s.trim();
+    if s.ends_with('%') {
+        let pct = s.trim_end_matches('%').parse::<f32>().ok()?;
+        Some((pct * 255.0 / 100.0).round().clamp(0.0, 255.0) as u8)
+    } else {
+        s.parse::<u8>().ok()
+    }
+}
+
+fn parse_alpha(s: &str) -> Option<u8> {
+    let a = s.trim().parse::<f32>().ok()?;
+    Some((a * 255.0).round().clamp(0.0, 255.0) as u8)
+}
+
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+    let h = h / 360.0;
+    let s = s / 100.0;
+    let l = l / 100.0;
+    if s == 0.0 {
+        let v = (l * 255.0).round() as u8;
+        return (v, v, v);
+    }
+    let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
+        if t < 0.0 { t += 1.0; }
+        if t > 1.0 { t -= 1.0; }
+        if t < 1.0 / 6.0 { p + (q - p) * 6.0 * t }
+        else if t < 1.0 / 2.0 { q }
+        else if t < 2.0 / 3.0 { p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
+        else { p }
+    };
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let r = hue_to_rgb(p, q, h + 1.0 / 3.0);
+    let g = hue_to_rgb(p, q, h);
+    let b = hue_to_rgb(p, q, h - 1.0 / 3.0);
+    ((r * 255.0).round() as u8, (g * 255.0).round() as u8, (b * 255.0).round() as u8)
+}
+
+fn parse_color_function(s: &str) -> Option<Color> {
+    let s = s.trim().to_lowercase();
+    if s.starts_with("rgba(") && s.ends_with(')') {
+        let inner = &s[5..s.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() == 4 {
+            let r = parse_color_component(parts[0])?;
+            let g = parse_color_component(parts[1])?;
+            let b = parse_color_component(parts[2])?;
+            let a = parse_alpha(parts[3])?;
+            return Some(Color { r, g, b, a });
+        }
+    }
+    if s.starts_with("rgb(") && s.ends_with(')') {
+        let inner = &s[4..s.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() == 3 {
+            let r = parse_color_component(parts[0])?;
+            let g = parse_color_component(parts[1])?;
+            let b = parse_color_component(parts[2])?;
+            return Some(Color { r, g, b, a: 255 });
+        }
+    }
+    if s.starts_with("hsla(") && s.ends_with(')') {
+        let inner = &s[5..s.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() == 4 {
+            let h = parts[0].parse::<f32>().ok()?;
+            let s = parts[1].trim_end_matches('%').parse::<f32>().ok()?;
+            let l = parts[2].trim_end_matches('%').parse::<f32>().ok()?;
+            let a = parse_alpha(parts[3])?;
+            let (r, g, b) = hsl_to_rgb(h, s, l);
+            return Some(Color { r, g, b, a });
+        }
+    }
+    if s.starts_with("hsl(") && s.ends_with(')') {
+        let inner = &s[4..s.len() - 1];
+        let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+        if parts.len() == 3 {
+            let h = parts[0].parse::<f32>().ok()?;
+            let s = parts[1].trim_end_matches('%').parse::<f32>().ok()?;
+            let l = parts[2].trim_end_matches('%').parse::<f32>().ok()?;
+            let (r, g, b) = hsl_to_rgb(h, s, l);
+            return Some(Color { r, g, b, a: 255 });
+        }
+    }
+    None
+}
+
+impl Parser {
     fn parse_identifier(&mut self) -> String {
         let mut result = String::new();
         while !self.eof() {

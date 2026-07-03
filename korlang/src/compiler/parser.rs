@@ -15,7 +15,7 @@ pub struct Parser { tokens: Vec<Token>, pos: usize }
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self { Self { tokens, pos: 0 } }
     pub fn parse_component(&mut self) -> Option<Component> {
-        if self.consume(Token::Component) {
+        if self.consume(&Token::Component) {
             let name = if let Some(Token::Identifier(id)) = self.advance_opt() { id } else { return None; };
             self.expect(Token::OpenBrace);
             let mut states = Vec::new();
@@ -51,7 +51,7 @@ impl Parser {
         }
         self.expect(Token::CloseBrace);
         let mut else_branch = Vec::new();
-        if self.consume(Token::Else) {
+        if self.consume(&Token::Else) {
             self.expect(Token::OpenBrace);
             while self.peek() != Some(&Token::CloseBrace) && !self.is_eof() {
                 if let Some(n) = self.parse_node() { else_branch.push(n); } else { break; }
@@ -76,7 +76,7 @@ impl Parser {
         let name = if let Some(Token::Identifier(id)) = self.advance_opt() { id } else { return None; };
         let mut properties = Vec::new();
         let mut on_click = None;
-        if self.consume(Token::OpenParen) {
+        if self.consume(&Token::OpenParen) {
             while self.peek() != Some(&Token::CloseParen) && !self.is_eof() {
                 let prop_name = if let Some(Token::Identifier(id)) = self.advance_opt() { id } else { break; };
                 self.expect(Token::Colon);
@@ -86,7 +86,7 @@ impl Parser {
             self.expect(Token::CloseParen);
         }
         let mut children = Vec::new();
-        if self.consume(Token::OpenBrace) {
+        if self.consume(&Token::OpenBrace) {
             while self.peek() != Some(&Token::CloseBrace) && !self.is_eof() {
                 if let Some(Token::Identifier(id)) = self.peek() {
                     if id == "on_click" {
@@ -114,6 +114,6 @@ impl Parser {
     fn peek(&self) -> Option<&Token> { self.tokens.get(self.pos) }
     fn is_eof(&self) -> bool { self.pos >= self.tokens.len() }
     fn advance_opt(&mut self) -> Option<Token> { if self.is_eof() { None } else { let t = self.tokens[self.pos].clone(); self.pos += 1; Some(t) } }
-    fn consume(&mut self, token: Token) -> bool { if self.peek() == Some(&token) { self.pos += 1; true } else { false } }
-    fn expect(&mut self, token: Token) { self.consume(token); }
+    fn consume(&mut self, token: &Token) -> bool { if self.peek() == Some(token) { self.pos += 1; true } else { false } }
+    fn expect(&mut self, token: Token) { debug_assert!(self.consume(&token), "expect: unexpected token"); }
 }

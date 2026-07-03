@@ -101,10 +101,11 @@ fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
 }
 
 fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
+    let chars: Vec<char> = s.chars().collect();
     let mut simples = vec![];
-    while *pos < s.len() {
+    while *pos < chars.len() {
         skip_ws(s, pos);
-        if *pos >= s.len() || s.as_bytes()[*pos] == b'>' { break; }
+        if *pos >= chars.len() || chars[*pos] == '>' { break; }
         if let Some(simple) = parse_simple_selector(s, pos) {
             simples.push(simple);
         } else { break; }
@@ -114,18 +115,20 @@ fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
 }
 
 fn skip_ws(s: &str, pos: &mut usize) {
-    while *pos < s.len() && s.as_bytes()[*pos].is_ascii_whitespace() { *pos += 1; }
+    let chars: Vec<char> = s.chars().collect();
+    while *pos < chars.len() && chars[*pos].is_whitespace() { *pos += 1; }
 }
 
 fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
+    let chars: Vec<char> = s.chars().collect();
     skip_ws(s, pos);
-    if *pos < s.len() && s.as_bytes()[*pos] == b'>' {
+    if *pos < chars.len() && chars[*pos] == '>' {
         *pos += 1;
         skip_ws(s, pos);
         Some(Combinator::Child)
-    } else if *pos < s.len() && (s.as_bytes()[*pos] as char).is_whitespace() {
+    } else if *pos < chars.len() && chars[*pos].is_whitespace() {
         skip_ws(s, pos);
-        if *pos < s.len() { Some(Combinator::Descendant) } else { None }
+        if *pos < chars.len() { Some(Combinator::Descendant) } else { None }
     } else {
         None
     }
@@ -571,13 +574,17 @@ impl JsBridge {
     }
 
     fn parse_html_fragment(&mut self, html: &str) -> Vec<u32> {
+        self.parse_html_fragment_depth(html, 0)
+    }
+
+    fn parse_html_fragment_depth(&mut self, html: &str, depth: usize) -> Vec<u32> {
+        if depth > 100 { return vec![]; }
         let mut result = vec![];
         let html = html.trim();
         if html.is_empty() { return result; }
 
         let mut pos = 0;
         let chars: Vec<char> = html.chars().collect();
-
         while pos < chars.len() {
             if chars[pos] == '<' {
                 if pos + 1 < chars.len() && chars[pos + 1] == '/' {
@@ -603,9 +610,9 @@ impl JsBridge {
                 let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
                     let tag_name = html[pos+1..pos+tag_end].to_lowercase();
-                    if tag_name == "script" {
-                        let closing = "</script>";
-                        if let Some(closing_pos) = html[pos..].to_lowercase().find(closing) {
+                    if tag_name == "script" || tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
+                        let closing = format!("</{}>", tag_name);
+                        if let Some(closing_pos) = html[pos..].to_lowercase().find(&closing.to_lowercase()) {
                             pos += closing_pos + closing.len();
                         } else { pos = chars.len(); }
                         continue;
@@ -633,11 +640,11 @@ impl JsBridge {
 
                     pos += attr_end + 1;
 
-                    if !self_closing && tag_name != "style" {
+                    if !self_closing && tag_name != "style" && tag_name != "script" {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].find(&closing) {
                             let inner = &html[pos..pos + closing_pos];
-                            let inner_children = self.parse_html_fragment(inner);
+                            let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
                             for child_id in inner_children {
                                 if let Some(child) = self.nodes.get_mut(child_id as usize) {
                                     child.parent = Some(el_id);
@@ -647,7 +654,7 @@ impl JsBridge {
                             pos += closing_pos + closing.len();
                         } else {
                             let inner = &html[pos..];
-                            let inner_children = self.parse_html_fragment(inner);
+                            let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
                             for child_id in inner_children {
                                 if let Some(child) = self.nodes.get_mut(child_id as usize) {
                                     child.parent = Some(el_id);
@@ -836,7 +843,8 @@ impl JsBridge {
                 if entry.is_interval {
                     let new_id = self.next_timer_id;
                     self.next_timer_id += 1;
-                    let fire_at = now + std::time::Duration::from_millis(entry.delay_ms);
+                    let delay_ms = entry.delay_ms.max(1);
+                    let fire_at = now + std::time::Duration::from_millis(delay_ms);
                     self.timers.push(TimerEntry { id: new_id, source: entry.source, delay_ms: entry.delay_ms, is_interval: true, fire_at });
                 }
             } else {
@@ -1133,12 +1141,6 @@ const SHIM_JS: &str = r#"
             set innerHTML(val) {
                 __dom_setInnerHTML(id, String(val));
             },
-            addEventListener: function(type, listener) {
-                __dom_addEventListener(id, type, listener);
-            },
-            removeEventListener: function(type, listener) {
-                __dom_removeEventListener(id, type, listener);
-            },
             getBoundingClientRect: function() {
                 var rect = __dom_getBoundingClientRect(id);
                 return {
@@ -1154,7 +1156,7 @@ const SHIM_JS: &str = r#"
             },
             get parentNode() {
                 var pid = __dom_getParent(id);
-                return pid !== null ? makeElement(pid) : null;
+                return pid !== -1 ? makeElement(pid) : null;
             },
             click: function() {
                 __dom_dispatch_click(id);
@@ -1389,10 +1391,18 @@ const SHIM_JS: &str = r#"
 
     window.fetch = function(url) {
         var text = __fetch(String(url));
+        var ok = true;
+        var status = 200;
+        var statusText = "OK";
+        if (typeof text === "string" && text.indexOf("Error: ") === 0) {
+            ok = false;
+            status = 0;
+            statusText = text;
+        }
         return {
-            ok: true,
-            status: 200,
-            statusText: "OK",
+            ok: ok,
+            status: status,
+            statusText: statusText,
             url: url,
             text: function() { return Promise.resolve(text); },
             json: function() { return Promise.resolve(JSON.parse(text)); }
@@ -1420,17 +1430,13 @@ const SHIM_JS: &str = r#"
         };
     })();
 
-    console.time = (function() {
+    (function() {
         var timers = {};
-        return function(label) {
+        console.time = function(label) {
             label = label || "default";
             timers[label] = Date.now();
         };
-    })();
-
-    console.timeEnd = (function() {
-        var timers = {};
-        return function(label) {
+        console.timeEnd = function(label) {
             label = label || "default";
             var start = timers[label];
             if (start !== undefined) {
@@ -1477,6 +1483,7 @@ const SHIM_JS: &str = r#"
         this.readyState = 1;
     };
 
+    // ponytail: sync XHR, replace with async when Iced supports background tasks on JS thread
     window.XMLHttpRequest.prototype.send = function() {
         this.readyState = 2;
         this.responseText = __fetch(this._url);

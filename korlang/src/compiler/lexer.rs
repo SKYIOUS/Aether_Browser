@@ -26,7 +26,7 @@ impl Lexer {
                 '\"' => { tokens.push(self.read_string()); }
                 _ if c.is_alphabetic() => { tokens.push(self.read_identifier()); }
                 _ if c.is_numeric() => { tokens.push(self.read_number()); }
-                _ => { self.advance(); }
+                _ => { eprintln!("lexer: skipping unknown character '{}'", self.advance()); }
             }
         }
         tokens

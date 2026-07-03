@@ -147,7 +147,8 @@ fn compute_full_style(node: &Node, ss: &Stylesheet) -> FullStyle {
     let bl = cs.border_left_width.filter(|v| v.is_finite()).unwrap_or(0.0).max(0.0);
     let border_color = cs.border_top_color.or(cs.border_right_color).or(cs.border_bottom_color).or(cs.border_left_color).map(|c| stratus_color(&c));
 
-    let mut display = crate::bridge_gen::display_to_string(&cs.display).to_string();
+            let mut display = crate::bridge_gen::display_to_string(&cs.display).to_string();
+    // ponytail: display:none elements still get a StyledElement but are skipped in layout
     if display == "inline" && is_html_block_tag(&tag) {
         display = "block".to_string();
     }

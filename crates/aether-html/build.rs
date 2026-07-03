@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    println!("cargo::rerun-if-changed=tokenizer-states.json");
+    println!("cargo:rerun-if-changed=tokenizer-states.json");
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR must be set by Cargo");
     let dest_path = Path::new(&out_dir).join("state_dispatch.rs");

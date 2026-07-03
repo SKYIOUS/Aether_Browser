@@ -141,6 +141,7 @@ impl Response {
 }
 
 /// Fetches the HTML content from the given URL.
+// ponytail: cache uses raw URL, not normalized — may cause miss/hit mismatch
 pub fn fetch(url: &str) -> Result<String, FetchError> {
     if let Some(cached) = cache_get(url) {
         plog!("cache", "HIT: {}", url);
@@ -250,11 +251,12 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
     Err(FetchError::Network("Too many redirects".to_string()))
 }
 
-fn normalize_url(url: &str) -> String {
+pub fn normalize_url(url: &str) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
         url.to_string()
     } else {
-        format!("https://{}", url)
+        let cleaned = url.trim_start_matches('/');
+        format!("https://{}", cleaned)
     }
 }
 
@@ -265,12 +267,12 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
     }
 
     if url.starts_with("//") {
-        let stripped = url.trim_start_matches('/');
-        return format!("https://{}", stripped);
+        return format!("https:{}", url);
     }
 
     let base = normalize_url(base_url);
 
+    // ponytail: IPv6 URL handling not implemented
     let scheme_end = base.find("://").map(|i| i + 3).unwrap_or(0);
     if scheme_end == 0 { return base; }
     let host_end = base[scheme_end..]

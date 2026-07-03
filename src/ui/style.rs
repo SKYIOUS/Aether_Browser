@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+
 use iced::widget::{button, container, text_input};
 use iced::{Background, Border, Color};
 
@@ -122,69 +123,9 @@ pub fn card_style() -> impl Fn(&iced::Theme) -> container::Style {
     }
 }
 
-pub fn pill_style() -> impl Fn(&iced::Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(C::CARD)),
-        border: Border {
-            color: C::BORDER_MID,
-            width: 1.0,
-            radius: 20.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
-pub fn url_bar_style() -> impl Fn(&iced::Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.04))),
-        border: Border {
-            color: C::BORDER,
-            width: 1.0,
-            radius: 999.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
-pub fn active_workspace_style() -> impl Fn(&iced::Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(Color::from_rgba(0.25, 0.50, 0.90, 0.08))),
-        border: Border {
-            color: C::ACCENT,
-            width: 0.0,
-            radius: 12.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
-pub fn workspace_style() -> impl Fn(&iced::Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(C::TRANSPARENT)),
-        border: Border {
-            color: C::TRANSPARENT,
-            width: 0.0,
-            radius: 12.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
 pub fn status_bar_style() -> impl Fn(&iced::Theme) -> container::Style {
     |_| container::Style {
         background: Some(Background::Color(C::TRANSPARENT)),
-        ..Default::default()
-    }
-}
-
-pub fn graph_area_style() -> impl Fn(&iced::Theme) -> container::Style {
-    |_| container::Style {
-        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.25))),
-        border: Border {
-            color: C::BORDER,
-            width: 1.0,
-            radius: 16.0.into(),
-        },
         ..Default::default()
     }
 }
@@ -367,18 +308,3 @@ pub fn palette_input_style() -> impl Fn(&iced::Theme, text_input::Status) -> tex
     }
 }
 
-pub fn link_button_style() -> impl Fn(&iced::Theme, button::Status) -> button::Style {
-    |_, status| {
-        let bg = match status {
-            button::Status::Hovered => Some(Background::Color(Color::from_rgba(0.647, 0.788, 1.0, 0.05))),
-            button::Status::Pressed => Some(Background::Color(Color::from_rgba(0.647, 0.788, 1.0, 0.10))),
-            _ => None,
-        };
-        button::Style {
-            background: bg,
-            text_color: C::ACCENT,
-            border: Border::default(),
-            ..Default::default()
-        }
-    }
-}

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -13,7 +14,9 @@ fn log_dir() -> PathBuf {
     let mut p = std::env::current_exe().unwrap_or_default();
     p.pop();
     p.push("logs");
-    let _ = create_dir_all(&p);
+    if let Err(e) = create_dir_all(&p) {
+        eprintln!("[logging] failed to create log dir {:?}: {}", p, e);
+    }
     p
 }
 

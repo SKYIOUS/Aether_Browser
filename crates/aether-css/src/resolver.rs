@@ -49,7 +49,12 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                 CssPropertyName::Position => style.position = parse_position(&decl.value),
                 CssPropertyName::Overflow => style.overflow = parse_keyword(&decl.value),
                 CssPropertyName::Visibility => style.visibility = parse_keyword(&decl.value),
-                CssPropertyName::Opacity => style.opacity = parse_keyword(&decl.value).and_then(|v| v.parse::<f32>().ok()),
+                CssPropertyName::Opacity => {
+                    style.opacity = match &decl.value {
+                        PropertyValue::Number(n) => Some(*n),
+                        _ => parse_keyword(&decl.value).and_then(|v| v.parse::<f32>().ok()),
+                    };
+                }
                 CssPropertyName::ZIndex => style.z_index = parse_length_vp(&decl.value, vw, vh).map(|v| v as i32),
 
                 CssPropertyName::Margin | CssPropertyName::MarginTop | CssPropertyName::MarginRight | CssPropertyName::MarginBottom | CssPropertyName::MarginLeft => {
@@ -138,6 +143,7 @@ fn resolve_length_for_unit(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
 fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
     match value {
         PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
+        PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
@@ -153,6 +159,7 @@ fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f
             Unit::Em | Unit::Rem => lv.value * 16.0,
             _ => lv.value,
         }),
+        PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
@@ -306,8 +313,14 @@ fn apply_sides_vp(
     vw: f32,
     vh: f32,
 ) {
+    // Determine if this is a vertical or horizontal property
+    let is_vertical = matches!(name,
+        "margin-top" | "margin-bottom" | "padding-top" | "padding-bottom"
+        | "border-top-width" | "border-bottom-width"
+    );
     // First try single length
-    if let Some(len) = parse_length_vp(value, vw, vh) {
+    let maybe_len = if is_vertical { parse_length_vp_vertical(value, vw, vh) } else { parse_length_vp(value, vw, vh) };
+    if let Some(len) = maybe_len {
         match name {
             "margin-top" => *top = Some(len),
             "margin-right" => *right = Some(len),

@@ -1,3 +1,8 @@
+//! Stack-based VM that executes Korlang bytecode.
+//! Operates on a stack of [`Value`] with a persistent [`heap`](Self::heap)
+//! for variables and loop state. Elements are created as [`KorObject`] nodes
+//! and assembled via `AddChild`, producing a UI component tree.
+
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
@@ -98,6 +103,7 @@ impl VirtualMachine {
                     ip += 1;
                 }
                 OpCode::SetProperty(name) => {
+                    // ponytail: no stack underflow detection
                     let val = self.stack.pop().unwrap_or(Value::None);
                     if let Some(Value::Object(obj)) = self.stack.last() {
                         obj.lock().unwrap_or_else(|e| e.into_inner()).properties.insert(name, val);
@@ -105,6 +111,7 @@ impl VirtualMachine {
                     ip += 1;
                 }
                 OpCode::AddChild => {
+                    // ponytail: no stack underflow detection
                     let child = self.stack.pop().unwrap_or(Value::None);
                     if let Some(Value::Object(parent)) = self.stack.last() {
                         parent.lock().unwrap_or_else(|e| e.into_inner()).children.push(child);
@@ -117,6 +124,7 @@ impl VirtualMachine {
                     ip += 1;
                 }
                 OpCode::Pop => {
+                    // ponytail: no stack underflow detection
                     self.stack.pop();
                     ip += 1;
                 }
@@ -159,27 +167,33 @@ impl VirtualMachine {
                 }
                 OpCode::ForEach(var, count) => {
                     let key = format!("__fe_{}", var);
+                    let end_key = format!("__fe_end_{}", var);
                     let current = self.heap.get(&key).and_then(|v| {
                         if let Value::Number(n) = v { Some(*n as usize) } else { None }
                     }).unwrap_or(0);
 
                     if current < count {
+                        // ponytail: scan once to cache the end-jump offset
+                        if current == 0 {
+                            let mut scan = ip + 1;
+                            while scan < bytecode.len() {
+                                if let OpCode::Jump(target) = &bytecode[scan] {
+                                    if *target == ip {
+                                        self.heap.insert(end_key, Value::Number((scan + 1) as f64));
+                                        break;
+                                    }
+                                }
+                                scan += 1;
+                            }
+                        }
                         self.heap.insert(key, Value::Number((current + 1) as f64));
                         self.heap.insert(var.clone(), Value::Number(current as f64));
                         ip += 1;
                     } else {
                         self.heap.remove(&key);
-                        let start = ip;
-                        ip += 1;
-                        while ip < bytecode.len() {
-                            if let OpCode::Jump(target) = &bytecode[ip] {
-                                if *target == start {
-                                    ip += 1;
-                                    break;
-                                }
-                            }
-                            ip += 1;
-                        }
+                        ip = self.heap.remove(&end_key).and_then(|v| {
+                            if let Value::Number(n) = v { Some(n as usize) } else { None }
+                        }).unwrap_or(ip + 1);
                     }
                 }
             }

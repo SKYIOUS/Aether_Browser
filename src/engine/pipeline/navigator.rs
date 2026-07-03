@@ -1,3 +1,4 @@
+use crate::plog;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -8,19 +9,23 @@ pub struct Tab {
 
 pub fn normalize_nav_url(url: &str) -> String {
     let s = url.trim();
-    if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("aether://") || s.starts_with("about:") {
-        s.to_string()
-    } else if s.starts_with("//") {
-        let stripped = s.trim_start_matches('/');
-        format!("https://{}", stripped)
-    } else {
-        format!("https://{}", s)
+    if s.is_empty() { return "about:blank".to_string(); }
+    if s.starts_with("aether://") || s.starts_with("about:") {
+        return s.to_string();
     }
+    crate::engine::net::normalize_url(s)
 }
 
 pub fn save_tabs(tabs: &[Tab]) {
-    if let Ok(json) = serde_json::to_string(tabs) {
-        let _ = std::fs::write("aether_tabs.json", json);
+    match serde_json::to_string(tabs) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write("aether_tabs.json", json) {
+                plog!("tabs", "Failed to save tabs: {}", e);
+            }
+        }
+        Err(e) => {
+            plog!("tabs", "Failed to serialize tabs: {}", e);
+        }
     }
 }
 
