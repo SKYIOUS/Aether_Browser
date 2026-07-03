@@ -1,4 +1,4 @@
-pub mod lexer; pub mod parser; pub mod rust_gen;
+pub mod lexer; pub mod parser;
 use lexer::Lexer;
 use parser::{Parser, Node, Element, Expr};
 use crate::vm::{OpCode, Value};
@@ -12,9 +12,12 @@ pub fn compile(source: &str) -> Vec<OpCode> {
     bytecode
 }
 
-static mut LABEL_COUNTER: usize = 0;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
+static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 fn next_label() -> usize {
-    unsafe { let c = LABEL_COUNTER; LABEL_COUNTER += 1; c }
+    LABEL_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
 fn emit_component(comp: &parser::Component, ops: &mut Vec<OpCode>) {

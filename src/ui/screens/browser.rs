@@ -372,7 +372,7 @@ Component SidebarWS {
                 if !self.is_history_nav {
                     let (ref mut hist, ref mut idx) = self.tab_history[self.active_tab];
                     hist.truncate(*idx + 1);
-                    hist.push(page_url);
+                    hist.push(page_url.clone());
                     *idx = hist.len() - 1;
                 }
                 self.is_history_nav = false;
