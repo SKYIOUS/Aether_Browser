@@ -713,7 +713,7 @@ impl JsBridge {
                 let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
                     let tag_name = html[pos+1..pos+tag_end].to_lowercase();
-                    if tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
+                    if tag_name == "script" || tag_name == "style" || tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].to_lowercase().find(&closing.to_lowercase()) {
                             pos += closing_pos + closing.len();
@@ -1162,27 +1162,17 @@ impl JsBridge {
     // ── Fetch (blocking, called from JS) ────────────────────────────
 
     // ponytail: returns body prefixed with __STATUS_NNN__ for JS parsing
-    fn fetch_url_inner(&self, url: &str, use_xhr: bool) -> String {
+    fn fetch_url_inner(&self, url: &str, _use_xhr: bool) -> String {
         let resolved = crate::engine::net::resolve_url(url, &self.current_url);
-        let current = parse_url(&self.current_url);
-        let target = parse_url(&resolved);
-        if current.protocol != target.protocol
-            || current.hostname.to_lowercase() != target.hostname.to_lowercase()
-            || current.port != target.port
-        {
-            let err = format!("Cross-origin fetch blocked: '{}' ≠ origin '{}'", resolved, self.current_url);
-            plog!("csp", "{}", err);
-            return format!("__STATUS_0__{}", err);
-        }
-        plog!("net", "Fetching: {}", resolved);
-        if use_xhr {
-            let body = crate::engine::net::fetch_xhr(&resolved);
-            if body.starts_with("Error: ") {
-                return format!("__STATUS_0__{}", body);
-            }
-            format!("__STATUS_200__{}", body)
-        } else {
+        let origin = &self.current_url;
+        plog!("net", "Fetching: {} (origin: {})", resolved, origin);
+        if crate::engine::net::is_same_origin(&resolved, origin) {
             match crate::engine::net::fetch(&resolved) {
+                Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
+                Err(e) => format!("__STATUS_0__Error: {}", e),
+            }
+        } else {
+            match crate::engine::net::fetch_with_cors(&resolved, origin) {
                 Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
                 Err(e) => format!("__STATUS_0__Error: {}", e),
             }

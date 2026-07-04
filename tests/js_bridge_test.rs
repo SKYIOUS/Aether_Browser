@@ -191,8 +191,8 @@ fn test_fetch_url_cross_origin() {
     let dom = Node::new_document();
     let bridge = JsBridge::load_dom(&dom, "https://example.com");
     let result = bridge.fetch_url("https://other.com/data");
-    assert!(result.contains("Cross-origin"));
-    assert!(result.contains("example.com"));
+    // Cross-origin fetch without ACAO header should fail
+    assert!(result.starts_with("__STATUS_0__"), "expected failure for cross-origin fetch, got: {}", result);
 }
 
 #[test]

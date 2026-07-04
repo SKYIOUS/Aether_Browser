@@ -147,7 +147,7 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     plog!("FETCH", "URL={}", url);
     let response = match run_blocking({
         let url = url.clone();
-        move || net::fetch_with_redirects(&url, 5)
+        move || net::fetch_with_redirects(&url, 5, None)
     }) {
         Ok(Ok(resp)) => {
             plog!("FETCH", "Status=OK len={}", resp.body.len());

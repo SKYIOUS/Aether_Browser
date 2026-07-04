@@ -113,19 +113,12 @@ fn test_inner_html_strips_script_tags() {
     bridge.set_inner_html(root, "<script>alert('xss')</script><p>safe</p>");
 
     let children = bridge.get_child_nodes(root);
-    // script elements are preserved as element nodes with text content
+    // script elements are fully stripped
     let script = children.iter().find(|&&id| {
         bridge.get_tag_name(id).map(|t| t == "SCRIPT").unwrap_or(false)
     });
-    assert!(script.is_some(), "script element is preserved (content stored as text)");
-    // verify script content stored as text node child
-    let script_children = bridge.get_child_nodes(*script.unwrap());
-    let script_text = script_children.iter().find_map(|&id| {
-        let t = bridge.get_text_content(id);
-        if !t.is_empty() { Some(t) } else { None }
-    });
-    assert_eq!(script_text.unwrap_or_default().trim(), "alert('xss')");
-    // <p> should also be present
+    assert!(script.is_none(), "script tag should be stripped from innerHTML");
+    // <p> should be present
     assert!(children.iter().any(|&id| {
         bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false)
     }), "<p> should remain after set_inner_html");

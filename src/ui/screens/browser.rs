@@ -203,6 +203,7 @@ Component StatusBar {
         navbar_kor_vm.heap.insert("nav_search".into(), korlang::vm::Value::String("Search or navigate".into()));
         navbar_kor_vm.heap.insert("nav_bookmark".into(), korlang::vm::Value::String("\u{2606}".into()));
         navbar_kor_vm.heap.insert("nav_palette".into(), korlang::vm::Value::String("\u{229E}".into()));
+        navbar_kor_vm.heap.insert("nav_secure".into(), korlang::vm::Value::String(secure_indicator(&default_url)));
         navbar_kor_vm.heap.insert("url_input".into(), korlang::vm::Value::String(default_url.clone()));
         let navbar_src = r#"
 Component NavBar {
@@ -210,6 +211,7 @@ Component NavBar {
         Button(text: nav_back, on_click: "back")
         Button(text: nav_forward, on_click: "forward")
         Button(text: nav_refresh, on_click: "refresh")
+        Text(text: nav_secure, size: 16)
         TextInput(placeholder: nav_search, on_submit: "navigate")
         Button(text: nav_bookmark, on_click: "bookmark")
         Button(text: nav_palette, on_click: "palette")
@@ -285,6 +287,7 @@ Component SidebarWS {
         match msg {
             BrowserMessage::UrlChanged(s) => {
                 self.url = s.clone();
+                self.update_secure_indicator(&s);
                 self.navbar_kor_vm.update_state("url_input", korlang::vm::Value::String(s));
                 Task::none()
             }
@@ -292,6 +295,7 @@ Component SidebarWS {
                 plog!("NAV", "UrlSubmit: {}", self.url);
                 let target = normalize_nav_url(&self.url);
                 self.url = target.clone();
+                self.update_secure_indicator(&self.url.clone());
                 self.loading = true;
                 self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
                 self.kor_vm.update_state("status_right", korlang::vm::Value::String(target.clone()));
@@ -304,6 +308,7 @@ Component SidebarWS {
                 plog!("NAV", "LinkClicked: {}", url);
                 let target = normalize_nav_url(&url);
                 self.url = target.clone();
+                self.update_secure_indicator(&self.url.clone());
                 self.loading = true;
                 self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
                 self.kor_vm.update_state("status_right", korlang::vm::Value::String(target.clone()));
@@ -397,6 +402,7 @@ Component SidebarWS {
                 }
                 self.bridge = bridge_opt;
                 self.js_engine = Some(JSEngine::new());
+                self.update_secure_indicator(&self.url.clone());
                 self.navbar_kor_vm.update_state("url_input", korlang::vm::Value::String(self.url.clone()));
                 self.kor_vm.update_state("status_mid", korlang::vm::Value::String("Loaded".to_string()));
                 self.kor_vm.update_state("status_right", korlang::vm::Value::String(format!("{} elements", count)));
@@ -635,7 +641,19 @@ Component SidebarWS {
             .center_x(Length::Fill).center_y(Length::Fixed(40.0))
             .style(status_bar_style()).into()
     }
+
+    fn update_secure_indicator(&mut self, url: &str) {
+        let indicator = secure_indicator(url);
+        self.navbar_kor_vm.update_state("nav_secure", korlang::vm::Value::String(indicator));
+    }
 }
+
+fn secure_indicator(url: &str) -> String {
+    if url.starts_with("https://") { "\u{1F512}".to_string() }
+    else if url.starts_with("http://") { "\u{26A0}".to_string() }
+    else { String::new() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

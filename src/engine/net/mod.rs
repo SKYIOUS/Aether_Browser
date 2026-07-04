@@ -555,12 +555,25 @@ pub fn fetch(url: &str) -> Result<(String, u16), FetchError> {
         plog!("mock", "Serving CSS for {}", url);
         return Ok((body, 200));
     }
-    match fetch_with_redirects(url, 5) {
+    match fetch_with_redirects(url, 5, None) {
         Ok(resp) => {
             if resp.body.is_empty() {
                 return Err(FetchError::EmptyBody);
             }
             cache_set(url, &resp.body);
+            Ok((resp.body, resp.status))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Fetches with CORS origin header + ACAO response checking.
+pub fn fetch_with_cors(url: &str, origin: &str) -> Result<(String, u16), FetchError> {
+    match fetch_with_redirects(url, 5, Some(origin)) {
+        Ok(resp) => {
+            if resp.body.is_empty() {
+                return Err(FetchError::EmptyBody);
+            }
             Ok((resp.body, resp.status))
         }
         Err(e) => Err(e),
@@ -604,11 +617,11 @@ pub fn fetch_xhr(url: &str) -> String {
 }
 
 /// Fetches content with automatic redirect handling.
-pub fn fetch_with_redirects(url: &str, max_redirects: usize) -> Result<Response, FetchError> {
-    fetch_inner(url, max_redirects)
+pub fn fetch_with_redirects(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
+    fetch_inner(url, max_redirects, origin)
 }
 
-fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> {
+fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
     let final_url = normalize_url(url);
     plog!("net", "Fetching: {}", final_url);
 
@@ -619,6 +632,10 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
     let mut req = cl.get(&final_url);
     if !cookies.is_empty() {
         req = req.header("Cookie", &cookies);
+    }
+    if let Some(origin) = origin {
+        let origin_url = normalize_url(origin);
+        req = req.header("Origin", &origin_url);
     }
     let resp = match req.send() {
         Ok(r) => r,
@@ -643,6 +660,27 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
         }
     }
 
+    // CORS check: if origin is provided and request is cross-origin, require ACAO
+    if let Some(origin) = origin {
+        let normalized_origin = normalize_url(origin);
+        if !is_same_origin(&final_url, &normalized_origin) {
+            let acao = headers.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-origin"))
+                .map(|(_, v)| v.as_str());
+            let allowed = match acao {
+                Some("*") => true,
+                Some(header_origin) => is_same_origin(header_origin, &normalized_origin),
+                None => false,
+            };
+            if !allowed {
+                return Err(FetchError::CrossOrigin {
+                    target: final_url.clone(),
+                    origin: normalized_origin,
+                });
+            }
+        }
+    }
+
     if !check_csp(&final_url, &headers) {
         return Err(FetchError::Network("Blocked by Content-Security-Policy".to_string()));
     }
@@ -651,7 +689,7 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
         if let Some(location) = headers.get("location") {
             plog!("net", "Redirect to: {}", location);
             let next = resolve_url(location, &final_url);
-            return fetch_inner(&next, max_redirects - 1);
+            return fetch_inner(&next, max_redirects - 1, origin);
         }
     }
 
@@ -659,6 +697,14 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
     plog!("net", "Body length: {}", body.len());
 
     Ok(Response { body, status, headers, final_url })
+}
+
+pub fn is_same_origin(a: &str, b: &str) -> bool {
+    let pa = parse_simple_url(a);
+    let pb = parse_simple_url(b);
+    pa.protocol == pb.protocol
+        && pa.hostname.to_lowercase() == pb.hostname.to_lowercase()
+        && pa.port == pb.port
 }
 
 type ImageCache = HashMap<String, (Vec<u8>, Instant)>;
