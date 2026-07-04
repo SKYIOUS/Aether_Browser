@@ -8,15 +8,15 @@ use crate::engine::dom::{ElementData, Node, NodeType};
 // ── Flat DOM node representation ────────────────────────────────────
 
 #[derive(Debug, Clone)]
-struct FlatNode {
-    parent: Option<u32>,
-    children: Vec<u32>,
-    tag: String,
-    attrs: HashMap<String, String>,
-    text: String,
-    is_text: bool,
-    is_document: bool,
-    inline_styles: HashMap<String, String>,
+pub(crate) struct FlatNode {
+    pub(crate) parent: Option<u32>,
+    pub(crate) children: Vec<u32>,
+    pub(crate) tag: String,
+    pub(crate) attrs: HashMap<String, String>,
+    pub(crate) text: String,
+    pub(crate) is_text: bool,
+    pub(crate) is_document: bool,
+    pub(crate) inline_styles: HashMap<String, String>,
 }
 
 impl FlatNode {
@@ -34,7 +34,7 @@ impl FlatNode {
 // ── CSS Selector types ──────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-enum SimpleSel {
+pub(crate) enum SimpleSel {
     Universal,
     Tag(String),
     Class(String),
@@ -42,23 +42,23 @@ enum SimpleSel {
 }
 
 #[derive(Debug, Clone)]
-enum Combinator {
+pub(crate) enum Combinator {
     Descendant,
     Child,
 }
 
 #[derive(Debug, Clone)]
-struct CompoundSel {
-    simples: Vec<SimpleSel>,
+pub(crate) struct CompoundSel {
+    pub(crate) simples: Vec<SimpleSel>,
 }
 
 #[derive(Debug, Clone)]
-struct ComplexSel {
-    compound: CompoundSel,
-    combinator: Option<(Combinator, Box<ComplexSel>)>,
+pub(crate) struct ComplexSel {
+    pub(crate) compound: CompoundSel,
+    pub(crate) combinator: Option<(Combinator, Box<ComplexSel>)>,
 }
 
-fn simple_sel_to_stratus(sel: &SimpleSel) -> crate::engine::stratus::SimpleSelector {
+pub(crate) fn simple_sel_to_stratus(sel: &SimpleSel) -> crate::engine::stratus::SimpleSelector {
     use crate::engine::stratus::SimpleSelector;
     match sel {
         SimpleSel::Universal => SimpleSelector { tag_name: None, id: None, class: vec![], attribute: None, pseudo_class: None },
@@ -68,14 +68,14 @@ fn simple_sel_to_stratus(sel: &SimpleSel) -> crate::engine::stratus::SimpleSelec
     }
 }
 
-fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
+pub(crate) fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
     if node.is_text || node.is_document { return false; }
     let element = crate::engine::stratus::ElementData::with_attributes(node.tag.clone(), node.attrs.clone());
     let ss = simple_sel_to_stratus(sel);
     ss.matches(&element)
 }
 
-fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
+pub(crate) fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
     let chars: Vec<char> = s.chars().collect();
     if *pos >= chars.len() { return None; }
     match chars[*pos] {
@@ -101,7 +101,7 @@ fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
     }
 }
 
-fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
+pub(crate) fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
     let chars: Vec<char> = s.chars().collect();
     let mut simples = vec![];
     while *pos < chars.len() {
@@ -115,12 +115,12 @@ fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
     CompoundSel { simples }
 }
 
-fn skip_ws(s: &str, pos: &mut usize) {
+pub(crate) fn skip_ws(s: &str, pos: &mut usize) {
     let chars: Vec<char> = s.chars().collect();
     while *pos < chars.len() && chars[*pos].is_whitespace() { *pos += 1; }
 }
 
-fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
+pub(crate) fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
     let chars: Vec<char> = s.chars().collect();
     skip_ws(s, pos);
     if *pos < chars.len() && chars[*pos] == '>' {
@@ -135,7 +135,7 @@ fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
     }
 }
 
-fn parse_complex(s: &str) -> Option<ComplexSel> {
+pub(crate) fn parse_complex(s: &str) -> Option<ComplexSel> {
     let s = s.trim();
     if s.is_empty() { return None; }
     let mut pos = 0;
@@ -150,11 +150,11 @@ fn parse_complex(s: &str) -> Option<ComplexSel> {
     Some(ComplexSel { compound, combinator })
 }
 
-fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
+pub(crate) fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
     sel.simples.iter().all(|s| matches_simple(node, s))
 }
 
-fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
+pub(crate) fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
     if let Some(node) = nodes.get(node_id as usize) {
         if !matches_compound(node, &sel.compound) { return false; }
         if let Some((combinator, rest)) = &sel.combinator {
@@ -178,26 +178,26 @@ fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
 // ── Timer entry ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-struct TimerEntry {
-    id: u32,
-    source: String,
-    delay_ms: u64,
-    is_interval: bool,
-    fire_at: std::time::Instant,
+pub(crate) struct TimerEntry {
+    pub(crate) id: u32,
+    pub(crate) source: String,
+    pub(crate) delay_ms: u64,
+    pub(crate) is_interval: bool,
+    pub(crate) fire_at: std::time::Instant,
 }
 
 // ── Event listener entry ────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-struct EventListenerEntry {
-    node_id: u32,
-    event_type: String,
-    source: String,
+pub(crate) struct EventListenerEntry {
+    pub(crate) node_id: u32,
+    pub(crate) event_type: String,
+    pub(crate) source: String,
 }
 
 // ── URL parts helper ────────────────────────────────────────────────
 
-struct UrlParts {
+pub(crate) struct UrlParts {
     protocol: String,
     hostname: String,
     port: String,
@@ -207,19 +207,19 @@ struct UrlParts {
 }
 
 #[derive(Debug, Clone)]
-struct CookieEntry {
-    value: String,
-    expires: Option<Instant>,
+pub(crate) struct CookieEntry {
+    pub(crate) value: String,
+    pub(crate) expires: Option<Instant>,
 }
 
-type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>>;
-type OriginStore = HashMap<String, HashMap<String, String>>;
+pub(crate) type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>>;
+pub(crate) type OriginStore = HashMap<String, HashMap<String, String>>;
 
-fn is_expired(entry: &CookieEntry) -> bool {
+pub(crate) fn is_expired(entry: &CookieEntry) -> bool {
     entry.expires.map_or(false, |exp| Instant::now() >= exp)
 }
 
-fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
+pub(crate) fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
     // ponytail: only Max-Age and RFC 1123 Expires; no obs-date variants
     for part in cookie_str.split(';') {
         let part = part.trim();
@@ -238,7 +238,7 @@ fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
 }
 
 // ponytail: only RFC 1123/850 "Thu, 01 Jan 1970 00:00:00 GMT", not obs-date
-fn parse_rfc1123_date(s: &str) -> Option<Instant> {
+pub(crate) fn parse_rfc1123_date(s: &str) -> Option<Instant> {
     let s = s.strip_suffix(" GMT")?;
     let (_wkday, rest) = s.split_once(", ")?;
     let parts: Vec<&str> = rest.split_whitespace().collect();
@@ -260,18 +260,18 @@ fn parse_rfc1123_date(s: &str) -> Option<Instant> {
     Some(Instant::now() + Duration::from_secs((days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64).max(0) as u64))
 }
 
-fn sweep_expired_cookies(store: &mut CookieOriginStore) {
+pub(crate) fn sweep_expired_cookies(store: &mut CookieOriginStore) {
     for cookies in store.values_mut() {
         cookies.retain(|_, v| !is_expired(v));
     }
 }
 
-fn cookie_store() -> &'static RwLock<CookieOriginStore> {
+pub(crate) fn cookie_store() -> &'static RwLock<CookieOriginStore> {
     static COOKIE_STORE: OnceLock<RwLock<CookieOriginStore>> = OnceLock::new();
     COOKIE_STORE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-fn local_storage_store() -> &'static RwLock<OriginStore> {
+pub(crate) fn local_storage_store() -> &'static RwLock<OriginStore> {
     static LOCAL_STORAGE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
     LOCAL_STORAGE.get_or_init(|| RwLock::new(HashMap::new()))
 }
@@ -282,7 +282,7 @@ impl Default for UrlParts {
     }
 }
 
-fn parse_url(url: &str) -> UrlParts {
+pub(crate) fn parse_url(url: &str) -> UrlParts {
     let mut parts = UrlParts::default();
     let s = url.trim();
     if s.is_empty() { return parts; }
@@ -340,7 +340,7 @@ fn parse_url(url: &str) -> UrlParts {
     parts
 }
 
-fn origin_key(url: &str) -> String {
+pub(crate) fn origin_key(url: &str) -> String {
     let parts = parse_url(url);
     if parts.hostname.is_empty() {
         "null".to_string()
@@ -356,20 +356,20 @@ fn origin_key(url: &str) -> String {
 #[derive(Debug)]
 pub struct JsBridge {
     pub write_buffer: String,
-    nodes: Vec<FlatNode>,
+    pub(crate) nodes: Vec<FlatNode>,
     pub body_id: Option<u32>,
     pub current_url: String,
     pub pending_navigation: Option<String>,
     pub doc_title: String,
     pub history_state: String,
     pub pending_history_delta: Option<i32>,
-    next_timer_id: u32,
-    timers: Vec<TimerEntry>,
-    event_listeners: Vec<EventListenerEntry>,
+    pub(crate) next_timer_id: u32,
+    pub(crate) timers: Vec<TimerEntry>,
+    pub(crate) event_listeners: Vec<EventListenerEntry>,
 }
 
 impl JsBridge {
-    fn current_origin(&self) -> String {
+    pub(crate) fn current_origin(&self) -> String {
         origin_key(&self.current_url)
     }
 
@@ -857,36 +857,6 @@ impl JsBridge {
         attrs
     }
 
-    // ── querySelector / querySelectorAll ────────────────────────────
-
-    pub fn query_selector(&self, node_id: u32, selector: &str) -> Option<u32> {
-        let sel = parse_complex(selector)?;
-        self.query_sel(node_id, &sel, false).into_iter().next()
-    }
-
-    pub fn query_selector_all(&self, node_id: u32, selector: &str) -> Vec<u32> {
-        if let Some(sel) = parse_complex(selector) {
-            self.query_sel(node_id, &sel, true).into_iter().collect()
-        } else { vec![] }
-    }
-
-    fn query_sel(&self, start: u32, sel: &ComplexSel, all: bool) -> Vec<u32> {
-        let mut results = vec![];
-        let mut stack: Vec<u32> = self.nodes.get(start as usize).map(|n| n.children.clone()).unwrap_or_default();
-        while let Some(id) = stack.pop() {
-            if matches_complex(&self.nodes, id, sel) {
-                results.push(id);
-                if !all { return results; }
-            }
-            if let Some(node) = self.nodes.get(id as usize) {
-                for &child in node.children.iter().rev() {
-                    stack.push(child);
-                }
-            }
-        }
-        results
-    }
-
     // ── DOM traversal ───────────────────────────────────────────────
 
     pub fn get_parent(&self, node_id: u32) -> Option<u32> {
@@ -927,173 +897,6 @@ impl JsBridge {
 
     pub fn get_child_element_count(&self, node_id: u32) -> u32 {
         self.get_children(node_id).len() as u32
-    }
-
-    // ── Timer methods ───────────────────────────────────────────────
-
-    pub fn set_timeout(&mut self, source: String, delay_ms: u64) -> u32 {
-        let id = self.next_timer_id;
-        self.next_timer_id += 1;
-        let fire_at = std::time::Instant::now() + std::time::Duration::from_millis(delay_ms);
-        self.timers.push(TimerEntry { id, source, delay_ms, is_interval: false, fire_at });
-        id
-    }
-
-    pub fn set_interval(&mut self, source: String, delay_ms: u64) -> u32 {
-        let delay_ms = delay_ms.max(4); // ponytail: HTML spec says clamp to 4ms min
-        let id = self.next_timer_id;
-        self.next_timer_id += 1;
-        let fire_at = std::time::Instant::now() + std::time::Duration::from_millis(delay_ms);
-        self.timers.push(TimerEntry { id, source, delay_ms, is_interval: true, fire_at });
-        id
-    }
-
-    pub fn clear_timer(&mut self, id: u32) {
-        self.timers.retain(|t| t.id != id);
-    }
-
-    pub fn has_pending_timers(&self) -> bool {
-        !self.timers.is_empty()
-    }
-
-    /// Returns (timer_id, source_code) pairs for expired timers.
-    /// Re-registers interval timers for their next fire.
-    pub fn poll_timers(&mut self) -> Vec<(u32, String)> {
-        let now = std::time::Instant::now();
-        let mut ready = vec![];
-        let mut i = 0;
-        while i < self.timers.len() {
-            if self.timers[i].fire_at <= now {
-                let entry = self.timers.remove(i);
-                ready.push((entry.id, entry.source.clone()));
-                if entry.is_interval {
-                    let new_id = self.next_timer_id;
-                    self.next_timer_id += 1;
-                    let delay_ms = entry.delay_ms.max(1);
-                    let fire_at = now + std::time::Duration::from_millis(delay_ms);
-                    self.timers.push(TimerEntry { id: new_id, source: entry.source, delay_ms: entry.delay_ms, is_interval: true, fire_at });
-                }
-            } else {
-                i += 1;
-            }
-        }
-        ready
-    }
-
-    // ── Event listener methods ──────────────────────────────────────
-
-    pub fn add_event_listener(&mut self, node_id: u32, event_type: String, source: String) {
-        self.event_listeners.push(EventListenerEntry { node_id, event_type, source });
-    }
-
-    pub fn remove_event_listener(&mut self, node_id: u32, event_type: String, source: String) {
-        self.event_listeners.retain(|e| !(e.node_id == node_id && e.event_type == event_type && e.source == source));
-    }
-
-    pub fn get_event_listeners(&self, node_id: u32, event_type: &str) -> Vec<String> {
-        self.event_listeners.iter()
-            .filter(|e| e.node_id == node_id && e.event_type == event_type)
-            .map(|e| e.source.clone())
-            .collect()
-    }
-
-    /// Returns (source, node_id) for all matching event listeners, including on ancestor nodes.
-    pub fn get_event_listeners_bubbling(&self, node_id: u32, event_type: &str) -> Vec<(String, u32)> {
-        let mut results = vec![];
-        let mut current = Some(node_id);
-        while let Some(nid) = current {
-            for e in &self.event_listeners {
-                if e.node_id == nid && e.event_type == event_type {
-                    results.push((e.source.clone(), nid));
-                }
-            }
-            current = self.nodes.get(nid as usize).and_then(|n| n.parent);
-        }
-        results
-    }
-
-    // ── Cookie methods ─────────────────────────────────────────────
-
-    pub fn get_cookie(&self) -> String {
-        let mut parts: Vec<String> = Vec::new();
-        let origin = self.current_origin();
-        if let Ok(mut guard) = cookie_store().write() {
-            sweep_expired_cookies(&mut guard);
-            if let Some(cookies) = guard.get(&origin) {
-                for (key, entry) in cookies.iter() {
-                    parts.push(format!("{}={}", key, entry.value));
-                }
-            }
-        }
-        parts.join("; ")
-    }
-
-    pub fn set_cookie(&mut self, cookie_str: &str) {
-        if let Some(eq_pos) = cookie_str.find('=') {
-            let key = cookie_str[..eq_pos].trim().to_string();
-            // ponytail: value stops at ';' — anything after are attributes
-            let value_end = cookie_str[eq_pos + 1..].find(';').map(|p| eq_pos + 1 + p).unwrap_or(cookie_str.len());
-            let value = cookie_str[eq_pos + 1..value_end].trim().to_string();
-            if !key.is_empty() {
-                let expires = parse_cookie_expiry(cookie_str);
-                // Max-Age=0 or past Expires → delete
-                if expires.as_ref().is_some_and(|e| *e <= Instant::now()) {
-                    if let Ok(mut guard) = cookie_store().write() {
-                        guard.entry(self.current_origin()).or_default().remove(&key);
-                    }
-                    return;
-                }
-                if let Ok(mut guard) = cookie_store().write() {
-                    sweep_expired_cookies(&mut guard);
-                    let origin = self.current_origin();
-                    let total: usize = guard.values().map(|m| m.len()).sum();
-                    let origin_has_room = guard.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
-                    if !origin_has_room || total >= 500 { return; }
-                    guard.entry(origin).or_default().insert(key, CookieEntry { value, expires });
-                }
-            }
-        }
-    }
-
-    // ── LocalStorage methods ────────────────────────────────────────
-
-    pub fn local_storage_get_item(&self, key: &str) -> Option<String> {
-        let origin = self.current_origin();
-        local_storage_store().read().ok().and_then(|guard| guard.get(&origin).and_then(|m| m.get(key)).cloned())
-    }
-
-    pub fn local_storage_set_item(&mut self, key: String, value: String) {
-        if let Ok(mut guard) = local_storage_store().write() {
-            guard.entry(self.current_origin()).or_default().insert(key, value);
-        }
-    }
-
-    pub fn local_storage_remove_item(&mut self, key: &str) {
-        if let Ok(mut guard) = local_storage_store().write() {
-            if let Some(origin) = guard.get_mut(&self.current_origin()) {
-                origin.remove(key);
-            }
-        }
-    }
-
-    pub fn local_storage_clear(&mut self) {
-        if let Ok(mut guard) = local_storage_store().write() {
-            guard.remove(&self.current_origin());
-        }
-    }
-
-    pub fn local_storage_key(&self, index: i32) -> Option<String> {
-        if index < 0 {
-            return None;
-        }
-        local_storage_store().read().ok()
-            .and_then(|guard| guard.get(&self.current_origin()).and_then(|m| m.keys().nth(index as usize).cloned()))
-    }
-
-    pub fn local_storage_length(&self) -> i32 {
-        local_storage_store().read().ok()
-            .and_then(|guard| guard.get(&self.current_origin()).map(|m| m.len() as i32))
-            .unwrap_or(0)
     }
 
     // ── Style methods ───────────────────────────────────────────────
@@ -1157,35 +960,6 @@ impl JsBridge {
 
     pub fn location_replace(&mut self, url: String) {
         self.pending_navigation = Some(url);
-    }
-
-    // ── Fetch (blocking, called from JS) ────────────────────────────
-
-    // ponytail: returns body prefixed with __STATUS_NNN__ for JS parsing
-    fn fetch_url_inner(&self, url: &str, _use_xhr: bool) -> String {
-        let resolved = crate::engine::net::resolve_url(url, &self.current_url);
-        let origin = &self.current_url;
-        plog!("net", "Fetching: {} (origin: {})", resolved, origin);
-        if crate::engine::net::is_same_origin(&resolved, origin) {
-            match crate::engine::net::fetch(&resolved) {
-                Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
-                Err(e) => format!("__STATUS_0__Error: {}", e),
-            }
-        } else {
-            match crate::engine::net::fetch_with_cors(&resolved, origin) {
-                Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
-                Err(e) => format!("__STATUS_0__Error: {}", e),
-            }
-        }
-    }
-
-    pub fn fetch_url(&self, url: &str) -> String {
-        self.fetch_url_inner(url, false)
-    }
-
-    // ponytail: sync XHR — blocks JS thread, keep timeout short (3s)
-    pub fn fetch_url_xhr(&self, url: &str) -> String {
-        self.fetch_url_inner(url, true)
     }
 
     // ── Get elements at a point (for click dispatch) ────────────────

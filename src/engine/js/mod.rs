@@ -1,4 +1,9 @@
 pub mod js_bridge;
+pub mod timers;
+pub mod events;
+pub mod selector;
+pub mod fetch;
+pub mod storage;
 
 use std::sync::{Arc, Mutex};
 use rquickjs::Runtime as QuickJSRuntime;
