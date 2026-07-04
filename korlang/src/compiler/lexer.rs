@@ -15,6 +15,15 @@ impl Lexer {
             if self.is_eof() { break; }
             let c = self.peek();
             match c {
+                '/' if !self.is_eof() && self.pos + 1 < self.input.len() => {
+                    let next = self.input[self.pos + 1];
+                    if next == '/' { while !self.is_eof() && self.peek() != '\n' { self.advance(); } }
+                    else if next == '*' {
+                        self.advance(); self.advance();
+                        while !self.is_eof() && !(self.peek() == '*' && self.pos + 1 < self.input.len() && self.input[self.pos + 1] == '/') { self.advance(); }
+                        if !self.is_eof() { self.advance(); } if !self.is_eof() { self.advance(); }
+                    } else { eprintln!("lexer: skipping unknown character '/'"); self.advance(); }
+                }
                 '{' => { self.advance(); tokens.push(Token::OpenBrace); }
                 '}' => { self.advance(); tokens.push(Token::CloseBrace); }
                 '(' => { self.advance(); tokens.push(Token::OpenParen); }
@@ -46,7 +55,19 @@ impl Lexer {
         let mut vars = Vec::new();
         let mut current = String::new();
         while !self.is_eof() && self.peek() != '\"' {
-            if self.peek() == '$' && self.pos + 1 < self.input.len() && self.input[self.pos + 1].is_alphabetic() {
+            if self.peek() == '\\' && self.pos + 1 < self.input.len() {
+                let escaped = self.input[self.pos + 1];
+                self.advance(); self.advance(); // skip backslash and the escaped char
+                match escaped {
+                    'n' => current.push('\n'),
+                    'r' => current.push('\r'),
+                    't' => current.push('\t'),
+                    '\\' => current.push('\\'),
+                    '\"' => current.push('\"'),
+                    '\'' => current.push('\''),
+                    _ => { current.push('\\'); current.push(escaped); }
+                }
+            } else if self.peek() == '$' && self.pos + 1 < self.input.len() && self.input[self.pos + 1].is_alphabetic() {
                 parts.push(current.clone());
                 current.clear();
                 self.advance();

@@ -115,5 +115,9 @@ impl Parser {
     fn is_eof(&self) -> bool { self.pos >= self.tokens.len() }
     fn advance_opt(&mut self) -> Option<Token> { if self.is_eof() { None } else { let t = self.tokens[self.pos].clone(); self.pos += 1; Some(t) } }
     fn consume(&mut self, token: &Token) -> bool { if self.peek() == Some(token) { self.pos += 1; true } else { false } }
-    fn expect(&mut self, token: Token) { debug_assert!(self.consume(&token), "expect: unexpected token"); }
+    fn expect(&mut self, token: Token) {
+        if !self.consume(&token) {
+            eprintln!("parser: expected {:?}, got {:?}", token, self.peek());
+        }
+    }
 }

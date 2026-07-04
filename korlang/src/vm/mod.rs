@@ -103,35 +103,56 @@ impl VirtualMachine {
                     ip += 1;
                 }
                 OpCode::SetProperty(name) => {
-                    // ponytail: no stack underflow detection
-                    let val = self.stack.pop().unwrap_or(Value::None);
+                    if self.stack.len() < 2 {
+                        eprintln!("vm: stack underflow in SetProperty (need 2, have {})", self.stack.len());
+                        ip += 1; continue;
+                    }
+                    let val = self.stack.pop().unwrap();
                     if let Some(Value::Object(obj)) = self.stack.last() {
                         obj.lock().unwrap_or_else(|e| e.into_inner()).properties.insert(name, val);
                     }
                     ip += 1;
                 }
                 OpCode::AddChild => {
-                    // ponytail: no stack underflow detection
-                    let child = self.stack.pop().unwrap_or(Value::None);
+                    if self.stack.len() < 2 {
+                        eprintln!("vm: stack underflow in AddChild (need 2, have {})", self.stack.len());
+                        ip += 1; continue;
+                    }
+                    let child = self.stack.pop().unwrap();
                     if let Some(Value::Object(parent)) = self.stack.last() {
                         parent.lock().unwrap_or_else(|e| e.into_inner()).children.push(child);
                     }
                     ip += 1;
                 }
                 OpCode::Dup => {
-                    let v = self.stack.last().cloned().unwrap_or(Value::None);
+                    if self.stack.is_empty() {
+                        eprintln!("vm: stack underflow in Dup");
+                        ip += 1; continue;
+                    }
+                    let v = self.stack.last().unwrap().clone();
                     self.stack.push(v);
                     ip += 1;
                 }
                 OpCode::Pop => {
-                    // ponytail: no stack underflow detection
+                    if self.stack.is_empty() {
+                        eprintln!("vm: stack underflow in Pop");
+                        ip += 1; continue;
+                    }
                     self.stack.pop();
                     ip += 1;
                 }
                 OpCode::Jump(target) => {
+                    if target >= bytecode.len() {
+                        eprintln!("vm: Jump target {} out of bounds (len {})", target, bytecode.len());
+                        ip += 1; continue;
+                    }
                     ip = target;
                 }
                 OpCode::JumpIfFalse(target) => {
+                    if target >= bytecode.len() {
+                        eprintln!("vm: JumpIfFalse target {} out of bounds (len {})", target, bytecode.len());
+                        ip += 1; continue;
+                    }
                     let cond = self.stack.pop().unwrap_or(Value::Bool(false));
                     let is_false = match cond {
                         Value::Bool(b) => !b,
@@ -144,10 +165,14 @@ impl VirtualMachine {
                 }
                 OpCode::Label(_) => { ip += 1; }
                 OpCode::Call(name, argc) => {
+                    // ponytail: collect args first, then store with correct indices
+                    let mut args = Vec::with_capacity(argc);
                     for _ in 0..argc {
-                        if let Some(v) = self.stack.pop() {
-                            self.heap.insert(format!("__arg_{}", argc - 1 - self.stack.len() as usize % argc), v);
-                        }
+                        if let Some(v) = self.stack.pop() { args.push(v); } else { break; }
+                    }
+                    args.reverse();
+                    for (i, v) in args.into_iter().enumerate() {
+                        self.heap.insert(format!("__arg_{}", i), v);
                     }
                     let result = self.builtins.get(&name).cloned().unwrap_or(Value::None);
                     self.stack.push(result);

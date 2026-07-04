@@ -69,7 +69,10 @@ fn convert_object(obj_arc: Arc<std::sync::Mutex<KorObject>>, vm: &VirtualMachine
                     "ws0" => b = b.on_press(BrowserMessage::WorkspaceSelected(0)),
                     "ws1" => b = b.on_press(BrowserMessage::WorkspaceSelected(1)),
                     "ws2" => b = b.on_press(BrowserMessage::WorkspaceSelected(2)),
-                    _ => b = b.on_press(BrowserMessage::None),
+                    unknown => {
+                        eprintln!("kor_renderer: unknown handler '{}'", unknown);
+                        b = b.on_press(BrowserMessage::None);
+                    }
                 }
             }
             b.into()
