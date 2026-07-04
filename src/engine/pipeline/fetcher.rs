@@ -86,7 +86,6 @@ fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>) {
     }
 }
 
-// ponytail: document.write() output appended as text, not parsed HTML
 fn inject_js_output(dom: &mut Node, text: &str) {
     if text.is_empty() { return; }
     fn is_body(node: &Node) -> bool {
@@ -101,11 +100,11 @@ fn inject_js_output(dom: &mut Node, text: &str) {
         }
         None
     }
-    if let Some(body) = find_body_mut(dom) {
-        body.children.push(Node::new_text(text.to_string()));
-    } else {
-        dom.children.push(Node::new_text(text.to_string()));
-    }
+    let target = if let Some(body) = find_body_mut(dom) { body } else { dom };
+    // ponytail: parse document.write() output as HTML fragment
+    let mut parser = crate::engine::parser::Parser::new(text.to_string());
+    let fragment = parser.parse_node();
+    target.children.extend(fragment.children);
 }
 
 fn run_blocking<T, F>(f: F) -> Result<T, String>
@@ -199,26 +198,30 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
             let resolved = resolved.clone();
             move || net::fetch(&resolved)
         }) {
-            Ok(Ok(css_content)) => {
-                let max_css_len = 500_000;
-                let trimmed = if css_content.len() > max_css_len {
-                    plog!("CSS", "Truncated external CSS from {} to {}", css_content.len(), max_css_len);
-                    css_content[..max_css_len].to_string()
+            Ok(Ok((css_content, css_status))) => {
+                if css_status >= 400 {
+                    plog!("CSS", "External CSS HTTP error {} for {}", css_status, resolved);
                 } else {
-                    css_content
-                };
-                let parsed = crate::engine::stratus::parse(&trimmed);
-                if let Ok(mut cache) = css_cache().write() {
-                    if cache.len() > 100 {
-                        cache.clear();
-                        plog!("CSS", "Cache evicted (size > 100)");
+                    let max_css_len = 500_000;
+                    let trimmed = if css_content.len() > max_css_len {
+                        plog!("CSS", "Truncated external CSS from {} to {}", css_content.len(), max_css_len);
+                        css_content[..max_css_len].to_string()
+                    } else {
+                        css_content
+                    };
+                    let parsed = crate::engine::stratus::parse(&trimmed);
+                    if let Ok(mut cache) = css_cache().write() {
+                        if cache.len() > 100 {
+                            cache.clear();
+                            plog!("CSS", "Cache evicted (size > 100)");
+                        }
+                        cache.insert(resolved.clone(), parsed.clone());
                     }
-                    cache.insert(resolved.clone(), parsed.clone());
+                    let rules = parsed.rules;
+                    let count = rules.len();
+                    stylesheet.rules.extend(rules);
+                    plog!("CSS", "Parsed {} rules from external CSS", count);
                 }
-                let rules = parsed.rules;
-                let count = rules.len();
-                stylesheet.rules.extend(rules);
-                plog!("CSS", "Parsed {} rules from external CSS", count);
             }
             Ok(Err(e)) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
             Err(e) => { plog!("CSS", "Fetch task join error: {}", e); }
@@ -250,7 +253,7 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                     let resolved = resolved.clone();
                     move || net::fetch(&resolved)
                 }) {
-                    Ok(Ok(fetched)) => fetched,
+                    Ok(Ok((fetched, _status))) => fetched,
                     Ok(Err(e)) => {
                         plog!("JS", "Failed to fetch external script: {}", e);
                         continue;

@@ -97,21 +97,56 @@ fn header_value<'a>(headers: &'a HashMap<String, String>, key: &str) -> Option<&
     headers.iter().find_map(|(k, v)| k.eq_ignore_ascii_case(key).then_some(v.as_str()))
 }
 
-fn csp_directive_blocks(csp: &str, directive: &str) -> bool {
+/// Returns true if the CSP directive explicitly uses `'none'`.
+fn csp_directive_is_none(csp: &str, directive: &str) -> bool {
     csp.split(';').any(|part| {
         let trimmed = part.trim();
         trimmed.starts_with(directive) && trimmed.contains("'none'")
     })
 }
 
-/// Checks Content-Security-Policy headers and applies a conservative block for
-/// pages that explicitly opt out of all content or scripts.
+/// Returns true if the CSP directive includes `'self'` (allows same-origin).
+// ponytail: no support for specific origin allowlists or port restrictions
+fn csp_directive_allows_self(csp: &str, directive: &str) -> bool {
+    csp.split(';').any(|part| {
+        let trimmed = part.trim();
+        if trimmed.starts_with(directive) {
+            let rest = &trimmed[directive.len()..].trim();
+            rest.contains("'self'") || (!rest.contains("'none'") && !rest.is_empty())
+        } else {
+            false
+        }
+    })
+}
+
+fn csp_url_matches_origin(url: &str, origin_url: &str) -> bool {
+    let parts = parse_simple_url(url);
+    let origin_parts = parse_simple_url(origin_url);
+    parts.protocol == origin_parts.protocol && parts.hostname == origin_parts.hostname && parts.port == origin_parts.port
+}
+
+/// Checks Content-Security-Policy headers. Returns false only when the policy
+/// explicitly blocks the resource (e.g. `'none'` or a non-matching allowlist
+/// without `'self'` for same-origin resources).
+// ponytail: only handles 'none', 'self', and basic same-origin matching
 pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
     if let Some(csp) = header_value(headers, "content-security-policy") {
         plog!("csp", "Content-Security-Policy for {}: {}", url, csp);
-        if csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "script-src") {
-            plog!("csp", "Blocking {} due to restrictive CSP", url);
+        if csp_directive_is_none(csp, "default-src") || csp_directive_is_none(csp, "script-src") {
+            plog!("csp", "Blocking {} due to CSP 'none'", url);
             return false;
+        }
+        // ponytail: check default-src or script-src for the resource URL
+        if csp_directive_allows_self(csp, "default-src") || csp_directive_allows_self(csp, "script-src") {
+            let origin = if let Some(first_url) = headers.get("final_url").or_else(|| headers.get("url")) {
+                first_url
+            } else {
+                return true; // no origin to compare against, allow
+            };
+            if !csp_url_matches_origin(url, origin) {
+                plog!("csp", "Blocking {}: CSP allows 'self' only", url);
+                return false;
+            }
         }
     }
     true
@@ -119,13 +154,38 @@ pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
 
 pub fn csp_blocks_scripts(headers: &HashMap<String, String>) -> bool {
     header_value(headers, "content-security-policy")
-        .is_some_and(|csp| csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "script-src"))
+        .is_some_and(|csp| csp_directive_is_none(csp, "default-src") || csp_directive_is_none(csp, "script-src"))
 }
 
 pub fn csp_blocks_styles(headers: &HashMap<String, String>) -> bool {
     header_value(headers, "content-security-policy")
-        .is_some_and(|csp| csp_directive_blocks(csp, "default-src") || csp_directive_blocks(csp, "style-src"))
+        .is_some_and(|csp| csp_directive_is_none(csp, "default-src") || csp_directive_is_none(csp, "style-src"))
 }
+
+// ponytail: simple URL parser for CSP origin matching
+fn parse_simple_url<'a>(url: &'a str) -> UrlParts<'a> {
+    let mut protocol = "https:";
+    let rest = if let Some(pos) = url.find("://") {
+        protocol = &url[..pos + 1];
+        &url[pos + 3..]
+    } else { url };
+    let hostname = if let Some(pos) = rest.find('/') { &rest[..pos] } else { rest };
+    let mut port = "";
+    let hostname = if hostname.starts_with('[') {
+        if let Some(br) = hostname.find(']') {
+            if br + 1 < hostname.len() && hostname.as_bytes()[br + 1] == b':' {
+                port = &hostname[br + 2..];
+            }
+            hostname
+        } else { hostname }
+    } else if let Some(pos) = hostname.find(':') {
+        port = &hostname[pos + 1..];
+        &hostname[..pos]
+    } else { hostname };
+    UrlParts { protocol, hostname, port }
+}
+
+struct UrlParts<'a> { protocol: &'a str, hostname: &'a str, port: &'a str }
 
 pub struct Response {
     pub body: String,
@@ -140,20 +200,20 @@ impl Response {
     }
 }
 
-/// Fetches the HTML content from the given URL.
+/// Fetches content from the given URL, returning body + HTTP status code.
 // ponytail: cache uses raw URL, not normalized — may cause miss/hit mismatch
-pub fn fetch(url: &str) -> Result<String, FetchError> {
+pub fn fetch(url: &str) -> Result<(String, u16), FetchError> {
     if let Some(cached) = cache_get(url) {
         plog!("cache", "HIT: {}", url);
-        return Ok(cached);
+        return Ok((cached, 200));
     }
     if let Some(body) = mock::resolve_html(url) {
         plog!("mock", "Serving HTML for {}", url);
-        return Ok(body);
+        return Ok((body, 200));
     }
     if let Some(body) = mock::resolve_css(url) {
         plog!("mock", "Serving CSS for {}", url);
-        return Ok(body);
+        return Ok((body, 200));
     }
     match fetch_with_redirects(url, 5) {
         Ok(resp) => {
@@ -161,7 +221,7 @@ pub fn fetch(url: &str) -> Result<String, FetchError> {
                 return Err(FetchError::EmptyBody);
             }
             cache_set(url, &resp.body);
-            Ok(resp.body)
+            Ok((resp.body, resp.status))
         }
         Err(e) => Err(e),
     }
@@ -239,11 +299,27 @@ fn fetch_inner(url: &str, max_redirects: usize) -> Result<Response, FetchError> 
     Ok(Response { body, status, headers, final_url })
 }
 
+type ImageCache = HashMap<String, (Vec<u8>, Instant)>;
+
+fn image_cache() -> &'static RwLock<ImageCache> {
+    static IMG_CACHE: OnceLock<RwLock<ImageCache>> = OnceLock::new();
+    IMG_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
 /// Fetches binary content (images, etc.) from the given URL.
+// ponytail: simple image cache with 60s TTL, capped at 100 entries
 pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
     if let Some(bytes) = mock::resolve_binary(url) {
         plog!("mock", "Serving binary for {}", url);
         return Ok(bytes);
+    }
+    if let Ok(cache) = image_cache().read() {
+        if let Some((bytes, time)) = cache.get(url) {
+            if time.elapsed() < Duration::from_secs(60) {
+                plog!("cache", "Image HIT: {}", url);
+                return Ok(bytes.clone());
+            }
+        }
     }
     let mut current_url = normalize_url(url);
     plog!("net", "Fetching binary: {}", current_url);
@@ -268,6 +344,13 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
         }
         let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();
         plog!("net", "Fetched {} bytes", bytes.len());
+        if let Ok(mut cache) = image_cache().write() {
+            if cache.len() > 100 {
+                cache.clear();
+                plog!("cache", "Image cache evicted (size > 100)");
+            }
+            cache.insert(url.to_string(), (bytes.clone(), Instant::now()));
+        }
         return Ok(bytes);
     }
     Err(FetchError::Network("Too many redirects".to_string()))
@@ -294,13 +377,15 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
 
     let base = normalize_url(base_url);
 
-    // ponytail: IPv6 URL handling not implemented
     let scheme_end = base.find("://").map(|i| i + 3).unwrap_or(0);
     if scheme_end == 0 { return base; }
-    let host_end = base[scheme_end..]
-        .find('/')
-        .map(|i| scheme_end + i)
-        .unwrap_or(base.len());
+    let after_scheme = &base[scheme_end..];
+    let host_end = if after_scheme.starts_with('[') {
+        // ponytail: assumes well-formed IPv6 like [::1], no nested brackets
+        after_scheme.find("]").map(|i| scheme_end + i + 1).unwrap_or(base.len())
+    } else {
+        after_scheme.find('/').map(|i| scheme_end + i).unwrap_or(base.len())
+    };
     let origin = &base[..host_end];
 
     if url.starts_with('/') {

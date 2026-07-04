@@ -261,8 +261,17 @@ fn parse_url(url: &str) -> UrlParts {
         rest
     };
 
-    // Hostname:port
-    if let Some(pos) = rest.find(':') {
+    // Hostname:port (handle IPv6 [::1])
+    if rest.starts_with('[') {
+        if let Some(bracket_end) = rest.find(']') {
+            parts.hostname = rest[..bracket_end + 1].to_string();
+            if bracket_end + 1 < rest.len() && rest.as_bytes()[bracket_end + 1] == b':' {
+                parts.port = rest[bracket_end + 2..].to_string();
+            }
+        } else {
+            parts.hostname = rest.to_string();
+        }
+    } else if let Some(pos) = rest.find(':') {
         parts.hostname = rest[..pos].to_string();
         parts.port = rest[pos+1..].to_string();
     } else {
@@ -499,6 +508,40 @@ impl JsBridge {
                 }
             }
         }
+    }
+
+    // ponytail: simple HTML serialization — skips void elements, no attr escaping for special chars
+    fn serialize_node(&self, id: u32) -> String {
+        let node = match self.nodes.get(id as usize) { Some(n) => n, None => return String::new() };
+        if node.is_text { return node.text.clone(); }
+        let mut html = String::new();
+        html.push('<');
+        html.push_str(&node.tag);
+        for (k, v) in &node.attrs {
+            html.push(' ');
+            html.push_str(k);
+            html.push_str("=\"");
+            html.push_str(v);
+            html.push('"');
+        }
+        html.push('>');
+        for &child in &node.children {
+            html.push_str(&self.serialize_node(child));
+        }
+        html.push_str("</");
+        html.push_str(&node.tag);
+        html.push('>');
+        html
+    }
+
+    pub fn get_inner_html(&self, node_id: u32) -> String {
+        let node = match self.nodes.get(node_id as usize) { Some(n) => n, None => return String::new() };
+        if node.is_text || node.is_document { return String::new(); }
+        let mut html = String::new();
+        for &child in &node.children {
+            html.push_str(&self.serialize_node(child));
+        }
+        html
     }
 
     pub fn set_text_content(&mut self, node_id: u32, text: &str) {
@@ -816,6 +859,7 @@ impl JsBridge {
     }
 
     pub fn set_interval(&mut self, source: String, delay_ms: u64) -> u32 {
+        let delay_ms = delay_ms.max(4); // ponytail: HTML spec says clamp to 4ms min
         let id = self.next_timer_id;
         self.next_timer_id += 1;
         let fire_at = std::time::Instant::now() + std::time::Duration::from_millis(delay_ms);
@@ -905,7 +949,12 @@ impl JsBridge {
             let value = cookie_str[eq_pos + 1..].trim().to_string();
             if !key.is_empty() {
                 if let Ok(mut guard) = cookie_store().write() {
-                    guard.entry(self.current_origin()).or_default().insert(key, value);
+                    let origin = self.current_origin();
+                    // ponytail: max 50 cookies per origin, max 500 total
+                    let total: usize = guard.values().map(|m| m.len()).sum();
+                    let origin_has_room = guard.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
+                    if !origin_has_room || total >= 500 { return; }
+                    guard.entry(origin).or_default().insert(key, value);
                 }
             }
         }
@@ -1017,7 +1066,8 @@ impl JsBridge {
 
     // ── Fetch (blocking, called from JS) ────────────────────────────
 
-    pub fn fetch_url(&self, url: &str) -> String {
+    // ponytail: returns body prefixed with __STATUS_NNN__ for JS parsing
+    fn fetch_url_inner(&self, url: &str, use_xhr: bool) -> String {
         let resolved = crate::engine::net::resolve_url(url, &self.current_url);
         let current = parse_url(&self.current_url);
         let target = parse_url(&resolved);
@@ -1027,29 +1077,30 @@ impl JsBridge {
         {
             let err = format!("Cross-origin fetch blocked: '{}' ≠ origin '{}'", resolved, self.current_url);
             plog!("csp", "{}", err);
-            return err;
+            return format!("__STATUS_0__{}", err);
         }
         plog!("net", "Fetching: {}", resolved);
-        match crate::engine::net::fetch(&resolved) {
-            Ok(s) => s,
-            Err(e) => format!("Error: {}", e),
+        if use_xhr {
+            let body = crate::engine::net::fetch_xhr(&resolved);
+            if body.starts_with("Error: ") {
+                return format!("__STATUS_0__{}", body);
+            }
+            format!("__STATUS_200__{}", body)
+        } else {
+            match crate::engine::net::fetch(&resolved) {
+                Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
+                Err(e) => format!("__STATUS_0__Error: {}", e),
+            }
         }
+    }
+
+    pub fn fetch_url(&self, url: &str) -> String {
+        self.fetch_url_inner(url, false)
     }
 
     // ponytail: sync XHR — blocks JS thread, keep timeout short (3s)
     pub fn fetch_url_xhr(&self, url: &str) -> String {
-        let resolved = crate::engine::net::resolve_url(url, &self.current_url);
-        let current = parse_url(&self.current_url);
-        let target = parse_url(&resolved);
-        if current.protocol != target.protocol
-            || current.hostname.to_lowercase() != target.hostname.to_lowercase()
-            || current.port != target.port
-        {
-            let err = format!("Cross-origin fetch blocked: '{}' ≠ origin '{}'", resolved, self.current_url);
-            plog!("csp", "{}", err);
-            return err;
-        }
-        crate::engine::net::fetch_xhr(&resolved)
+        self.fetch_url_inner(url, true)
     }
 
     // ── Get elements at a point (for click dispatch) ────────────────
@@ -1153,7 +1204,7 @@ const SHIM_JS: &str = r#"
                 __dom_setTextContent(id, String(val));
             },
             get innerHTML() {
-                return __dom_getTextContent(id);
+                return __dom_getInnerHTML(id);
             },
             set innerHTML(val) {
                 __dom_setInnerHTML(id, String(val));
@@ -1407,22 +1458,17 @@ const SHIM_JS: &str = r#"
     // ── window.fetch ────────────────────────────────────────────────
 
     window.fetch = function(url) {
-        var text = __fetch(String(url));
-        var ok = true;
-        var status = 200;
-        var statusText = "OK";
-        if (typeof text === "string" && text.indexOf("Error: ") === 0) {
-            ok = false;
-            status = 0;
-            statusText = text;
-        }
+        var raw = __fetch(String(url));
+        var m = raw.match(/^__STATUS_(\d+)__/);
+        var status = m ? parseInt(m[1], 10) : 0;
+        var body = m ? raw.slice(m[0].length) : raw;
         return {
-            ok: ok,
+            ok: status >= 200 && status < 300,
             status: status,
-            statusText: statusText,
+            statusText: status >= 200 && status < 300 ? "OK" : body,
             url: url,
-            text: function() { return Promise.resolve(text); },
-            json: function() { return Promise.resolve(JSON.parse(text)); }
+            text: function() { return Promise.resolve(body); },
+            json: function() { return Promise.resolve(JSON.parse(body)); }
         };
     };
 
@@ -1503,9 +1549,11 @@ const SHIM_JS: &str = r#"
     // ponytail: sync XHR — blocks JS thread, 3s timeout via __fetchXhr
     window.XMLHttpRequest.prototype.send = function() {
         this.readyState = 2;
-        this.responseText = __fetchXhr(this._url);
-        this.status = 200;
-        this.statusText = "OK";
+        var raw = __fetchXhr(this._url);
+        var m = raw.match(/^__STATUS_(\d+)__/);
+        this.status = m ? parseInt(m[1], 10) : 0;
+        this.responseText = m ? raw.slice(m[0].length) : raw;
+        this.statusText = this.status >= 200 && this.status < 300 ? "OK" : this.responseText;
         this.readyState = 4;
         if (typeof this.onreadystatechange === "function") {
             this.onreadystatechange();
@@ -1679,6 +1727,15 @@ pub fn register_browser_api(
     })?;
     fn_set_text.set_name("__dom_setTextContent")?;
     globals.set("__dom_setTextContent", fn_set_text)?;
+
+    let b1 = Arc::clone(bridge);
+    let fn_get_html = Function::new(ctx.clone(), move |node_id: i32| -> String {
+        if let Ok(b) = b1.lock() {
+            b.get_inner_html(node_id as u32)
+        } else { String::new() }
+    })?;
+    fn_get_html.set_name("__dom_getInnerHTML")?;
+    globals.set("__dom_getInnerHTML", fn_get_html)?;
 
     let b1 = Arc::clone(bridge);
     let fn_set_html = Function::new(ctx.clone(), move |node_id: i32, html: String| {
