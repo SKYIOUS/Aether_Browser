@@ -99,7 +99,7 @@ fn is_html_block_tag(tag: &str) -> bool {
 }
 
 pub fn should_skip_tag(tag: &str) -> bool {
-    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "input" | "button" | "iframe" | "textarea" | "select" | "option" | "form" | "template")
+    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "template")
 }
 
 pub fn should_skip_content(tag: &str) -> bool {
@@ -120,12 +120,12 @@ fn get_all_text(node: &Node) -> String {
     }
 }
 
-fn compute_full_style(node: &Node, ss: &Stylesheet) -> FullStyle {
+fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
     let tag = match &node.node_type {
         NodeType::Element(e) => e.tag_name.to_lowercase(),
         _ => String::new(),
     };
-    let cs = crate::engine::style::compute_style(node, ss);
+    let cs = crate::engine::style::compute_style_vp(node, ss, vw, vh);
     let color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
     let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.clamp(6.0, 200.0)).unwrap_or(16.0);
     let font_weight = cs.font_weight.unwrap_or_else(|| "normal".to_string());
@@ -227,6 +227,8 @@ pub fn extract_elements(
     parent_style: Option<FullStyle>,
     parent_idx: Option<usize>,
     dom_path: Vec<usize>,
+    viewport_w: f32,
+    viewport_h: f32,
 ) {
     if depth > 50 || elements.len() >= 2000 { return; }
 
@@ -240,7 +242,7 @@ pub fn extract_elements(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let fs = compute_full_style(node, ss);
+                    let fs = compute_full_style(node, ss, viewport_w, viewport_h);
                     let mut el = make_element("text", txt.to_string(), &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -259,15 +261,15 @@ pub fn extract_elements(
                         let mut child_path = dom_path.clone();
                         child_path.push(visible_idx);
                         visible_idx += 1;
-                        extract_elements(child, elements, depth + 1, ss, parent_style.clone(), parent_idx, child_path);
+                        extract_elements(child, elements, depth + 1, ss, parent_style.clone(), parent_idx, child_path, viewport_w, viewport_h);
                     }
                 }
                 return;
             }
 
-            let fs = compute_full_style(node, ss);
+            let fs = compute_full_style(node, ss, viewport_w, viewport_h);
 
-            let uses_default_margins = matches!(tag.as_str(), "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img");
+            let uses_default_margins = matches!(tag.as_str(), "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select");
 
             let mut text_consumed = false;
 
@@ -323,6 +325,51 @@ pub fn extract_elements(
                     let alt = elem.attributes.get("alt").cloned().unwrap_or_default();
                     (alt, false, None, 0, "img", false, false)
                 }
+                "button" => {
+                    let text = get_all_text(node);
+                    if text.is_empty() {
+                        (String::new(), false, None, 0, "button", false, false)
+                    } else {
+                        text_consumed = true;
+                        (text, false, None, 0, "button", false, false)
+                    }
+                }
+                "input" => {
+                    let value = elem.attributes.get("value").cloned();
+                    let placeholder = elem.attributes.get("placeholder").cloned();
+                    let input_type = elem.attributes.get("type").cloned().unwrap_or_else(|| "text".to_string());
+                    let text = if input_type == "submit" || input_type == "button" || input_type == "reset" {
+                        value.unwrap_or_else(|| input_type.to_string())
+                    } else {
+                        value.or(placeholder).unwrap_or_default()
+                    };
+                    (text, false, None, 0, "input", false, false)
+                }
+                "textarea" => {
+                    let text = get_all_text(node);
+                    if text.is_empty() {
+                        let placeholder = elem.attributes.get("placeholder").cloned().unwrap_or_default();
+                        (placeholder, false, None, 0, "textarea", false, false)
+                    } else {
+                        text_consumed = true;
+                        (text, false, None, 0, "textarea", false, false)
+                    }
+                }
+                "select" => {
+                    (String::new(), false, None, 0, "select", false, true)
+                }
+                "option" => {
+                    let text = get_all_text(node);
+                    if text.is_empty() {
+                        (String::new(), false, None, 0, "", true, false)
+                    } else {
+                        text_consumed = true;
+                        (text, false, None, 1, "option", false, false)
+                    }
+                }
+                "iframe" => {
+                    (String::new(), false, None, 0, "iframe", false, false)
+                }
                 _ => {
                     if fs.display == "inline" && tag != "span" {
                         (String::new(), false, None, 0, "", true, true)
@@ -346,10 +393,17 @@ pub fn extract_elements(
                     if el.css_width.is_none() { el.css_width = Some(200.0); }
                     if el.css_height.is_none() { el.css_height = Some(150.0); }
                 }
+                if matches!(tag.as_str(), "input" | "button" | "textarea" | "select" | "iframe") {
+                    if el.css_width.is_none() { el.css_width = Some(200.0); }
+                    if el.css_height.is_none() { el.css_height = Some(32.0); }
+                    if tag == "textarea" { el.css_height = Some(64.0); }
+                    if tag == "iframe" { el.css_height = Some(150.0); }
+                }
                 if uses_default_margins {
                     let def_mt: f32 = match tag.as_str() {
                         "h1" => 24.0, "h2" => 20.0, "h3" | "h4" | "h5" | "h6" => 16.0,
-                        "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0, _ => 0.0,
+                        "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0,
+                        "form" => 12.0, "button" => 4.0, "input" => 4.0, "textarea" => 4.0, "select" => 4.0, _ => 0.0,
                     };
                     if el.margin_top == 0.0 { el.margin_top = def_mt; }
                 }
@@ -361,8 +415,8 @@ pub fn extract_elements(
             };
 
             let (new_parent, skip_fn): (Option<usize>, Box<dyn Fn(&Node) -> bool>) = match tag.as_str() {
-                "img" => (parent_idx, Box::new(|_| true)),
-                "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
+                "img" | "input" | "button" | "iframe" => (parent_idx, Box::new(|_| true)),
+                "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" | "option" => {
                     if text_consumed {
                         (parent_idx, Box::new(|_| true))
                     } else {
@@ -380,6 +434,7 @@ pub fn extract_elements(
                     let new_p = this_idx.or(parent_idx);
                     (new_p, Box::new(|c: &Node| matches!(c.node_type, NodeType::Text(_))))
                 }
+                "select" | "form" => (this_idx.or(parent_idx), Box::new(|_| false)),
                 _ => {
                     if skip_element {
                         (parent_idx, Box::new(|_| false))
@@ -398,8 +453,11 @@ pub fn extract_elements(
                 child_path.push(visible_idx);
                 visible_idx += 1;
                 if skip_fn(child) { continue; }
-                extract_elements(child, elements, depth + 1, ss, Some(fs.clone()), new_parent, child_path);
+                extract_elements(child, elements, depth + 1, ss, Some(fs.clone()), new_parent, child_path, viewport_w, viewport_h);
             }
         }
     }
 }
+
+
+

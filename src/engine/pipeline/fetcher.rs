@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex, RwLock, OnceLock};
 use std::collections::HashMap;
 
+use iced::Color;
 use iced::widget::image::Handle;
 
 use crate::engine::dom::{Node, NodeType};
@@ -117,6 +118,31 @@ where
         .map_err(|_| "blocking task panicked".to_string())
 }
 
+fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+    let pad = 24.0;
+    let red = Color::from_rgb(0.88, 0.18, 0.18); // ponytail: simple accent, no palette import
+    let bg = Color::from_rgb(0.13, 0.13, 0.13);
+    let fg = Color::from_rgb(0.95, 0.95, 0.95);
+    let muted = Color::from_rgb(0.65, 0.65, 0.65);
+    // ponytail: no Default derive, inline closure to keep it short
+    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: Color, size: f32, weight: &str, bg: Option<Color>| StyledElement {
+        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
+        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
+        align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+    };
+    vec![
+        se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),
+        se("h1", &format!("⚠  {}", reason), pad, 60.0, content_width - pad * 2.0, 36.0, red, 22.0, "bold", None),
+        se("p", &format!("Could not load: {}", url), pad, 110.0, content_width - pad * 2.0, 24.0, muted, 14.0, "normal", None),
+        se("p", "Check the URL and try again.", pad, 145.0, content_width - pad * 2.0, 20.0, fg, 14.0, "normal", None),
+    ]
+}
+
 pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     plog!("FETCH", "URL={}", url);
     let response = match run_blocking({
@@ -129,16 +155,15 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
         }
         Ok(Err(e)) => {
             plog!("FETCH", "Fetch error: {}", e);
-            return (url, vec![], None);
+            return (url.clone(), error_page(&url, &e.to_string(), content_width, viewport_h), None);
         }
         Err(e) => {
             plog!("FETCH", "Fetch task join error: {}", e);
-            return (url, vec![], None);
+            return (url.clone(), error_page(&url, &e, content_width, viewport_h), None);
         }
     };
-    let net::Response { body: html, headers, .. } = response;
-    let csp_blocks_scripts = net::csp_blocks_scripts(&headers);
-    let csp_blocks_styles = net::csp_blocks_styles(&headers);
+    let net::Response { body: html, headers, final_url: page_url, .. } = response;
+    let csp_policy = net::parse_csp_from_headers(&headers);
 
     let max_html = 1_000_000;
     let html = if html.len() > max_html {
@@ -156,14 +181,13 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     extract_styles(&dom_node, &mut styles);
     plog!("STYLE", "Found {} style blocks", styles.len());
 
+    let inline_styles_ok = net::csp_allows_inline_style(&csp_policy);
     let mut stylesheet = Stylesheet { rules: Vec::new() };
     let style_limit = styles.len().min(50);
     plog!("STYLE", "Processing up to {} style blocks", style_limit);
-    if csp_blocks_styles {
-        plog!("STYLE", "Skipping inline styles due to CSP");
-    }
     for (si, style_content) in styles.iter().take(style_limit).enumerate() {
-        if csp_blocks_styles {
+        if !inline_styles_ok {
+            plog!("CSP", "Blocked inline style block {} (no 'unsafe-inline')", si);
             break;
         }
         let max_css_len = 500_000;
@@ -182,10 +206,11 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     let link_limit = link_urls.len().min(50);
     plog!("CSS", "Found {} external CSS links, processing {}", link_urls.len(), link_limit);
     for link_url in link_urls.iter().take(link_limit) {
-        if csp_blocks_styles {
-            break;
-        }
         let resolved = net::resolve_url(link_url, &url);
+        if !net::csp_allows_style_url(&resolved, &page_url, &csp_policy) {
+            plog!("CSP", "Blocked external CSS: {}", resolved);
+            continue;
+        }
         if let Ok(cache) = css_cache().read() {
             if let Some(cached) = cache.get(&resolved) {
                 plog!("CSS", "Cache HIT: {}", resolved);
@@ -234,20 +259,23 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     plog!("JS", "Found {} script blocks", scripts.len());
     let bridge = Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)));
     let mut js_engine = JSEngine::new();
-    if csp_blocks_scripts {
-        plog!("JS", "Skipping script execution due to CSP");
-    }
+    let inline_scripts_ok = net::csp_allows_inline_script(&csp_policy);
     for (si, script) in scripts.iter().enumerate() {
-        if csp_blocks_scripts {
-            break;
-        }
         let code = match script {
             ScriptSource::Inline(s) => {
+                if !inline_scripts_ok {
+                    plog!("CSP", "Blocked inline script {} (no 'unsafe-inline')", si);
+                    continue;
+                }
                 plog!("JS", "Executing inline script {}", si);
                 s.clone()
             }
             ScriptSource::External(src) => {
                 let resolved = net::resolve_url(src, &url);
+                if !net::csp_allows_script_url(&resolved, &page_url, &csp_policy) {
+                    plog!("CSP", "Blocked external script: {}", resolved);
+                    continue;
+                }
                 plog!("JS", "Fetching external script from {}", resolved);
                 match run_blocking({
                     let resolved = resolved.clone();
@@ -280,15 +308,19 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     }
 
     let mut elements = Vec::new();
-    extract_elements(&dom_node, &mut elements, 0, &stylesheet, None, None, vec![]);
+    extract_elements(&dom_node, &mut elements, 0, &stylesheet, None, None, vec![], content_width, viewport_h);
     plog!("EXTRACT", "Extracted {} elements", elements.len());
     elements.truncate(2000);
 
     let mut img_count = 0;
     for el in elements.iter_mut() {
         if let Some(ref img_src) = el.image_url.clone() {
-            img_count += 1;
             let resolved = net::resolve_url(img_src, &url);
+            if !net::csp_allows_image_url(&resolved, &page_url, &csp_policy) {
+                plog!("CSP", "Blocked image: {}", resolved);
+                continue;
+            }
+            img_count += 1;
             let bytes = match run_blocking({
                 let resolved = resolved.clone();
                 move || net::fetch_bytes(&resolved)
@@ -340,3 +372,4 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     // ponytail: one engine per page-load script batch; dropped here, timer/event engine created on main thread in PageLoaded
     (url, elements, Some(bridge))
 }
+

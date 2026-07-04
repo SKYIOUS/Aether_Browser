@@ -745,7 +745,7 @@ mod tests {
         let style = crate::engine::stratus::resolve_style(&ed, &stylesheet);
         assert_eq!(style.display, crate::engine::stratus::Display::Block);
         assert!(style.color.is_some(), "color should be resolved");
-        let c = style.color.expect("color should be resolved");
+        let c = style.color.unwrap_or(crate::engine::stratus::Color { r: 0, g: 0, b: 0, a: 255 });
         assert_eq!(c.r, 255, "r={}", c.r);
     }
 

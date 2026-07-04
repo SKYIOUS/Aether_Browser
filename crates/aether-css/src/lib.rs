@@ -8,7 +8,7 @@ pub mod style_value;
 pub use matcher::{match_element, match_rules, ElementData, Specificity};
 pub use parser::{Declaration, parse, PropertyValue, Rule, Selector, SimpleSelector, Stylesheet};
 pub use property_names::CssPropertyName;
-pub use resolver::{resolve_style, resolve_styles_for_tree};
+pub use resolver::{resolve_style, resolve_style_vp, resolve_styles_for_tree};
 pub use style_value::{
     AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexOptions,
     FlexWrap, JustifyContent, LengthValue, Position, Transform, Transition, Unit,

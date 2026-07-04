@@ -398,6 +398,17 @@ fn parse_color_function(s: &str) -> Option<Color> {
             return Some(Color { r, g, b, a: 255 });
         }
     }
+    if s.starts_with("color-mix(") && s.ends_with(')') {
+        let inner = &s[10..s.len() - 1];
+        let parts: Vec<&str> = inner.split(',').collect();
+        if parts.len() >= 2 {
+            let raw = parts[1].trim();
+            let base = raw.split_whitespace().next().unwrap_or(raw);
+            if let Some(c) = parse_color_function(base) { return Some(c); }
+            if let Some(c) = Color::from_named(base) { return Some(c); }
+            if base.starts_with('#') { return Color::from_hex(base); }
+        }
+    }
     None
 }
 
@@ -588,5 +599,37 @@ mod tests {
     fn test_parse_empty_input() {
         let stylesheet = parse("");
         assert!(stylesheet.rules.is_empty());
+    }
+
+    #[test]
+    fn test_parse_hsl_color() {
+        let css = "div { color: hsl(0, 100%, 50%); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 0 && c.b == 0 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_hsla_color() {
+        let css = "div { color: hsla(120, 100%, 50%, 0.5); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 0 && c.g == 255 && c.b == 0 && c.a == 128));
+    }
+
+    #[test]
+    fn test_parse_color_mix_stub() {
+        let css = "div { color: color-mix(in srgb, red, blue); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 0 && c.b == 0 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_color_mix_with_hex() {
+        let css = "div { color: color-mix(in srgb, #ff0, #00f); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 255 && c.b == 0));
     }
 }

@@ -31,8 +31,13 @@ pub struct Color {
 
 impl Color {
     pub const TRANSPARENT: Color = Color { r: 0, g: 0, b: 0, a: 0 };
+    pub const CURRENT_COLOR: Color = Color { r: 0, g: 0, b: 1, a: 0 };
     pub const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
     pub const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
+
+    pub fn is_current(&self) -> bool {
+        self.r == 0 && self.g == 0 && self.b == 1 && self.a == 0
+    }
 
     pub fn from_hex(hex: &str) -> Option<Color> {
         let hex = hex.trim_start_matches('#');
@@ -91,6 +96,7 @@ impl Color {
             "cornflowerblue" => Some(Color { r: 100, g: 149, b: 237, a: 255 }),
             "cornsilk" => Some(Color { r: 255, g: 248, b: 220, a: 255 }),
             "crimson" => Some(Color { r: 220, g: 20, b: 60, a: 255 }),
+            "currentcolor" => Some(Color::CURRENT_COLOR),
             "cyan" => Some(Color { r: 0, g: 255, b: 255, a: 255 }),
             "darkblue" => Some(Color { r: 0, g: 0, b: 139, a: 255 }),
             "darkcyan" => Some(Color { r: 0, g: 139, b: 139, a: 255 }),
@@ -233,11 +239,15 @@ pub enum Unit {
     Percent,
     Vw,
     Vh,
+    Vmin,
+    Vmax,
     Pt,
+    Pc,
     Cm,
     Mm,
     In,
     Ch,
+    Ex,
 }
 
 impl Unit {
@@ -246,8 +256,10 @@ impl Unit {
         let s = s.trim();
         for (suffix, unit) in [("px", Unit::Px), ("em", Unit::Em), ("rem", Unit::Rem),
             ("%", Unit::Percent), ("vw", Unit::Vw), ("vh", Unit::Vh),
-            ("pt", Unit::Pt), ("cm", Unit::Cm), ("mm", Unit::Mm),
-            ("in", Unit::In), ("ch", Unit::Ch)] {
+            ("vmin", Unit::Vmin), ("vmax", Unit::Vmax),
+            ("pt", Unit::Pt), ("pc", Unit::Pc),
+            ("cm", Unit::Cm), ("mm", Unit::Mm),
+            ("in", Unit::In), ("ch", Unit::Ch), ("ex", Unit::Ex)] {
             if s.ends_with(suffix) {
                 let value = s.trim_end_matches(suffix).parse::<f32>().ok()?;
                 return Some((value, unit));
@@ -535,6 +547,13 @@ mod tests {
     }
 
     #[test]
+    fn test_color_current_color() {
+        let c = Color::from_named("currentcolor").unwrap();
+        assert!(c.is_current());
+        assert_eq!(c, Color::CURRENT_COLOR);
+    }
+
+    #[test]
     fn test_unit_parsing() {
         assert_eq!(Unit::from_str("10px"), Some((10.0, Unit::Px)));
         assert_eq!(Unit::from_str("1.5em"), Some((1.5, Unit::Em)));
@@ -556,3 +575,5 @@ mod tests {
         assert_eq!(style.font_size, Some(16.0));
     }
 }
+
+

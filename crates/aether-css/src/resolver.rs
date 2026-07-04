@@ -38,7 +38,11 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
         let vh = viewport_h;
         if let Ok(prop) = CssPropertyName::from_str(&decl.name) {
             match prop {
-                CssPropertyName::Color => style.color = parse_color(&decl.value),
+                CssPropertyName::Color => {
+                    if let Some(v) = parse_color(&decl.value) {
+                        if !v.is_current() { style.color = Some(v); }
+                    }
+                }
                 CssPropertyName::Background => style.background_color = parse_background(&decl.value),
                 CssPropertyName::BackgroundColor => style.background_color = parse_color(&decl.value),
                 CssPropertyName::FontSize => style.font_size = parse_length_vp(&decl.value, vw, vh),
@@ -102,11 +106,24 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
             }
         }
     }
+
+    let base = style.color.clone().unwrap_or(Color::BLACK);
+    for bc in [&mut style.border_top_color, &mut style.border_right_color,
+               &mut style.border_bottom_color, &mut style.border_left_color] {
+        if let Some(c) = bc {
+            if c.is_current() { *bc = Some(base.clone()); }
+        }
+    }
+    if let Some(c) = &mut style.background_color {
+        if c.is_current() { *c = base; }
+    }
 }
 
 fn parse_color(value: &PropertyValue) -> Option<Color> {
     match value {
-        PropertyValue::Color(c) => Some(c.clone()),
+        PropertyValue::Color(c) => {
+            if c.is_current() { Some(Color::CURRENT_COLOR) } else { Some(c.clone()) }
+        },
         PropertyValue::Keyword(s) => Color::from_named(s),
         _ => None,
     }
@@ -121,13 +138,27 @@ fn parse_background(value: &PropertyValue) -> Option<Color> {
 // parse_length is retained for backward compat (uses default 800×600 viewport).
 
 fn lv_to_px(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
+    lv_to_px_font(lv, vw, vh, 16.0)
+}
+
+fn lv_to_px_font(lv: &LengthValue, vw: f32, vh: f32, font_size: f32) -> f32 {
+    let vw_val = lv.value * vw / 100.0;
+    let vh_val = lv.value * vh / 100.0;
     match lv.unit {
         Unit::Px => lv.value,
-        Unit::Vw => lv.value * vw / 100.0,
-        Unit::Vh => lv.value * vh / 100.0,
+        Unit::Vw => vw_val,
+        Unit::Vh => vh_val,
+        Unit::Vmin => vw_val.min(vh_val),
+        Unit::Vmax => vw_val.max(vh_val),
         Unit::Percent => lv.value * vw / 100.0,
-        Unit::Em | Unit::Rem => lv.value * 16.0,
-        _ => lv.value,
+        Unit::Em | Unit::Rem => lv.value * font_size,
+        Unit::In => lv.value * 96.0,
+        Unit::Cm => lv.value * 96.0 / 2.54,
+        Unit::Mm => lv.value * 96.0 / 25.4,
+        Unit::Pt => lv.value * 96.0 / 72.0,
+        Unit::Pc => lv.value * 96.0 / 6.0,
+        Unit::Ch => lv.value * 8.0,
+        Unit::Ex => lv.value * 7.0,
     }
 }
 
@@ -151,14 +182,13 @@ fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
 
 fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
     match value {
-        PropertyValue::Length(lv) => Some(match lv.unit {
-            Unit::Px => lv.value,
-            Unit::Vw => lv.value * vw / 100.0,
-            Unit::Vh => lv.value * vh / 100.0,
-            Unit::Percent => lv.value * vh / 100.0,
-            Unit::Em | Unit::Rem => lv.value * 16.0,
-            _ => lv.value,
-        }),
+        PropertyValue::Length(lv) => {
+            let mut p = lv_to_px(lv, vw, vh);
+            if lv.unit == Unit::Percent {
+                p = lv.value * vh / 100.0;
+            }
+            Some(p)
+        }
         PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
@@ -451,5 +481,41 @@ mod tests {
 
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+    }
+
+    #[test]
+    fn test_resolve_current_color() {
+        let css = "div { color: currentColor; }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color::BLACK));
+    }
+
+    #[test]
+    fn test_resolve_hsl_color() {
+        let css = "div { color: hsl(0, 100%, 50%); }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    }
+
+    #[test]
+    fn test_resolve_color_mix_stub() {
+        let css = "div { color: color-mix(in srgb, red, blue); }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    }
+
+    #[test]
+    fn test_resolve_border_current_color() {
+        let css = "div { color: red; border-color: currentColor; }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
     }
 }

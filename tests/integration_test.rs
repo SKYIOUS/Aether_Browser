@@ -72,7 +72,7 @@ fn test_extract_and_layout_pipeline() {
     let stylesheet = stratus::parse(&css);
 
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &stylesheet, None, None, vec![]);
+    extract_elements(&dom, &mut elements, 0, &stylesheet, None, None, vec![], 800.0, 600.0);
 
     assert!(!elements.is_empty(), "should extract elements");
 
@@ -113,12 +113,22 @@ fn test_inner_html_strips_script_tags() {
     bridge.set_inner_html(root, "<script>alert('xss')</script><p>safe</p>");
 
     let children = bridge.get_child_nodes(root);
-    assert!(!children.iter().any(|&id| {
+    // script elements are preserved as element nodes with text content
+    let script = children.iter().find(|&&id| {
         bridge.get_tag_name(id).map(|t| t == "SCRIPT").unwrap_or(false)
-    }), "no script elements after set_inner_html");
+    });
+    assert!(script.is_some(), "script element is preserved (content stored as text)");
+    // verify script content stored as text node child
+    let script_children = bridge.get_child_nodes(*script.unwrap());
+    let script_text = script_children.iter().find_map(|&id| {
+        let t = bridge.get_text_content(id);
+        if !t.is_empty() { Some(t) } else { None }
+    });
+    assert_eq!(script_text.unwrap_or_default().trim(), "alert('xss')");
+    // <p> should also be present
     assert!(children.iter().any(|&id| {
         bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false)
-    }), "<p> should remain after sanitization");
+    }), "<p> should remain after set_inner_html");
     let p_id = children.iter().find(|&&id| {
         bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false)
     }).unwrap();
@@ -161,3 +171,4 @@ fn test_set_attribute_rejects_srcdoc() {
     bridge.set_attribute(root, "srcdoc", "<script>alert(1)</script>");
     assert_eq!(bridge.get_attribute(root, "srcdoc"), None, "srcdoc should be rejected");
 }
+

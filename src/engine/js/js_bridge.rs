@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::time::{Duration, Instant};
 
 use crate::plog;
 use crate::engine::dom::{ElementData, Node, NodeType};
@@ -205,10 +206,68 @@ struct UrlParts {
     hash: String,
 }
 
+#[derive(Debug, Clone)]
+struct CookieEntry {
+    value: String,
+    expires: Option<Instant>,
+}
+
+type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>>;
 type OriginStore = HashMap<String, HashMap<String, String>>;
 
-fn cookie_store() -> &'static RwLock<OriginStore> {
-    static COOKIE_STORE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
+fn is_expired(entry: &CookieEntry) -> bool {
+    entry.expires.map_or(false, |exp| Instant::now() >= exp)
+}
+
+fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
+    // ponytail: only Max-Age and RFC 1123 Expires; no obs-date variants
+    for part in cookie_str.split(';') {
+        let part = part.trim();
+        if let Some(val) = part.strip_prefix("Max-Age=").or_else(|| part.strip_prefix("max-age=")).or_else(|| part.strip_prefix("MAX-AGE=")) {
+            if let Ok(secs) = val.trim().parse::<u64>() {
+                return Some(Instant::now() + Duration::from_secs(secs));
+            }
+        }
+        if let Some(val) = part.strip_prefix("Expires=").or_else(|| part.strip_prefix("expires=")) {
+            if let Some(instant) = parse_rfc1123_date(val.trim()) {
+                return Some(instant);
+            }
+        }
+    }
+    None
+}
+
+// ponytail: only RFC 1123/850 "Thu, 01 Jan 1970 00:00:00 GMT", not obs-date
+fn parse_rfc1123_date(s: &str) -> Option<Instant> {
+    let s = s.strip_suffix(" GMT")?;
+    let (_wkday, rest) = s.split_once(", ")?;
+    let parts: Vec<&str> = rest.split_whitespace().collect();
+    if parts.len() != 4 { return None; }
+    let day: u32 = parts[0].parse().ok()?;
+    let month_idx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        .iter().position(|m| m.eq_ignore_ascii_case(parts[1]))? as u32;
+    let year: i64 = parts[2].parse().ok()?;
+    let time: Vec<&str> = parts[3].split(':').collect();
+    if time.len() != 3 { return None; }
+    let hour: u32 = time[0].parse().ok()?;
+    let min: u32 = time[1].parse().ok()?;
+    let sec: u32 = time[2].parse().ok()?;
+    // ponytail: naive date→duration, ignores leap seconds and pre-1970 dates
+    let days = (year - 1970) * 365 + (year - 1969) / 4
+        + [0,31,59,90,120,151,181,212,243,273,304,334][month_idx as usize] as i64
+        + if month_idx > 1 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 }
+        + day as i64 - 1;
+    Some(Instant::now() + Duration::from_secs((days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64).max(0) as u64))
+}
+
+fn sweep_expired_cookies(store: &mut CookieOriginStore) {
+    for cookies in store.values_mut() {
+        cookies.retain(|_, v| !is_expired(v));
+    }
+}
+
+fn cookie_store() -> &'static RwLock<CookieOriginStore> {
+    static COOKIE_STORE: OnceLock<RwLock<CookieOriginStore>> = OnceLock::new();
     COOKIE_STORE.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
@@ -654,7 +713,7 @@ impl JsBridge {
                 let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
                     let tag_name = html[pos+1..pos+tag_end].to_lowercase();
-                    if tag_name == "script" || tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
+                    if tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].to_lowercase().find(&closing.to_lowercase()) {
                             pos += closing_pos + closing.len();
@@ -684,26 +743,48 @@ impl JsBridge {
 
                     pos += attr_end + 1;
 
-                    if !self_closing && tag_name != "style" && tag_name != "script" {
+                    if !self_closing {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].find(&closing) {
                             let inner = &html[pos..pos + closing_pos];
-                            let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
-                            for child_id in inner_children {
-                                if let Some(child) = self.nodes.get_mut(child_id as usize) {
-                                    child.parent = Some(el_id);
+                            if tag_name == "style" || tag_name == "script" {
+                                if !inner.is_empty() {
+                                    let text_id = self.nodes.len() as u32;
+                                    self.nodes.push(FlatNode::text(inner));
+                                    self.nodes[el_id as usize].children.push(text_id);
+                                    if let Some(child) = self.nodes.get_mut(text_id as usize) {
+                                        child.parent = Some(el_id);
+                                    }
                                 }
-                                self.nodes[el_id as usize].children.push(child_id);
+                            } else {
+                                let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
+                                for child_id in inner_children {
+                                    if let Some(child) = self.nodes.get_mut(child_id as usize) {
+                                        child.parent = Some(el_id);
+                                    }
+                                    self.nodes[el_id as usize].children.push(child_id);
+                                }
                             }
                             pos += closing_pos + closing.len();
                         } else {
                             let inner = &html[pos..];
-                            let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
-                            for child_id in inner_children {
-                                if let Some(child) = self.nodes.get_mut(child_id as usize) {
-                                    child.parent = Some(el_id);
+                            if tag_name == "style" || tag_name == "script" {
+                                if !inner.is_empty() {
+                                    let text_id = self.nodes.len() as u32;
+                                    self.nodes.push(FlatNode::text(inner));
+                                    self.nodes[el_id as usize].children.push(text_id);
+                                    if let Some(child) = self.nodes.get_mut(text_id as usize) {
+                                        child.parent = Some(el_id);
+                                    }
                                 }
-                                self.nodes[el_id as usize].children.push(child_id);
+                            } else {
+                                let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
+                                for child_id in inner_children {
+                                    if let Some(child) = self.nodes.get_mut(child_id as usize) {
+                                        child.parent = Some(el_id);
+                                    }
+                                    self.nodes[el_id as usize].children.push(child_id);
+                                }
                             }
                             pos = byte_len;
                         }
@@ -936,9 +1017,13 @@ impl JsBridge {
     pub fn get_cookie(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
         let origin = self.current_origin();
-        let guard = cookie_store().read().ok();
-        for (key, value) in guard.as_ref().and_then(|g| g.get(&origin)).into_iter().flat_map(|m| m.iter()) {
-            parts.push(format!("{}={}", key, value));
+        if let Ok(mut guard) = cookie_store().write() {
+            sweep_expired_cookies(&mut guard);
+            if let Some(cookies) = guard.get(&origin) {
+                for (key, entry) in cookies.iter() {
+                    parts.push(format!("{}={}", key, entry.value));
+                }
+            }
         }
         parts.join("; ")
     }
@@ -946,15 +1031,25 @@ impl JsBridge {
     pub fn set_cookie(&mut self, cookie_str: &str) {
         if let Some(eq_pos) = cookie_str.find('=') {
             let key = cookie_str[..eq_pos].trim().to_string();
-            let value = cookie_str[eq_pos + 1..].trim().to_string();
+            // ponytail: value stops at ';' — anything after are attributes
+            let value_end = cookie_str[eq_pos + 1..].find(';').map(|p| eq_pos + 1 + p).unwrap_or(cookie_str.len());
+            let value = cookie_str[eq_pos + 1..value_end].trim().to_string();
             if !key.is_empty() {
+                let expires = parse_cookie_expiry(cookie_str);
+                // Max-Age=0 or past Expires → delete
+                if expires.as_ref().is_some_and(|e| *e <= Instant::now()) {
+                    if let Ok(mut guard) = cookie_store().write() {
+                        guard.entry(self.current_origin()).or_default().remove(&key);
+                    }
+                    return;
+                }
                 if let Ok(mut guard) = cookie_store().write() {
+                    sweep_expired_cookies(&mut guard);
                     let origin = self.current_origin();
-                    // ponytail: max 50 cookies per origin, max 500 total
                     let total: usize = guard.values().map(|m| m.len()).sum();
                     let origin_has_room = guard.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
                     if !origin_has_room || total >= 500 { return; }
-                    guard.entry(origin).or_default().insert(key, value);
+                    guard.entry(origin).or_default().insert(key, CookieEntry { value, expires });
                 }
             }
         }
