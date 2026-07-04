@@ -28,8 +28,7 @@ aether-caelum = { path = "crates/aether-caelum" }
 serde_json = "1.0"
 
 [profile.dev]
-# ponytail: overflow-checks disabled for perf — every `as usize`/`as u32` can silently corrupt
-overflow-checks = false
+overflow-checks = true
 
 [features]
 default = ["content_size"]

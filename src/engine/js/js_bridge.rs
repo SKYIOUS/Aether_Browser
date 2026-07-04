@@ -83,18 +83,18 @@ fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
             *pos += 1;
             let start = *pos;
             while *pos < chars.len() && chars[*pos] != '.' && chars[*pos] != '#' && chars[*pos] != '[' && !chars[*pos].is_whitespace() && chars[*pos] != '>' { *pos += 1; }
-            if *pos > start { Some(SimpleSel::Class(s[start..*pos].to_string())) } else { None }
+            if *pos > start { Some(SimpleSel::Class(chars[start..*pos].iter().collect())) } else { None }
         }
         '#' => {
             *pos += 1;
             let start = *pos;
             while *pos < chars.len() && chars[*pos] != '.' && chars[*pos] != '#' && chars[*pos] != '[' && !chars[*pos].is_whitespace() && chars[*pos] != '>' { *pos += 1; }
-            if *pos > start { Some(SimpleSel::Id(s[start..*pos].to_string())) } else { None }
+            if *pos > start { Some(SimpleSel::Id(chars[start..*pos].iter().collect())) } else { None }
         }
         c if c.is_alphanumeric() || c == '-' => {
             let start = *pos;
             while *pos < chars.len() && (chars[*pos].is_alphanumeric() || chars[*pos] == '-') { *pos += 1; }
-            Some(SimpleSel::Tag(s[start..*pos].to_string()))
+            Some(SimpleSel::Tag(chars[start..*pos].iter().collect()))
         }
         _ => None,
     }
@@ -584,10 +584,11 @@ impl JsBridge {
         if html.is_empty() { return result; }
 
         let mut pos = 0;
-        let chars: Vec<char> = html.chars().collect();
-        while pos < chars.len() {
-            if chars[pos] == '<' {
-                if pos + 1 < chars.len() && chars[pos + 1] == '/' {
+        let bytes = html.as_bytes();
+        let byte_len = html.len();
+        while pos < byte_len {
+            if bytes[pos] == b'<' {
+                if pos + 1 < byte_len && bytes[pos + 1] == b'/' {
                     let end = html[pos..].find('>');
                     if let Some(end) = end {
                         pos += end + 1;
@@ -595,7 +596,7 @@ impl JsBridge {
                     }
                     break;
                 }
-                if pos + 1 < chars.len() && chars[pos + 1] == '!' {
+                if pos + 1 < byte_len && bytes[pos + 1] == b'!' {
                     if html[pos..].starts_with("<!--") {
                         let end = html[pos..].find("-->");
                         if let Some(end) = end {
@@ -614,7 +615,7 @@ impl JsBridge {
                         let closing = format!("</{}>", tag_name);
                         if let Some(closing_pos) = html[pos..].to_lowercase().find(&closing.to_lowercase()) {
                             pos += closing_pos + closing.len();
-                        } else { pos = chars.len(); }
+                        } else { pos = byte_len; }
                         continue;
                     }
                     let is_self_closing = ["br", "hr", "img", "input", "meta", "link"];
@@ -622,12 +623,12 @@ impl JsBridge {
 
                     let mut attr_end = tag_end;
                     loop {
-                        if pos + attr_end >= chars.len() || chars[pos + attr_end] == '>' {
+                        if pos + attr_end >= byte_len || bytes[pos + attr_end] == b'>' {
                             break;
                         }
                         attr_end += 1;
                     }
-                    if pos + attr_end >= chars.len() { break; }
+                    if pos + attr_end >= byte_len { break; }
 
                     let attrs_part = &html[pos+tag_end..pos+attr_end];
                     let mut attrs = self.parse_attributes(attrs_part);
@@ -661,14 +662,14 @@ impl JsBridge {
                                 }
                                 self.nodes[el_id as usize].children.push(child_id);
                             }
-                            pos = chars.len();
+                            pos = byte_len;
                         }
                     }
                 } else {
                     pos += 1;
                 }
             } else {
-                let text_end = html[pos..].find('<').unwrap_or(html.len() - pos);
+                let text_end = html[pos..].find('<').unwrap_or(byte_len - pos);
                 let text = &html[pos..pos + text_end];
                 if !text.trim().is_empty() || text_end > 0 {
                     let text_id = self.nodes.len() as u32;
@@ -1033,6 +1034,22 @@ impl JsBridge {
             Ok(s) => s,
             Err(e) => format!("Error: {}", e),
         }
+    }
+
+    // ponytail: sync XHR — blocks JS thread, keep timeout short (3s)
+    pub fn fetch_url_xhr(&self, url: &str) -> String {
+        let resolved = crate::engine::net::resolve_url(url, &self.current_url);
+        let current = parse_url(&self.current_url);
+        let target = parse_url(&resolved);
+        if current.protocol != target.protocol
+            || current.hostname.to_lowercase() != target.hostname.to_lowercase()
+            || current.port != target.port
+        {
+            let err = format!("Cross-origin fetch blocked: '{}' ≠ origin '{}'", resolved, self.current_url);
+            plog!("csp", "{}", err);
+            return err;
+        }
+        crate::engine::net::fetch_xhr(&resolved)
     }
 
     // ── Get elements at a point (for click dispatch) ────────────────
@@ -1483,10 +1500,10 @@ const SHIM_JS: &str = r#"
         this.readyState = 1;
     };
 
-    // ponytail: sync XHR, replace with async when Iced supports background tasks on JS thread
+    // ponytail: sync XHR — blocks JS thread, 3s timeout via __fetchXhr
     window.XMLHttpRequest.prototype.send = function() {
         this.readyState = 2;
-        this.responseText = __fetch(this._url);
+        this.responseText = __fetchXhr(this._url);
         this.status = 200;
         this.statusText = "OK";
         this.readyState = 4;
@@ -1944,6 +1961,16 @@ pub fn register_browser_api(
     })?;
     fn_fetch.set_name("__fetch")?;
     globals.set("__fetch", fn_fetch)?;
+
+    // ── XHR fetch (shorter timeout) ─────────────────────────────────
+    let bx = Arc::clone(bridge);
+    let fn_fetch_xhr = Function::new(ctx.clone(), move |url: String| -> String {
+        if let Ok(b) = bx.lock() {
+            b.fetch_url_xhr(&url)
+        } else { String::new() }
+    })?;
+    fn_fetch_xhr.set_name("__fetchXhr")?;
+    globals.set("__fetchXhr", fn_fetch_xhr)?;
 
     // ── Cookie functions ───────────────────────────────────────────
     let b1 = Arc::clone(bridge);

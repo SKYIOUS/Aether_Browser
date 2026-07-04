@@ -167,6 +167,28 @@ pub fn fetch(url: &str) -> Result<String, FetchError> {
     }
 }
 
+// ponytail: sync XHR — blocks JS thread, keep timeout short
+pub fn fetch_xhr(url: &str) -> String {
+    if let Some(body) = mock::resolve_html(url) {
+        return body;
+    }
+    if let Some(body) = mock::resolve_css(url) {
+        return body;
+    }
+    let cl = match reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return format!("Error: {}", e),
+    };
+    let final_url = normalize_url(url);
+    match cl.get(&final_url).send() {
+        Ok(r) => r.text().unwrap_or_default(),
+        Err(e) => format!("Error: {}", e),
+    }
+}
+
 /// Fetches content with automatic redirect handling.
 pub fn fetch_with_redirects(url: &str, max_redirects: usize) -> Result<Response, FetchError> {
     fetch_inner(url, max_redirects)
