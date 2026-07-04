@@ -2271,7 +2271,9 @@ pub fn register_browser_api(
     globals.set("_historyGo", fn_history_go)?;
 
     // ── Inject JS shim ──────────────────────────────────────────────
-    let _ = ctx.eval::<(), _>(SHIM_JS);
+    if let Err(e) = ctx.eval::<(), _>(SHIM_JS) {
+        eprintln!("[JS] SHIM_JS eval failed: {:?}", e);
+    }
 
 
     // ponytail: __vault_savePassword removed — would need encrypted storage, add when login forms are supported

@@ -137,14 +137,18 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             None => root_node,
         };
 
-        let _ = tree.add_child(parent_nid, child_id);
+        if let Err(e) = tree.add_child(parent_nid, child_id) {
+            plog!("CAELUM", "add_child failed: {:?}", e);
+        }
     }
 
     if elements.len() > 1 {
-        let _ = tree.compute_layout(root_node, Size {
+        if let Err(e) = tree.compute_layout(root_node, Size {
             width: AvailableSpace::Definite(container_width),
             height: AvailableSpace::Definite(viewport_h),
-        });
+        }) {
+            plog!("CAELUM", "compute_layout failed: {:?}", e);
+        }
         plog!("CAELUM", "Tree layout computed ({} nodes, viewport_h={})", node_ids.len(), viewport_h);
     }
 

@@ -690,7 +690,7 @@ impl<NodeContext> CaelumTree<NodeContext> {
         for &child in children {
             // Remove child from previous parent
             if let Some(previous_parent) = self.parents[child.into()] {
-                self.remove_child(previous_parent, child).unwrap();
+                self.remove_child(previous_parent, child)?;
             }
             self.parents[child.into()] = Some(parent);
         }
@@ -708,7 +708,7 @@ impl<NodeContext> CaelumTree<NodeContext> {
     ///
     /// The child is not removed from the tree entirely, it is simply no longer attached to its previous parent.
     pub fn remove_child(&mut self, parent: NodeId, child: NodeId) -> CaelumResult<NodeId> {
-        let index = self.children[parent.into()].iter().position(|n| *n == child).unwrap();
+        let index = self.children[parent.into()].iter().position(|n| *n == child).ok_or(CaelumError::InvalidChildNode(child))?;
         self.remove_child_at_index(parent, index)
     }
 

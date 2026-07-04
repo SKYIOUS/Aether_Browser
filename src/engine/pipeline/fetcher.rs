@@ -293,7 +293,9 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                 }
             }
         };
-        let _ = js_engine.execute_with_bridge(&code, &bridge);
+        if let Err(e) = js_engine.execute_with_bridge(&code, &bridge) {
+            plog!("JS", "Script execution failed: {}", e);
+        }
     }
     let (modified_dom, js_output) = {
         let mut guard = bridge.lock().unwrap_or_else(|e| e.into_inner());

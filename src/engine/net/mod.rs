@@ -115,7 +115,9 @@ fn save_cookies() {
     if let Ok(jar) = cookie_jar().read() {
         if let Some(path) = cookie_file() {
             if let Ok(json) = serde_json::to_string(&*jar) {
-                let _ = std::fs::write(path, json);
+                if let Err(e) = std::fs::write(&path, json) {
+                    plog!("COOKIE", "save_cookies write failed: {}", e);
+                }
             }
         }
     }

@@ -412,7 +412,9 @@ Component SidebarWS {
                     if !ready.is_empty() {
                         if let Some(ref mut js) = self.js_engine {
                             for (_timer_id, source) in ready {
-                                let _ = js.execute_source(&source, bridge);
+                                if let Err(e) = js.execute_source(&source, bridge) {
+                                    eprintln!("[JS] Timer callback failed: {}", e);
+                                }
                             }
                         }
                     }
@@ -470,7 +472,9 @@ Component SidebarWS {
                     if !listeners.is_empty() {
                         if let Some(ref mut js) = self.js_engine {
                             for (source, _node_id) in listeners {
-                                let _ = js.execute_source(&source, bridge);
+                                if let Err(e) = js.execute_source(&source, bridge) {
+                                    eprintln!("[JS] Event handler failed: {}", e);
+                                }
                             }
                         }
                     }
