@@ -121,6 +121,8 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> V
         align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
         x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),

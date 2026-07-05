@@ -52,6 +52,15 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         text_decoration: String::new(),
         text_transform: String::new(),
         border_radius: [0.0; 4],
+        input_type: String::new(),
+        input_value: String::new(),
+        input_placeholder: String::new(),
+        checked: false,
+        position: "static".to_string(),
+        inset_top: 0.0,
+        inset_right: 0.0,
+        inset_bottom: 0.0,
+        inset_left: 0.0,
     }
 }
 
