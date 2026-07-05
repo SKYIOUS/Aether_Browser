@@ -32,11 +32,30 @@ println!("root: {}x{} at ({},{})",
 - **Block** — Block layout with margin collapsing
 - **Standalone** — Zero external layout dependencies (only `slotmap`)
 
+## Feature Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `content_size` | yes | Tracks content overflow bounds per node in `LayoutOutput` |
+| `debug_layout` | no | Enables `eprintln!`-based debug logging for layout computation |
+
+## Known Limitations
+
+- **Safe alignment** not implemented — content may overflow with non-start alignment values in flexbox/grid
+- **Baseline alignment** partially implemented; last baseline and vertical text baselines not handled
+- **Float layout** has known edge cases: second float at same Y pushes subsequent content down
+- **Vertical writing modes** not supported
+- **`visibility: collapse`** not implemented
+- **Auto margins for absolute-positioned root** not supported
+- **Scrollbar gutter** side always right/bottom regardless of `direction`
+- **Grid track sizing** re-runs all tracks instead of only affected ones (performance)
+- Table layout not implemented; `display: inline` treated as `display: block`
+
 ## Cargo.toml
 
 ```toml
 [dependencies]
-aether-caelum = "0.1"
+aether-caelum = "0.2"
 ```
 
 ## License

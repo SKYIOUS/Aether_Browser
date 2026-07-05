@@ -484,8 +484,6 @@ fn test_query_selector_universal() {
     assert_eq!(bridge.query_selector(root, "*"), Some(c));
 }
 
-// ponytail: child combinator matches outermost compound to node, then rest to ancestor.
-// "div > section" finds divs whose parent is a section.
 #[test]
 fn test_query_selector_child_combinator() {
     let mut bridge = JsBridge::new();
@@ -494,12 +492,37 @@ fn test_query_selector_child_combinator() {
     let div_child = bridge.create_element("div");
     bridge.append_child(root, section);
     bridge.append_child(section, div_child);
-    assert_eq!(bridge.query_selector(root, "div > section"), Some(div_child));
+    // standard CSS: "div > section" finds section whose parent is a div
+    assert_eq!(bridge.query_selector(root, "div > section"), Some(section));
 }
 
-// ponytail: descendant combinator uses whitespace, which parse_combinator doesn't handle
-// (skip_ws advances past it before the whitespace check, so it always returns None).
-// These selectors degrade to single-tag matching — tested separately.
+#[test]
+fn test_query_selector_descendant_combinator() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("div");
+    let span = bridge.create_element("span");
+    let p = bridge.create_element("p");
+    bridge.append_child(root, span);
+    bridge.append_child(span, p);
+    // "div p" finds a p that descends from a div (any depth)
+    assert_eq!(bridge.query_selector(root, "div p"), Some(p));
+    // "span p" finds a p that descends from a span
+    assert_eq!(bridge.query_selector(root, "span p"), Some(p));
+    // "div > p" does NOT match (p's parent is span, not div)
+    assert_eq!(bridge.query_selector(root, "div > p"), None);
+}
+
+#[test]
+fn test_query_selector_compound_descendant() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("div");
+    bridge.set_attribute(root, "id", "x");
+    let inner = bridge.create_element("span");
+    bridge.set_attribute(inner, "class", "y");
+    bridge.append_child(root, inner);
+    // "#x .y" finds .y element that descends from #x
+    assert_eq!(bridge.query_selector(root, "#x .y"), Some(inner));
+}
 
 #[test]
 fn test_event_listener_remove() {

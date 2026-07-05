@@ -31,7 +31,8 @@ pub(super) fn align_tracks(
     // simply pass zero here. Grid layout is never reversed.
     let gap = 0.0;
     let layout_is_reversed = false;
-    let is_safe = false; // TODO: Implement safe alignment
+    // ponytail: safe alignment not implemented; unsafe mode used (content may overflow with non-start alignment)
+    let is_safe = false;
     let track_alignment = apply_alignment_fallback(free_space, num_tracks, track_alignment_style, is_safe);
     let track_alignment = if axis_is_reversed { track_alignment.reversed() } else { track_alignment };
 
@@ -306,7 +307,7 @@ pub(super) fn align_item_within_area(
 
     // Compute offset in the axis
     let alignment_based_offset = match alignment_style {
-        // TODO: Add support for baseline alignment. For now we treat it as "start".
+        // ponytail: baseline alignment not implemented; falls back to start
         AlignSelf::Start | AlignSelf::FlexStart | AlignSelf::Baseline | AlignSelf::Stretch => {
             if direction.is_rtl() {
                 grid_area_size - resolved_size - resolved_margin.end

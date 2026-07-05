@@ -547,7 +547,7 @@ mod tests {
                 flow,
                 AlignSelf::Start,
                 AlignSelf::Start,
-                // TODO: actually test named line resolution
+                // ponytail: named line resolution not tested in this test
                 &name_resolver,
             );
 

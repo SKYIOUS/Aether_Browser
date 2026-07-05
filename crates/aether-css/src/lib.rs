@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 pub mod matcher;
 pub mod parser;
 pub mod property_names;

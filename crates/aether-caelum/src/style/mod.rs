@@ -549,6 +549,116 @@ impl<S: CheapCloneStr> Style<S> {
     };
 }
 
+impl<S: CheapCloneStr> Style<S> {
+    /// Minimal CSS parser — handles common simple values only.
+    ///
+    /// Supported properties:
+    ///   - `width`, `height`: `"100px"`, `"50%"`, `"auto"`
+    ///   - `margin`, `padding`: single value or 4-value shorthand (`"10px"`, `"10px 20px 10px 20px"`)
+    ///   - `display`: `"flex"`, `"block"`, `"inline"`, `"none"`, `"grid"`
+    ///   - `position`: `"relative"`, `"absolute"`
+    ///
+    /// For full control, use [`StyleBuilder`] or construct [`Style`] fields directly.
+    pub fn from_css(key: &str, value: &str) -> Result<Self, String> {
+        let mut s = Style::default();
+        let v = value.trim();
+        match key {
+            "width" => { s.size.width = parse_dimension(v)?; }
+            "height" => { s.size.height = parse_dimension(v)?; }
+            "margin" => { s.margin = parse_rect_shorthand_lpauto(v)?; }
+            "padding" => { s.padding = parse_rect_shorthand_lp(v)?; }
+            "display" => {
+                s.display = match v {
+                    "flex" => Display::Flex,
+                    "block" => Display::Block,
+                    "inline" => Display::Block, // treated as block
+                    "none" => Display::None,
+                    "grid" => Display::Grid,
+                    _ => return Err(format!("unsupported display value: {v}")),
+                };
+            }
+            "position" => {
+                s.position = match v {
+                    "relative" => Position::Relative,
+                    "absolute" => Position::Absolute,
+                    _ => return Err(format!("unsupported position value: {v}")),
+                };
+            }
+            _ => return Err(format!("unsupported CSS property: {key}")),
+        }
+        Ok(s)
+    }
+}
+
+/// Parse a CSS dimension value (px, %, auto) into a [`Dimension`].
+fn parse_dimension(v: &str) -> Result<Dimension, String> {
+    if v == "auto" {
+        return Ok(Dimension::auto());
+    }
+    if let Some(px) = v.strip_suffix("px") {
+        let n: f32 = px.trim().parse().map_err(|_| format!("invalid px value: {v}"))?;
+        return Ok(Dimension::length(n));
+    }
+    if let Some(pct) = v.strip_suffix('%') {
+        let n: f32 = pct.trim().parse().map_err(|_| format!("invalid percent value: {v}"))?;
+        return Ok(Dimension::percent(n / 100.0));
+    }
+    Err(format!("cannot parse dimension: {v}"))
+}
+
+/// Parse a CSS dimension into a [`LengthPercentage`] (no auto).
+fn parse_lp(v: &str) -> Result<LengthPercentage, String> {
+    if let Some(px) = v.strip_suffix("px") {
+        let n: f32 = px.trim().parse().map_err(|_| format!("invalid px value: {v}"))?;
+        return Ok(LengthPercentage::length(n));
+    }
+    if let Some(pct) = v.strip_suffix('%') {
+        let n: f32 = pct.trim().parse().map_err(|_| format!("invalid percent value: {v}"))?;
+        return Ok(LengthPercentage::percent(n / 100.0));
+    }
+    Err(format!("cannot parse LP value: {v}"))
+}
+
+/// Parse a CSS dimension into a [`LengthPercentageAuto`] (auto allowed).
+fn parse_lpauto(v: &str) -> Result<LengthPercentageAuto, String> {
+    if v == "auto" {
+        return Ok(LengthPercentageAuto::auto());
+    }
+    if let Some(px) = v.strip_suffix("px") {
+        let n: f32 = px.trim().parse().map_err(|_| format!("invalid px value: {v}"))?;
+        return Ok(LengthPercentageAuto::length(n));
+    }
+    if let Some(pct) = v.strip_suffix('%') {
+        let n: f32 = pct.trim().parse().map_err(|_| format!("invalid percent value: {v}"))?;
+        return Ok(LengthPercentageAuto::percent(n / 100.0));
+    }
+    Err(format!("cannot parse LPAuto value: {v}"))
+}
+
+/// Parse a CSS margin/padding shorthand into a [`Rect`] of `LengthPercentage`.
+fn parse_rect_shorthand_lp(v: &str) -> Result<Rect<LengthPercentage>, String> {
+    let parts: Vec<&str> = v.split_whitespace().collect();
+    match parts.len() {
+        1 => { let d = parse_lp(parts[0])?; Ok(Rect { left: d, right: d, top: d, bottom: d }) }
+        2 => { let y = parse_lp(parts[0])?; let x = parse_lp(parts[1])?; Ok(Rect { left: x, right: x, top: y, bottom: y }) }
+        3 => { let t = parse_lp(parts[0])?; let x = parse_lp(parts[1])?; let b = parse_lp(parts[2])?; Ok(Rect { left: x, right: x, top: t, bottom: b }) }
+        4 => { let t = parse_lp(parts[0])?; let r = parse_lp(parts[1])?; let b = parse_lp(parts[2])?; let l = parse_lp(parts[3])?; Ok(Rect { left: l, right: r, top: t, bottom: b }) }
+        _ => Err(format!("invalid shorthand rect: {v}")),
+    }
+}
+
+/// Parse a CSS margin/padding shorthand into a [`Rect`] of `LengthPercentageAuto`.
+fn parse_rect_shorthand_lpauto(v: &str) -> Result<Rect<LengthPercentageAuto>, String> {
+    let parts: Vec<&str> = v.split_whitespace().collect();
+    match parts.len() {
+        1 => { let d = parse_lpauto(parts[0])?; Ok(Rect { left: d, right: d, top: d, bottom: d }) }
+        2 => { let y = parse_lpauto(parts[0])?; let x = parse_lpauto(parts[1])?; Ok(Rect { left: x, right: x, top: y, bottom: y }) }
+        3 => { let t = parse_lpauto(parts[0])?; let x = parse_lpauto(parts[1])?; let b = parse_lpauto(parts[2])?; Ok(Rect { left: x, right: x, top: t, bottom: b }) }
+        4 => { let t = parse_lpauto(parts[0])?; let r = parse_lpauto(parts[1])?; let b = parse_lpauto(parts[2])?; let l = parse_lpauto(parts[3])?; Ok(Rect { left: l, right: r, top: t, bottom: b }) }
+        _ => Err(format!("invalid shorthand rect: {v}")),
+    }
+}
+
 impl<S: CheapCloneStr> Default for Style<S> {
     fn default() -> Self {
         Style::DEFAULT
@@ -1004,12 +1114,12 @@ impl<T: GridContainerStyle> GridContainerStyle for &'_ T {
 impl<S: CheapCloneStr> GridItemStyle for Style<S> {
     #[inline(always)]
     fn grid_row(&self) -> Line<GridPlacement<S>> {
-        // TODO: Investigate eliminating clone
+        // ponytail: clone required because trait returns owned value
         self.grid_row.clone()
     }
     #[inline(always)]
     fn grid_column(&self) -> Line<GridPlacement<S>> {
-        // TODO: Investigate eliminating clone
+        // ponytail: clone required because trait returns owned value
         self.grid_column.clone()
     }
     #[inline(always)]

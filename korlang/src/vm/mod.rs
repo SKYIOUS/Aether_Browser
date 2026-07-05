@@ -6,6 +6,9 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
+// ponytail: simple native fn pointer; replace with proper FFI when more than ~5 callbacks
+pub type NativeFn = Arc<dyn Fn(&[Value]) -> Value + Send + Sync>;
+
 #[derive(Debug, Clone)]
 pub enum OpCode {
     Push(Value),
@@ -56,6 +59,7 @@ pub struct VirtualMachine {
     pub stack: Vec<Value>,
     pub heap: HashMap<String, Value>,
     pub builtins: HashMap<String, Value>,
+    pub native_funcs: HashMap<String, NativeFn>,
     instruction_pointer: usize,
 }
 
@@ -65,6 +69,7 @@ impl VirtualMachine {
             stack: Vec::new(),
             heap: HashMap::new(),
             builtins: HashMap::new(),
+            native_funcs: HashMap::new(),
             instruction_pointer: 0,
         }
     }
@@ -77,13 +82,20 @@ impl VirtualMachine {
         self.builtins.get(name)
     }
 
+    pub fn register_native(&mut self, name: &str, f: NativeFn) {
+        self.native_funcs.insert(name.to_string(), f);
+    }
+
     pub fn execute(&mut self, bytecode: Vec<OpCode>) {
         let mut ip = 0usize;
         while ip < bytecode.len() {
             match bytecode[ip].clone() {
                 OpCode::Push(v) => { self.stack.push(v); ip += 1; }
                 OpCode::Load(name) => {
-                    let v = self.heap.get(&name).cloned().unwrap_or(Value::None);
+                    let v = self.heap.get(&name)
+                        .or_else(|| self.builtins.get(&name))
+                        .cloned()
+                        .unwrap_or(Value::None);
                     self.stack.push(v);
                     ip += 1;
                 }
@@ -165,16 +177,20 @@ impl VirtualMachine {
                 }
                 OpCode::Label(_) => { ip += 1; }
                 OpCode::Call(name, argc) => {
-                    // ponytail: collect args first, then store with correct indices
+                    // ponytail: pop args (top = last arg), reverse for correct order
                     let mut args = Vec::with_capacity(argc);
                     for _ in 0..argc {
                         if let Some(v) = self.stack.pop() { args.push(v); } else { break; }
                     }
                     args.reverse();
-                    for (i, v) in args.into_iter().enumerate() {
-                        self.heap.insert(format!("__arg_{}", i), v);
+                    for (i, v) in args.iter().enumerate() {
+                        self.heap.insert(format!("__arg_{}", i), v.clone());
                     }
-                    let result = self.builtins.get(&name).cloned().unwrap_or(Value::None);
+                    let result = if let Some(cb) = self.native_funcs.get(&name) {
+                        cb(&args)
+                    } else {
+                        self.builtins.get(&name).cloned().unwrap_or(Value::None)
+                    };
                     self.stack.push(result);
                     ip += 1;
                 }

@@ -1220,7 +1220,7 @@ fn expand_flexible_tracks(
                     .filter(|item| item.crosses_flexible_track(axis))
                     .map(|item| {
                         let tracks = &axis_tracks[item.track_range_excluding_lines(axis)];
-                        // TODO: plumb estimate of other axis size (known_dimensions) in here rather than just passing Size::NONE?
+                        // ponytail: plumb known_dimensions instead of Size::NONE for better fr sizing precision
                         let max_content_contribution =
                             item.max_content_contribution_cached(axis, tree, Size::NONE, inner_node_size);
                         find_size_of_fr(tracks, max_content_contribution)

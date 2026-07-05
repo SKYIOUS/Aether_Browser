@@ -156,6 +156,18 @@ fn test_flex_properties() {
     assert_eq!(style.flex.justify_content, JustifyContent::Center);
 }
 
+#[test]
+fn test_flex_grow() {
+    let style = resolve("div { flex-grow: 2; }", "div");
+    assert_eq!(style.flex.flex_grow, 2.0);
+}
+
+#[test]
+fn test_flex_shrink() {
+    let style = resolve("div { flex-shrink: 1; }", "div");
+    assert_eq!(style.flex.flex_shrink, 1.0);
+}
+
 // ── 11. Line height ──
 
 #[test]
@@ -174,6 +186,18 @@ fn test_z_index() {
 fn test_opacity() {
     let style = resolve("div { opacity: 0.5; }", "div");
     assert_eq!(style.opacity, Some(0.5));
+}
+
+#[test]
+fn test_opacity_clamp_high() {
+    let style = resolve("div { opacity: 1.5; }", "div");
+    assert_eq!(style.opacity, Some(1.0));
+}
+
+#[test]
+fn test_opacity_clamp_low() {
+    let style = resolve("div { opacity: -0.5; }", "div");
+    assert_eq!(style.opacity, Some(0.0));
 }
 
 // ── 14. Text decoration ──

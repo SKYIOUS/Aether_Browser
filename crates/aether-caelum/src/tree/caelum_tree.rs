@@ -522,8 +522,7 @@ impl<NodeContext> CaelumTree<NodeContext> {
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         CaelumTree {
-            // TODO: make this method const upstream,
-            // so constructors here can be const
+            // ponytail: upstream slotmap::with_capacity not const; blocks const constructors
             nodes: SlotMap::with_capacity(capacity),
             children: SlotMap::with_capacity(capacity),
             parents: SlotMap::with_capacity(capacity),
@@ -1275,7 +1274,7 @@ mod tests {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
         let node = Caelum.new_leaf(Style::default()).unwrap();
 
-        // TODO: Improve this test?
+        // ponytail: basic smoke test for layout retrieval
         let res = Caelum.layout(node);
         assert!(res.is_ok());
     }

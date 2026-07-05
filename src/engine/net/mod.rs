@@ -3,6 +3,7 @@ pub mod mock;
 
 use std::collections::HashMap;
 use std::sync::RwLock;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
@@ -53,6 +54,8 @@ fn client() -> Option<&'static reqwest::blocking::Client> {
     let entry = CLIENT.get_or_init(|| {
         reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(15))
+            .user_agent("Aether/0.2.0 (Rust; +https://aether-browser.dev)")
+            .danger_accept_invalid_certs(false)
             .build()
             .map_err(|e| format!("reqwest client: {}", e))
     });
@@ -123,6 +126,16 @@ fn save_cookies() {
     }
 }
 
+fn maybe_save_cookies() {
+    static LAST_SAVE: OnceLock<Mutex<Instant>> = OnceLock::new();
+    let last = LAST_SAVE.get_or_init(|| Mutex::new(Instant::now()));
+    let mut last = last.lock().unwrap();
+    if last.elapsed() > Duration::from_secs(30) {
+        save_cookies();
+        *last = Instant::now();
+    }
+}
+
 fn cookie_origin_key(url: &str) -> String {
     let s = url.trim();
     let (protocol, rest) = if let Some(pos) = s.find("://") {
@@ -185,6 +198,7 @@ pub fn get_cookies_for_url(url: &str) -> String {
             }
         }
     }
+    maybe_save_cookies();
     parts.join("; ")
 }
 
@@ -580,45 +594,19 @@ pub fn fetch_with_cors(url: &str, origin: &str) -> Result<(String, u16), FetchEr
     }
 }
 
-// ponytail: sync XHR — blocks JS thread, keep timeout short
-pub fn fetch_xhr(url: &str) -> String {
-    if let Some(body) = mock::resolve_html(url) {
-        return body;
-    }
-    if let Some(body) = mock::resolve_css(url) {
-        return body;
-    }
-    let cl = match reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => return format!("Error: {}", e),
-    };
-    let final_url = normalize_url(url);
-    let cookies = get_cookies_for_url(&final_url);
-    let mut req = cl.get(&final_url);
-    if !cookies.is_empty() {
-        req = req.header("Cookie", &cookies);
-    }
-    match req.send() {
-        Ok(r) => {
-            for (name, value) in r.headers() {
-                if name.as_str().eq_ignore_ascii_case("set-cookie") {
-                    if let Ok(v) = value.to_str() {
-                        set_cookie_from_response(&final_url, v);
-                    }
-                }
-            }
-            r.text().unwrap_or_default()
-        }
-        Err(e) => format!("Error: {}", e),
-    }
-}
-
 /// Fetches content with automatic redirect handling.
 pub fn fetch_with_redirects(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
     fetch_inner(url, max_redirects, origin)
+}
+
+fn is_scheme_downgrade(original_url: &str, redirect_url: &str) -> bool {
+    let orig_is_https = original_url.starts_with("https://");
+    let redir_is_http = redirect_url.starts_with("http://");
+    if orig_is_https && redir_is_http {
+        plog!("net", "Blocked HTTPS→HTTP downgrade redirect: {} → {}", original_url, redirect_url);
+        return true;
+    }
+    false
 }
 
 fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
@@ -689,7 +677,11 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
         if let Some(location) = headers.get("location") {
             plog!("net", "Redirect to: {}", location);
             let next = resolve_url(location, &final_url);
-            return fetch_inner(&next, max_redirects - 1, origin);
+            if is_scheme_downgrade(&final_url, &next) {
+                plog!("net", "HTTPS→HTTP downgrade blocked, returning current response");
+            } else {
+                return fetch_inner(&next, max_redirects - 1, origin);
+            }
         }
     }
 

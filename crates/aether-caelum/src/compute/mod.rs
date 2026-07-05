@@ -150,7 +150,7 @@ pub fn compute_root_layout(tree: &mut impl LayoutPartialTree, root: NodeId, avai
             scrollbar_size,
             padding,
             border,
-            // TODO: support auto margins for root node?
+            // ponytail: auto margins for root node not supported; unlikely use case
             margin,
         },
     );

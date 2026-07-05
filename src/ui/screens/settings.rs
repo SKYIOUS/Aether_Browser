@@ -1,7 +1,65 @@
-use iced::widget::{button, column, container, row, scrollable, text, Space};
+use iced::widget::{button, column, container, row, scrollable, text, text_input, Space};
 use iced::Padding;
 use iced::{Alignment, Element, Length, Task};
+use serde::{Serialize, Deserialize};
 use crate::ui::style::*;
+use crate::plog;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AetherSettings {
+    pub home_page_url: String,
+    pub default_search_engine: String,
+    pub js_enabled: bool,
+    pub cookies_enabled: bool,
+}
+
+impl Default for AetherSettings {
+    fn default() -> Self {
+        Self {
+            home_page_url: "aether://design/spatial-minimalism".to_string(),
+            default_search_engine: "duckduckgo".to_string(),
+            js_enabled: true,
+            cookies_enabled: true,
+        }
+    }
+}
+
+impl AetherSettings {
+    pub fn load() -> Self {
+        std::fs::read_to_string("aether_settings.json")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) {
+        if let Ok(json) = serde_json::to_string_pretty(self) {
+            if let Err(e) = std::fs::write("aether_settings.json", json) {
+                plog!("settings", "Failed to save: {}", e);
+            }
+        }
+    }
+
+    pub fn search_url(&self, query: &str) -> String {
+        let q = urlencoding(query);
+        match self.default_search_engine.as_str() {
+            "google" => format!("https://www.google.com/search?q={}", q),
+            _ => format!("https://duckduckgo.com/?q={}", q),
+        }
+    }
+
+    pub fn is_url(s: &str) -> bool {
+        s.contains("://") || s.contains('.') || s.starts_with("about:") || s.starts_with("aether://")
+    }
+}
+
+fn urlencoding(s: &str) -> String {
+    s.chars().map(|c| match c {
+        'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+        ' ' => "+".to_string(),
+        _ => format!("%{:02X}", c as u8),
+    }).collect()
+}
 
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
@@ -10,6 +68,10 @@ pub enum SettingsMessage {
     ToggleSilentFlow,
     ToggleLogging,
     AccentSelected(usize),
+    HomePageChanged(String),
+    SearchEngineChanged(String),
+    ToggleJs,
+    ToggleCookies,
 }
 
 const NAV_ITEMS: [(&str, &str); 5] = [
@@ -25,12 +87,14 @@ pub struct SettingsScreen {
     pub silent_flow: bool,
     pub logging_enabled: bool,
     pub accent_selected: usize,
+    pub settings: AetherSettings,
+    pub changed: bool,
 }
 
 impl SettingsScreen {
     pub fn new() -> Self {
         crate::logging::set_enabled(true);
-        Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0 }
+        Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0, settings: AetherSettings::load(), changed: false }
     }
 }
 
@@ -50,8 +114,13 @@ impl SettingsScreen {
                 crate::logging::set_enabled(self.logging_enabled);
             }
             SettingsMessage::AccentSelected(i) => self.accent_selected = i,
+            SettingsMessage::HomePageChanged(s) => { self.settings.home_page_url = s; self.changed = true; },
+            SettingsMessage::SearchEngineChanged(s) => { self.settings.default_search_engine = s; self.changed = true; },
+            SettingsMessage::ToggleJs => { self.settings.js_enabled = !self.settings.js_enabled; self.changed = true; },
+            SettingsMessage::ToggleCookies => { self.settings.cookies_enabled = !self.settings.cookies_enabled; self.changed = true; },
             _ => {}
         }
+        if self.changed { self.settings.save(); self.changed = false; }
         Task::none()
     }
 
@@ -122,6 +191,20 @@ impl SettingsScreen {
     }
 
     fn content_panel(&self) -> Element<'_, SettingsMessage> {
+        // Browser section
+        let section_browser = column![
+            text("Browser").size(28).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(24),
+            self.home_page_card(),
+            Space::with_height(12),
+            self.search_engine_card(),
+            Space::with_height(12),
+            self.js_card(),
+            Space::with_height(12),
+            self.cookies_card(),
+        ];
+
         // Personalization section
         let section_1 = column![
             text("Personalization").size(28).color(C::FG)
@@ -166,6 +249,8 @@ impl SettingsScreen {
         let body = scrollable(
             container(
                 column![
+                    section_browser,
+                    Space::with_height(48),
                     section_1,
                     Space::with_height(48),
                     section_dev,
@@ -185,6 +270,80 @@ impl SettingsScreen {
             .height(Length::Fill)
             .style(main_area_style())
             .into()
+    }
+
+    fn home_page_card(&self) -> Element<'_, SettingsMessage> {
+        let left = column![
+            text("Home Page").size(14).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(4),
+            text("Page shown on new tab or startup").size(12).color(C::MUTED),
+        ];
+        let input = text_input("URL", &self.settings.home_page_url)
+            .on_input(SettingsMessage::HomePageChanged)
+            .size(13)
+            .padding(10);
+        container(row![left, Space::with_width(Length::Fill), input.width(Length::Fixed(300.0))].align_y(Alignment::Center))
+            .width(Length::Fill).padding(20).style(card_style()).into()
+    }
+
+    fn search_engine_card(&self) -> Element<'_, SettingsMessage> {
+        let ddg_active = self.settings.default_search_engine == "duckduckgo";
+        let google_active = self.settings.default_search_engine == "google";
+        let left = column![
+            text("Default Search Engine").size(14).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(4),
+            text("Used when typing non-URLs in the address bar").size(12).color(C::MUTED),
+        ];
+        let ddg = button(text("DuckDuckGo").size(12).color(if ddg_active { C::ACCENT } else { C::MUTED }))
+            .padding([6, 12]).style(pill_button_style(ddg_active)).on_press(SettingsMessage::SearchEngineChanged("duckduckgo".to_string()));
+        let google = button(text("Google").size(12).color(if google_active { C::ACCENT } else { C::MUTED }))
+            .padding([6, 12]).style(pill_button_style(google_active)).on_press(SettingsMessage::SearchEngineChanged("google".to_string()));
+        container(row![left, Space::with_width(Length::Fill), ddg, google].spacing(8).align_y(Alignment::Center))
+            .width(Length::Fill).padding(20).style(card_style()).into()
+    }
+
+    fn js_card(&self) -> Element<'_, SettingsMessage> {
+        let on = self.settings.js_enabled;
+        let toggle_color = if on { C::ACCENT } else { C::MUTED };
+        let toggle_text = if on { "ON" } else { "OFF" };
+        let left = column![
+            text("JavaScript").size(14).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(4),
+            text("Enable JavaScript execution on web pages").size(12).color(C::MUTED),
+        ];
+        let toggle = container(text(toggle_text).size(11).color(toggle_color)
+            .font(iced::Font { weight: iced::font::Weight::Bold, ..Default::default() }))
+            .padding([6, 12]).style(|_| container::Style {
+                background: Some(iced::Background::Color(C::ACCENT_DIM)),
+                border: iced::Border { color: C::ACCENT_BORDER, width: 1.0, radius: 8.0.into() },
+                ..Default::default()
+            });
+        button(row![left, Space::with_width(Length::Fill), toggle].align_y(Alignment::Center))
+            .width(Length::Fill).padding(20).style(card_button_style()).on_press(SettingsMessage::ToggleJs).into()
+    }
+
+    fn cookies_card(&self) -> Element<'_, SettingsMessage> {
+        let on = self.settings.cookies_enabled;
+        let toggle_color = if on { C::ACCENT } else { C::MUTED };
+        let toggle_text = if on { "ON" } else { "OFF" };
+        let left = column![
+            text("Cookies").size(14).color(C::FG)
+                .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
+            Space::with_height(4),
+            text("Allow websites to store cookies on this device").size(12).color(C::MUTED),
+        ];
+        let toggle = container(text(toggle_text).size(11).color(toggle_color)
+            .font(iced::Font { weight: iced::font::Weight::Bold, ..Default::default() }))
+            .padding([6, 12]).style(|_| container::Style {
+                background: Some(iced::Background::Color(C::ACCENT_DIM)),
+                border: iced::Border { color: C::ACCENT_BORDER, width: 1.0, radius: 8.0.into() },
+                ..Default::default()
+            });
+        button(row![left, Space::with_width(Length::Fill), toggle].align_y(Alignment::Center))
+            .width(Length::Fill).padding(20).style(card_button_style()).on_press(SettingsMessage::ToggleCookies).into()
     }
 
     fn silent_flow_card(&self) -> Element<'_, SettingsMessage> {

@@ -154,8 +154,7 @@ pub trait GridContainerStyle: CoreStyle {
     where
         Self: 'a;
 
-    // FIXME: re-add default implemenations for grid_{template,auto}_{rows,columns} once the
-    // associated_type_defaults feature (https://github.com/rust-lang/rust/issues/29661) is stabilised.
+    // ponytail: default impls for grid template methods blocked on associated_type_defaults (rust#29661)
 
     /// Defines the track sizing functions (heights) of the grid rows
     fn grid_template_rows(&self) -> Option<Self::TemplateTrackList<'_>>;

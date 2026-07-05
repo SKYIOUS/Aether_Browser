@@ -102,6 +102,19 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
 pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
     if elements.is_empty() { return; }
 
+    // ponytail: estimate heights for text elements so Caelum can stack block elements correctly
+    for el in elements.iter_mut() {
+        if el.css_height.is_none() && el.display != "none" && !el.text.is_empty() {
+            let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
+            let text_w = text_visual_width(&el.text) as f32 * fs * CHAR_W_SCALE;
+            let available_width = el.css_width.unwrap_or(container_width);
+            let line_count = if available_width > 0.0 && text_w > available_width {
+                (text_w / available_width).ceil().max(1.0)
+            } else { 1.0 };
+            el.css_height = Some(fs * el.line_height.max(1.0) * line_count);
+        }
+    }
+
     let mut tree: CaelumTree = CaelumTree::new();
 
     let root_style = Style {

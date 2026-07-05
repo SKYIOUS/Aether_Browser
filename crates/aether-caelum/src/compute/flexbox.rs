@@ -331,7 +331,7 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
     //
     //     Skip this step in the second layout round.
 
-    // TODO implement once (if ever) we support visibility:collapse
+    // ponytail: visibility:collapse not implemented; skipped as low-priority
 
     // 11. Determine the used cross size of each flex item.
     debug_log!("determine_used_cross_size");
@@ -739,7 +739,7 @@ fn determine_flex_base_size(
             //    for a box in an orthogonal flow [CSS3-WRITING-MODES]. The flex base size
             //    is the item’s max-content main size.
 
-            // TODO if/when vertical writing modes are supported
+            // ponytail: vertical writing modes not supported; orthogonal flow handling deferred
 
             // E. Otherwise, size the item into the available space using its used flex basis
             //    in place of its main size, treating a value of content as max-content.
@@ -776,7 +776,7 @@ fn determine_flex_base_size(
         // This seems to be in violation of the spec which explicitly states that the content box should not be floored at zero
         // (like it usually is) when calculating the flex-basis. But including this matches both Chrome and Firefox's behaviour.
         //
-        // TODO: resolve spec violation
+        // ponytail: spec violation — floor(flex_basis) matches Chrome/Firefox but deviates from spec
         // Spec: https://www.w3.org/TR/css-flexbox-1/#intrinsic-item-contributions
         // Spec: https://www.w3.org/TR/css-flexbox-1/#change-2016-max-contribution
         let padding_border_sum = child.padding.main_axis_sum(constants.dir) + child.border.main_axis_sum(constants.dir);
@@ -1057,7 +1057,7 @@ fn determine_container_main_size(
                                 };
 
                                 // Either the min- or max- content size depending on which constraint we are sizing under.
-                                // TODO: Optimise by using already computed values where available
+                                // ponytail: optimization opportunity — reuse already-computed values instead of recomputing
                                 debug_log!("COMPUTE CHILD BASE SIZE (for intrinsic main size):");
                                 let content_main_size = tree.measure_child_size(
                                     item.node,
@@ -1105,7 +1105,7 @@ fn determine_container_main_size(
                         };
                     }
 
-                    // TODO Spec says to scale everything by the line's max flex fraction. But neither Chrome nor firefox implement this
+                    // ponytail: spec says scale by line's max flex fraction; Chrome/Firefox don't, so we don't either
                     // so we don't either. But if we did want to, we'd need this computation here (and to use it below):
                     //
                     // Within each line, find the largest max-content flex fraction among all the flex items.
@@ -1424,7 +1424,7 @@ fn calculate_children_base_lines(
 ) {
     // Only compute baselines for flex rows because we only support baseline alignment in the cross axis
     // where that axis is also the inline axis
-    // TODO: this may need revisiting if/when we support vertical writing modes
+    // ponytail: baseline alignment assumes row layout; vertical writing modes need separate handling
     if !constants.is_row {
         return;
     }
@@ -1695,7 +1695,8 @@ fn distribute_remaining_free_space(flex_lines: &mut [FlexLine], constants: &Algo
         let num_items = line.items.len();
         let layout_reverse = constants.dir.is_reverse();
         let gap = constants.gap.main(constants.dir);
-        let is_safe = false; // TODO: Implement safe alignment
+        // ponytail: safe alignment not implemented; unsafe mode used (content may overflow with non-start alignment)
+        let is_safe = false;
         let raw_justify_content_mode = constants.justify_content.unwrap_or(JustifyContent::FlexStart);
         let justify_content_mode = apply_alignment_fallback(free_space, num_items, raw_justify_content_mode, is_safe);
 
@@ -1877,7 +1878,8 @@ fn align_flex_lines_per_align_content(flex_lines: &mut [FlexLine], constants: &A
     let gap = constants.gap.cross(constants.dir);
     let total_cross_axis_gap = sum_axis_gaps(gap, num_lines);
     let free_space = constants.inner_container_size.cross(constants.dir) - total_cross_size - total_cross_axis_gap;
-    let is_safe = false; // TODO: Implement safe alignment
+    // ponytail: safe alignment not implemented; unsafe mode used
+    let is_safe = false;
 
     let align_content_mode = apply_alignment_fallback(free_space, num_lines, constants.align_content, is_safe);
 

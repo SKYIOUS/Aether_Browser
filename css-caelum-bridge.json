@@ -9,8 +9,20 @@
       { "stratus": "InlineFlex", "string": "inline-flex", "caelum": "Flex" },
       { "stratus": "Inline", "string": "inline", "caelum": "Block" },
       { "stratus": "InlineBlock", "string": "inline-block", "caelum": "Block" },
-      { "stratus": "Grid", "string": "grid", "caelum": "Block" },
+      { "stratus": "Grid", "string": "grid", "caelum": "Grid" },
       { "stratus": "None", "string": "none", "caelum": "None" }
+    ]
+  },
+  "position": {
+    "stratus_enum": "Position",
+    "caelum_enum": "Position",
+    "default": "Relative",
+    "mappings": [
+      { "stratus": "Static", "string": "static", "caelum": "Relative" },
+      { "stratus": "Relative", "string": "relative", "caelum": "Relative" },
+      { "stratus": "Absolute", "string": "absolute", "caelum": "Absolute" },
+      { "stratus": "Fixed", "string": "fixed", "caelum": "Absolute" },
+      { "stratus": "Sticky", "string": "sticky", "caelum": "Relative" }
     ]
   },
   "flex_direction": {

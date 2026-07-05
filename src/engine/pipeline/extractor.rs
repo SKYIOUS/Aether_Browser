@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use iced::Color;
 use iced::widget::image::Handle;
 
 use crate::engine::dom::{Node, NodeType};
+use crate::engine::js::js_bridge::FlatNode;
 use crate::engine::stratus::Stylesheet;
 use crate::engine::stratus;
 use crate::ui::style::C;
@@ -37,6 +40,11 @@ pub struct FullStyle {
     pub text_decoration: String,
     pub text_transform: String,
     pub border_radius: [f32; 4],
+    pub position: String,
+    pub inset_top: f32,
+    pub inset_right: f32,
+    pub inset_bottom: f32,
+    pub inset_left: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +92,15 @@ pub struct StyledElement {
     pub text_decoration: String,
     pub text_transform: String,
     pub border_radius: [f32; 4],
+    pub input_type: String,
+    pub input_value: String,
+    pub input_placeholder: String,
+    pub checked: bool,
+    pub position: String,
+    pub inset_top: f32,
+    pub inset_right: f32,
+    pub inset_bottom: f32,
+    pub inset_left: f32,
 }
 
 fn stratus_color(c: &stratus::Color) -> Color {
@@ -99,33 +116,111 @@ fn is_html_block_tag(tag: &str) -> bool {
 }
 
 pub fn should_skip_tag(tag: &str) -> bool {
-    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "template")
+    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "template" | "iframe" | "option")
 }
 
 pub fn should_skip_content(tag: &str) -> bool {
     matches!(tag, "script" | "style" | "noscript" | "template" | "svg" | "title")
 }
 
-fn get_all_text(node: &Node) -> String {
-    match &node.node_type {
-        NodeType::Text(t) => t.trim().to_string(),
-        NodeType::Element(_) => {
-            node.children.iter()
-                .map(get_all_text)
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")
-        }
-        NodeType::Document | NodeType::Comment(_) => String::new(),
+// ponytail: single-pass entity decode, no recursion for &amp;lt; etc.
+pub fn decode_html_entities(text: &str) -> String {
+    if !text.contains('&') {
+        return text.to_string();
     }
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            let mut entity = String::new();
+            for ch in &mut chars {
+                if ch == ';' { break; }
+                entity.push(ch);
+            }
+            let decoded = match entity.as_str() {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\''),
+                "nbsp" => Some('\u{00A0}'),
+                "copy" => Some('\u{00A9}'),
+                "reg" => Some('\u{00AE}'),
+                _ => {
+                    if let Some(hex) = entity.strip_prefix("#x") {
+                        u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)
+                    } else if let Some(dec) = entity.strip_prefix('#') {
+                        dec.parse::<u32>().ok().and_then(char::from_u32)
+                    } else {
+                        None
+                    }
+                }
+            };
+            match decoded {
+                Some(d) => result.push(d),
+                None => {
+                    result.push('&');
+                    result.push_str(&entity);
+                    result.push(';');
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+fn get_all_text(node: &Node) -> String {
+    // ponytail: build string in-place to avoid intermediate Vec allocation
+    fn collect(node: &Node, out: &mut String) {
+        match &node.node_type {
+            NodeType::Text(t) => {
+                let decoded = decode_html_entities(t.trim());
+                if !decoded.is_empty() {
+                    if !out.is_empty() { out.push(' '); }
+                    out.push_str(&decoded);
+                }
+            }
+            NodeType::Element(_) => {
+                for child in &node.children { collect(child, out); }
+            }
+            _ => {}
+        }
+    }
+    let mut out = String::new();
+    collect(node, &mut out);
+    out
 }
 
 fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
-    let tag = match &node.node_type {
-        NodeType::Element(e) => e.tag_name.to_lowercase(),
-        _ => String::new(),
+    let (tag, attrs) = match &node.node_type {
+        NodeType::Element(e) => (e.tag_name.to_lowercase(), &e.attributes),
+        _ => (String::new(), &HashMap::new()),
     };
-    let cs = crate::engine::style::compute_style_vp(node, ss, vw, vh);
+    compute_full_style_inner(&tag, attrs, Some(node), ss, vw, vh)
+}
+
+fn compute_full_style_flat(node: &FlatNode, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
+    compute_full_style_inner(&node.tag, &node.attrs, None::<&Node>, ss, vw, vh)
+}
+
+fn compute_full_style_inner(
+    tag: &str,
+    attrs: &HashMap<String, String>,
+    // ponytail: style module needs &Node; pass None for FlatNode path
+    node: Option<&Node>,
+    ss: &Stylesheet,
+    vw: f32,
+    vh: f32,
+) -> FullStyle {
+    let cs = match node {
+        Some(n) => crate::engine::style::compute_style_vp(n, ss, vw, vh),
+        None => {
+            let element = crate::engine::stratus::ElementData::with_attributes(tag.to_string(), attrs.clone());
+            crate::engine::stratus::resolve_style_vp(&element, ss, vw, vh)
+        }
+    };
     let color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
     let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.clamp(6.0, 200.0)).unwrap_or(16.0);
     let font_weight = cs.font_weight.unwrap_or_else(|| "normal".to_string());
@@ -182,6 +277,11 @@ fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullSty
             let r = cs.border_radius.unwrap_or(0.0);
             [r, r, r, r]
         },
+        position: crate::bridge_gen::position_to_string(&cs.position).to_string(),
+        inset_top: cs.top.unwrap_or(0.0),
+        inset_right: cs.right.unwrap_or(0.0),
+        inset_bottom: cs.bottom.unwrap_or(0.0),
+        inset_left: cs.left.unwrap_or(0.0),
     }
 }
 
@@ -216,6 +316,15 @@ fn make_element(
         text_decoration: fs.text_decoration.clone(),
         text_transform: fs.text_transform.clone(),
         border_radius: fs.border_radius,
+        input_type: String::new(),
+        input_value: String::new(),
+        input_placeholder: String::new(),
+        checked: false,
+        position: fs.position.clone(),
+        inset_top: fs.inset_top,
+        inset_right: fs.inset_right,
+        inset_bottom: fs.inset_bottom,
+        inset_left: fs.inset_left,
     }
 }
 
@@ -235,15 +344,15 @@ pub fn extract_elements(
     match &node.node_type {
         NodeType::Document | NodeType::Comment(_) => {}
         NodeType::Text(text) => {
-            let txt = text.trim();
+            let txt = decode_html_entities(text.trim());
             if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
                 if let Some(ref ps) = parent_style {
-                    let mut el = make_element("text", txt.to_string(), ps, parent_idx, dom_path.clone());
+                    let mut el = make_element("text", txt, ps, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
                 } else {
                     let fs = compute_full_style(node, ss, viewport_w, viewport_h);
-                    let mut el = make_element("text", txt.to_string(), &fs, parent_idx, dom_path.clone());
+                    let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
                 }
@@ -272,10 +381,14 @@ pub fn extract_elements(
             let uses_default_margins = matches!(tag.as_str(), "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select");
 
             let mut text_consumed = false;
+            let mut extra_input_type = String::new();
+            let mut extra_input_value = String::new();
+            let mut extra_input_placeholder = String::new();
+            let mut extra_checked = false;
 
             let (text_content, is_link, href, indent, tag_override, skip_element, recurse_into_children) = match tag.as_str() {
                 "a" => {
-                    let href = elem.attributes.get("href").cloned();
+                    let href = elem.attributes.get("href").map(|v| decode_html_entities(v));
                     let text = get_all_text(node);
                     if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
                     else { text_consumed = true; (text, true, href, 0, "a", false, false) }
@@ -299,7 +412,7 @@ pub fn extract_elements(
                     let direct_text: String = node.children.iter()
                         .filter_map(|c| {
                             if let NodeType::Text(t) = &c.node_type {
-                                let txt = t.trim().to_string();
+                                let txt = decode_html_entities(t.trim());
                                 if !txt.is_empty() { Some(txt) } else { None }
                             } else { None }
                         })
@@ -322,7 +435,7 @@ pub fn extract_elements(
                     }
                 }
                 "img" => {
-                    let alt = elem.attributes.get("alt").cloned().unwrap_or_default();
+                    let alt = elem.attributes.get("alt").map(|v| decode_html_entities(v)).unwrap_or_default();
                     (alt, false, None, 0, "img", false, false)
                 }
                 "button" => {
@@ -335,28 +448,49 @@ pub fn extract_elements(
                     }
                 }
                 "input" => {
-                    let value = elem.attributes.get("value").cloned();
-                    let placeholder = elem.attributes.get("placeholder").cloned();
                     let input_type = elem.attributes.get("type").cloned().unwrap_or_else(|| "text".to_string());
-                    let text = if input_type == "submit" || input_type == "button" || input_type == "reset" {
-                        value.unwrap_or_else(|| input_type.to_string())
-                    } else {
-                        value.or(placeholder).unwrap_or_default()
+                    let input_value = elem.attributes.get("value").cloned().unwrap_or_default();
+                    let input_placeholder = elem.attributes.get("placeholder").cloned().unwrap_or_default();
+                    let checked = elem.attributes.get("checked").is_some();
+                    let text = match input_type.as_str() {
+                        "submit" | "button" | "reset" => {
+                            if !input_value.is_empty() { input_value.clone() } else { input_type.clone() }
+                        }
+                        _ => input_placeholder.clone(),
                     };
+                    extra_input_type = input_type;
+                    extra_input_value = input_value;
+                    extra_input_placeholder = input_placeholder;
+                    extra_checked = checked;
                     (text, false, None, 0, "input", false, false)
                 }
                 "textarea" => {
                     let text = get_all_text(node);
+                    extra_input_type = "textarea".to_string();
                     if text.is_empty() {
                         let placeholder = elem.attributes.get("placeholder").cloned().unwrap_or_default();
+                        extra_input_placeholder = placeholder.clone();
                         (placeholder, false, None, 0, "textarea", false, false)
                     } else {
                         text_consumed = true;
+                        extra_input_value = text.clone();
                         (text, false, None, 0, "textarea", false, false)
                     }
                 }
                 "select" => {
-                    (String::new(), false, None, 0, "select", false, true)
+                    let selected_text = node.children.iter().find_map(|c| {
+                        if let NodeType::Element(e) = &c.node_type {
+                            if e.tag_name.to_lowercase() == "option" {
+                                let txt = get_all_text(c);
+                                if !txt.is_empty() { Some(txt) } else { None }
+                            } else { None }
+                        } else { None }
+                    }).unwrap_or_default();
+                    extra_input_type = "select".to_string();
+                    if !selected_text.is_empty() {
+                        text_consumed = true;
+                    }
+                    (selected_text, false, None, 0, "select", false, false)
                 }
                 "option" => {
                     let text = get_all_text(node);
@@ -389,7 +523,7 @@ pub fn extract_elements(
                 el.href = href;
                 el.indent_level = indent;
                 if tag == "img" {
-                    el.image_url = elem.attributes.get("src").cloned().filter(|s| !s.is_empty());
+                    el.image_url = elem.attributes.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
                     if el.css_width.is_none() { el.css_width = Some(200.0); }
                     if el.css_height.is_none() { el.css_height = Some(150.0); }
                 }
@@ -406,6 +540,15 @@ pub fn extract_elements(
                         "form" => 12.0, "button" => 4.0, "input" => 4.0, "textarea" => 4.0, "select" => 4.0, _ => 0.0,
                     };
                     if el.margin_top == 0.0 { el.margin_top = def_mt; }
+                }
+                if !extra_input_type.is_empty() {
+                    el.input_type = extra_input_type;
+                    el.input_value = extra_input_value;
+                    el.input_placeholder = extra_input_placeholder;
+                    el.checked = extra_checked;
+                }
+                if tag == "button" {
+                    el.input_type = "button".to_string();
                 }
                 let idx = elements.len();
                 elements.push(el);
@@ -434,7 +577,8 @@ pub fn extract_elements(
                     let new_p = this_idx.or(parent_idx);
                     (new_p, Box::new(|c: &Node| matches!(c.node_type, NodeType::Text(_))))
                 }
-                "select" | "form" => (this_idx.or(parent_idx), Box::new(|_| false)),
+                "select" => (parent_idx, Box::new(|_| true)),
+                "form" => (this_idx.or(parent_idx), Box::new(|_| false)),
                 _ => {
                     if skip_element {
                         (parent_idx, Box::new(|_| false))
@@ -459,5 +603,318 @@ pub fn extract_elements(
     }
 }
 
+// ── FlatNode-based extraction (avoids FlatNode → DOM round-trip) ──
 
+fn get_all_text_flat(nodes: &[FlatNode], id: u32) -> String {
+    fn collect(nodes: &[FlatNode], id: u32, out: &mut String) {
+        let node = match nodes.get(id as usize) { Some(n) => n, None => return };
+        if node.is_text {
+            let decoded = decode_html_entities(&node.text);
+            let trimmed = decoded.trim();
+            if !trimmed.is_empty() {
+                if !out.is_empty() { out.push(' '); }
+                out.push_str(trimmed);
+            }
+        } else if !node.is_document {
+            for &child in &node.children { collect(nodes, child, out); }
+        }
+    }
+    let mut out = String::new();
+    collect(nodes, id, &mut out);
+    out
+}
+
+fn get_direct_text_flat(nodes: &[FlatNode], id: u32) -> String {
+    let node = match nodes.get(id as usize) { Some(n) => n, None => return String::new() };
+    let mut out = String::new();
+    for &child_id in &node.children {
+        if let Some(child) = nodes.get(child_id as usize) {
+            if child.is_text {
+                let decoded = decode_html_entities(&child.text);
+                let trimmed = decoded.trim();
+                if !trimmed.is_empty() {
+                    if !out.is_empty() { out.push(' '); }
+                    out.push_str(trimmed);
+                }
+            }
+        }
+    }
+    out
+}
+
+// ponytail: mirrors extract_elements but takes &[FlatNode] to skip to_dom() serialization
+pub(crate) fn extract_elements_flat(
+    nodes: &[FlatNode],
+    elements: &mut Vec<StyledElement>,
+    ss: &Stylesheet,
+    viewport_w: f32,
+    viewport_h: f32,
+) {
+    fn walk(
+        nodes: &[FlatNode],
+        node_id: u32,
+        elements: &mut Vec<StyledElement>,
+        depth: usize,
+        ss: &Stylesheet,
+        parent_style: Option<FullStyle>,
+        parent_idx: Option<usize>,
+        dom_path: &mut Vec<usize>,
+        vw: f32,
+        vh: f32,
+    ) {
+        if depth > 50 || elements.len() >= 2000 { return; }
+        let node = match nodes.get(node_id as usize) { Some(n) => n, None => return };
+
+        if node.is_document {
+            for (ci, &child_id) in node.children.iter().enumerate() {
+                dom_path.push(ci);
+                walk(nodes, child_id, elements, depth + 1, ss, None, None, dom_path, vw, vh);
+                dom_path.pop();
+            }
+            return;
+        }
+
+        if node.is_text {
+            let txt = decode_html_entities(node.text.trim());
+            if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
+                if let Some(ref ps) = parent_style {
+                    let mut el = make_element("text", txt, ps, parent_idx, dom_path.clone());
+                    el.background_color = None;
+                    elements.push(el);
+                } else {
+                    let fs = compute_full_style_flat(node, ss, vw, vh);
+                    let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
+                    el.background_color = None;
+                    elements.push(el);
+                }
+            }
+            return;
+        }
+
+        let tag = node.tag.as_str();
+        if should_skip_tag(tag) {
+            if !should_skip_content(tag) && tag != "head" && tag != "meta" && tag != "link" {
+                for (ci, &child_id) in node.children.iter().enumerate() {
+                    dom_path.push(ci);
+                    walk(nodes, child_id, elements, depth + 1, ss, parent_style.clone(), parent_idx, dom_path, vw, vh);
+                    dom_path.pop();
+                }
+            }
+            return;
+        }
+
+        let fs = compute_full_style_flat(node, ss, vw, vh);
+        let uses_default_margins = matches!(tag, "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select");
+
+        let (text_content, is_link, href, indent, tag_override, skip_element, recurse_into_children) = match tag {
+            "a" => {
+                let h = node.attrs.get("href").map(|v| decode_html_entities(v));
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                else { (text, true, h, 0, "a", false, false) }
+            }
+            "h1" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                else { (text, false, None, 0, "h1", false, false) }
+            }
+            "h2" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                else { (text, false, None, 0, "h2", false, false) }
+            }
+            "h3" | "h4" | "h5" | "h6" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                else { (text, false, None, 1, tag, false, false) }
+            }
+            "p" => {
+                let direct_text = get_direct_text_flat(nodes, node_id);
+                if direct_text.is_empty() { (String::new(), false, None, 0, "", true, true) }
+                else { (direct_text, false, None, 0, "p", false, true) }
+            }
+            "li" => {
+                let has_link = node.children.iter().any(|&c| {
+                    nodes.get(c as usize).map_or(false, |n| !n.is_text && n.tag == "a")
+                });
+                if has_link { (String::new(), false, None, 0, "", true, false) }
+                else {
+                    let text = get_all_text_flat(nodes, node_id);
+                    if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                    else { (format!("• {}", text), false, None, 1, "li", false, false) }
+                }
+            }
+            "img" => {
+                let alt = node.attrs.get("alt").map(|v| decode_html_entities(v)).unwrap_or_default();
+                (alt, false, None, 0, "img", false, false)
+            }
+            "button" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "button", false, false) }
+                else { (text, false, None, 0, "button", false, false) }
+            }
+            "input" => {
+                let value = node.attrs.get("value").cloned();
+                let placeholder = node.attrs.get("placeholder").cloned();
+                let input_type = node.attrs.get("type").cloned().unwrap_or_else(|| "text".to_string());
+                let text = if input_type == "submit" || input_type == "button" || input_type == "reset" {
+                    value.unwrap_or_else(|| input_type.to_string())
+                } else {
+                    value.or(placeholder).unwrap_or_default()
+                };
+                (text, false, None, 0, "input", false, false)
+            }
+            "textarea" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() {
+                    let placeholder = node.attrs.get("placeholder").cloned().unwrap_or_default();
+                    (placeholder, false, None, 0, "textarea", false, false)
+                } else {
+                    (text, false, None, 0, "textarea", false, false)
+                }
+            }
+            "select" => (String::new(), false, None, 0, "select", false, true),
+            "option" => {
+                let text = get_all_text_flat(nodes, node_id);
+                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
+                else { (text, false, None, 1, "option", false, false) }
+            }
+            "iframe" => (String::new(), false, None, 0, "iframe", false, false),
+            _ => {
+                if fs.display == "inline" && tag != "span" {
+                    (String::new(), false, None, 0, "", true, true)
+                } else {
+                    (String::new(), false, None, 0, tag, false, false)
+                }
+            }
+        };
+
+        if !recurse_into_children && skip_element { return; }
+
+        let this_idx = if !skip_element {
+            let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
+            el.is_link = is_link;
+            el.href = href;
+            el.indent_level = indent;
+            if tag == "img" {
+                el.image_url = node.attrs.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
+                if el.css_width.is_none() { el.css_width = Some(200.0); }
+                if el.css_height.is_none() { el.css_height = Some(150.0); }
+            }
+            if matches!(tag, "input" | "button" | "textarea" | "select" | "iframe") {
+                if el.css_width.is_none() { el.css_width = Some(200.0); }
+                if el.css_height.is_none() { el.css_height = Some(32.0); }
+                if tag == "textarea" { el.css_height = Some(64.0); }
+                if tag == "iframe" { el.css_height = Some(150.0); }
+            }
+            if uses_default_margins {
+                let def_mt: f32 = match tag {
+                    "h1" => 24.0, "h2" => 20.0, "h3" | "h4" | "h5" | "h6" => 16.0,
+                    "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0,
+                    "form" => 12.0, "button" => 4.0, "input" => 4.0, "textarea" => 4.0, "select" => 4.0, _ => 0.0,
+                };
+                if el.margin_top == 0.0 { el.margin_top = def_mt; }
+            }
+            let idx = elements.len();
+            elements.push(el);
+            Some(idx)
+        } else { parent_idx };
+
+        let (new_parent, skip_text_children): (Option<usize>, bool) = match tag {
+            "img" | "input" | "button" | "iframe" => (parent_idx, false),
+            "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" | "option" => (parent_idx, false),
+            "li" => (parent_idx, false),
+            "p" => (this_idx.or(parent_idx), true),
+            "select" | "form" => (this_idx.or(parent_idx), false),
+            _ => {
+                if skip_element { (parent_idx, false) }
+                else { (this_idx.or(parent_idx), false) }
+            }
+        };
+
+        for (ci, &child_id) in node.children.iter().enumerate() {
+            let child = match nodes.get(child_id as usize) { Some(c) => c, None => continue };
+            if skip_text_children && child.is_text { continue; }
+            dom_path.push(ci);
+            walk(nodes, child_id, elements, depth + 1, ss, Some(fs.clone()), new_parent, dom_path, vw, vh);
+            dom_path.pop();
+        }
+    }
+
+    if nodes.is_empty() { return; }
+    let mut path = Vec::new();
+    walk(nodes, 0, elements, 0, ss, None, None, &mut path, viewport_w, viewport_h);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_html_entities;
+    use crate::engine::stratus::Stylesheet;
+    use crate::engine::parser::Parser;
+
+    #[test]
+    fn test_decode_amp() { assert_eq!(decode_html_entities("&amp;"), "&"); }
+    #[test]
+    fn test_decode_lt() { assert_eq!(decode_html_entities("&lt;"), "<"); }
+    #[test]
+    fn test_decode_gt() { assert_eq!(decode_html_entities("&gt;"), ">"); }
+    #[test]
+    fn test_decode_quot() { assert_eq!(decode_html_entities("&quot;"), "\""); }
+    #[test]
+    fn test_decode_apos() { assert_eq!(decode_html_entities("&apos;"), "'"); }
+    #[test]
+    fn test_decode_decimal() { assert_eq!(decode_html_entities("&#123;"), "{"); }
+    #[test]
+    fn test_decode_hex_emoji() { assert_eq!(decode_html_entities("&#x1F600;"), "😀"); }
+    #[test]
+    fn test_decode_no_nested() { assert_eq!(decode_html_entities("&amp;lt;"), "&lt;"); }
+    #[test]
+    fn test_decode_no_entities() { assert_eq!(decode_html_entities("hello world"), "hello world"); }
+    #[test]
+    fn test_decode_unknown() { assert_eq!(decode_html_entities("&unknown;"), "&unknown;"); }
+    #[test]
+    fn test_decode_mixed() { assert_eq!(decode_html_entities("a &amp; b &lt; c"), "a & b < c"); }
+    #[test]
+    fn test_decode_nbsp() { assert_eq!(decode_html_entities("&nbsp;"), "\u{00A0}"); }
+    #[test]
+    fn test_decode_copy() { assert_eq!(decode_html_entities("&copy;"), "\u{00A9}"); }
+    #[test]
+    fn test_decode_reg() { assert_eq!(decode_html_entities("&reg;"), "\u{00AE}"); }
+
+    #[test]
+    fn test_extract_decodes_text() {
+        let html = r#"<p>hello &amp; goodbye</p>"#;
+        let mut parser = Parser::new(html.to_string());
+        let dom = parser.parse_node();
+        let sheet = Stylesheet { rules: vec![] };
+        let mut elements = Vec::new();
+        crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+        let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
+        assert_eq!(p.text, "hello & goodbye", "&amp; should decode to &");
+    }
+
+    #[test]
+    fn test_extract_decodes_anchor_href() {
+        let html = r#"<a href="https://x.com?a=1&amp;b=2">link</a>"#;
+        let mut parser = Parser::new(html.to_string());
+        let dom = parser.parse_node();
+        let sheet = Stylesheet { rules: vec![] };
+        let mut elements = Vec::new();
+        crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+        let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
+        assert_eq!(a.href.as_deref(), Some("https://x.com?a=1&b=2"), "href &amp; should decode");
+    }
+
+    #[test]
+    fn test_extract_decodes_img_alt() {
+        let html = r#"<img src="x.png" alt="photo &amp; picture">"#;
+        let mut parser = Parser::new(html.to_string());
+        let dom = parser.parse_node();
+        let sheet = Stylesheet { rules: vec![] };
+        let mut elements = Vec::new();
+        crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+        let img = elements.iter().find(|e| e.tag == "img").expect("should find <img>");
+        assert_eq!(img.text, "photo & picture", "alt &amp; should decode");
+    }
+}
 

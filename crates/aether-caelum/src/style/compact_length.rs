@@ -5,23 +5,15 @@ use crate::style_helpers::{
     FromFr, FromLength, FromPercent, CaelumAuto, CaelumFitContent, CaelumMaxContent, CaelumMinContent, CaelumZero,
 };
 
-/// Note: these two functions are copied directly from the std (core) library. But by duplicating them
-/// here we can reduce MSRV from 1.84 all the way down to 1.65 while retaining const constructors and
-/// strict pointer provenance
+/// Safe bitcasts — `f32::to_bits`/`from_bits` have been const-stable since Rust 1.57
 mod compat {
-    #![allow(unsafe_code)]
-    #![allow(unknown_lints)]
-    #![allow(unnecessary_transmutes)]
-
-    /// Raw transmutation from `f32` to `u32`.
+    /// Bitcast `f32` to `u32`.
     pub const fn f32_to_bits(val: f32) -> u32 {
-        // SAFETY: `u32` is a plain old datatype so we can always transmute to it.
-        unsafe { core::mem::transmute(val) }
+        f32::to_bits(val)
     }
-    /// Raw transmutation from `u32` to `f32`.
+    /// Bitcast `u32` to `f32`.
     pub const fn f32_from_bits(v: u32) -> f32 {
-        // SAFETY: `u32` is a plain old datatype so we can always transmute from it.
-        unsafe { core::mem::transmute(v) }
+        f32::from_bits(v)
     }
 
     /// Tag a pointer preserving provenance (requires Rust 1.84)

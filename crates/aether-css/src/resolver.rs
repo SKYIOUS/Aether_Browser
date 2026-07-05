@@ -55,11 +55,18 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                 CssPropertyName::Visibility => style.visibility = parse_keyword(&decl.value),
                 CssPropertyName::Opacity => {
                     style.opacity = match &decl.value {
-                        PropertyValue::Number(n) => Some(*n),
-                        _ => parse_keyword(&decl.value).and_then(|v| v.parse::<f32>().ok()),
+                        PropertyValue::Number(n) => Some(n.clamp(0.0, 1.0)),
+                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0)),
+                        _ => None,
                     };
                 }
-                CssPropertyName::ZIndex => style.z_index = parse_length_vp(&decl.value, vw, vh).map(|v| v as i32),
+                CssPropertyName::ZIndex => {
+                    style.z_index = match &decl.value {
+                        PropertyValue::Number(n) => Some(*n as i32),
+                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v as i32),
+                        _ => None,
+                    };
+                }
 
                 CssPropertyName::Margin | CssPropertyName::MarginTop | CssPropertyName::MarginRight | CssPropertyName::MarginBottom | CssPropertyName::MarginLeft => {
                     apply_sides_vp(&mut style.margin_top, &mut style.margin_right, &mut style.margin_bottom, &mut style.margin_left, &decl.name, &decl.value, vw, vh);
@@ -90,8 +97,20 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                 CssPropertyName::JustifyContent => style.flex.justify_content = parse_justify_content(&decl.value),
                 CssPropertyName::AlignItems => style.flex.align_items = parse_align_items(&decl.value),
                 CssPropertyName::AlignSelf => style.flex.align_self = parse_align_self(&decl.value),
-                CssPropertyName::FlexGrow => style.flex.flex_grow = parse_length_vp(&decl.value, vw, vh).unwrap_or(0.0),
-                CssPropertyName::FlexShrink => style.flex.flex_shrink = parse_length_vp(&decl.value, vw, vh).unwrap_or(1.0),
+                CssPropertyName::FlexGrow => {
+                    style.flex.flex_grow = match &decl.value {
+                        PropertyValue::Number(n) => n.max(0.0),
+                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(0.0),
+                        _ => 0.0,
+                    };
+                }
+                CssPropertyName::FlexShrink => {
+                    style.flex.flex_shrink = match &decl.value {
+                        PropertyValue::Number(n) => n.max(0.0),
+                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0),
+                        _ => 1.0,
+                    };
+                }
                 CssPropertyName::FlexBasis => style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh),
 
                 CssPropertyName::Transform => style.transform = parse_transform(&decl.value),
@@ -162,10 +181,6 @@ fn lv_to_px_font(lv: &LengthValue, vw: f32, vh: f32, font_size: f32) -> f32 {
     }
 }
 
-fn parse_length(value: &PropertyValue) -> Option<f32> {
-    parse_length_vp(value, 800.0, 600.0)
-}
-
 #[allow(dead_code)]
 fn resolve_length_for_unit(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
     lv_to_px(lv, vw, vh)
@@ -178,6 +193,13 @@ fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
+}
+
+fn lv_to_px_vertical(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
+    if lv.unit == Unit::Percent {
+        return lv.value * vh / 100.0;
+    }
+    lv_to_px(lv, vw, vh)
 }
 
 fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
@@ -204,10 +226,11 @@ fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[O
     if parts.is_empty() || parts.len() > 4 { return None; }
 
     let mut vals: Vec<Option<f32>> = Vec::with_capacity(parts.len());
-    for p in &parts {
+    for (i, p) in parts.iter().enumerate() {
         if *p == "auto" { vals.push(None); continue; }
         if let Some(lv) = LengthValue::from_str(p) {
-            vals.push(Some(lv_to_px(&lv, vw, vh)));
+            let px = if i % 2 == 0 && parts.len() >= 2 { lv_to_px_vertical(&lv, vw, vh) } else { lv_to_px(&lv, vw, vh) };
+            vals.push(Some(px));
         } else if let Ok(n) = p.parse::<f32>() {
             vals.push(Some(n));
         } else { return None; }
@@ -319,18 +342,6 @@ fn parse_transition(value: &PropertyValue) -> Option<Transition> {
         }
         _ => None,
     }
-}
-
-/// Parse a space-separated CSS shorthand (1-4 values) into side values.
-fn apply_sides(
-    top: &mut Option<f32>,
-    right: &mut Option<f32>,
-    bottom: &mut Option<f32>,
-    left: &mut Option<f32>,
-    name: &str,
-    value: &PropertyValue,
-) {
-    apply_sides_vp(top, right, bottom, left, name, value, 800.0, 600.0)
 }
 
 fn apply_sides_vp(
@@ -517,5 +528,32 @@ mod tests {
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.border_top_color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    }
+
+    #[test]
+    fn test_resolve_rgb_color() {
+        let css = "div { color: rgb(255, 0, 0); }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    }
+
+    #[test]
+    fn test_resolve_rgba_color() {
+        let css = "div { color: rgba(0, 255, 0, 0.5); }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 128 }));
+    }
+
+    #[test]
+    fn test_resolve_hsla_color() {
+        let css = "div { color: hsla(240, 100%, 50%, 0.25); }";
+        let stylesheet = parse(css);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 64 }));
     }
 }

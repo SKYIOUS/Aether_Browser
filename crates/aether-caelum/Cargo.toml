@@ -1,19 +1,24 @@
 [package]
 name = "aether-caelum"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A between-the-lines layout engine for Rust, implementing Flexbox, Grid, and Block layout"
 license = "MIT"
 repository = "https://github.com/SKYIOUS/aether-caelum"
 keywords = ["layout", "flexbox", "css", "grid", "ui"]
 categories = ["gui", "rendering::data-formats"]
+# Note: pre-release crate, not yet stable
 
 [dependencies]
 slotmap = "1.0"
 
 [features]
 default = ["content_size"]
+# Gated feature: content_size tracks content overflow bounds per node.
+# Disabling it strips the field from LayoutOutput for a minor memory saving.
 content_size = []
+# Enable layout debug logging (eprintln-based)
+debug_layout = []
 
 [package.metadata.docs.rs]
 all-features = true

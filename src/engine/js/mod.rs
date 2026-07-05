@@ -77,4 +77,16 @@ impl JSEngine {
             Err("No JS context".to_string())
         }
     }
+
+    /// Process pending JS microtasks (Promise resolutions etc.).
+    /// Should be called after timer/event dispatch to flush the microtask queue.
+    pub fn process_pending_js_work(&mut self) {
+        if let Some(ref ctx) = self.context {
+            ctx.with(|ctx: rquickjs::Ctx<'_>| {
+                if let Err(e) = ctx.eval::<(), _>("void 0") {
+                    plog!("JS", "Failed to flush microtasks: {:?}", e);
+                }
+            });
+        }
+    }
 }

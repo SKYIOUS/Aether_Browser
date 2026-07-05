@@ -56,7 +56,7 @@ pub(in super::super) struct GridItem {
     /// The items first baseline (horizontal)
     pub baseline: Option<f32>,
     /// Shim for baseline alignment that acts like an extra top margin
-    /// TODO: Support last baseline and vertical text baselines
+    /// ponytail: last baseline and vertical text baselines not implemented
     pub baseline_shim: f32,
 
     /// The item's definite row-start and row-end (same as `row` field, except in a different coordinate system)
@@ -491,12 +491,12 @@ impl GridItem {
                 let item_axis_tracks = &axis_tracks[self.track_range_excluding_lines(axis)];
 
                 // it is not a scroll container
-                // TODO: support overflow property
+                // ponytail: overflow property not checked for automatic minimum size
 
                 // it spans at least one track in that axis whose min track sizing function is auto
                 let spans_auto_min_track = axis_tracks
                     .iter()
-                    // TODO: should this be 'behaves as auto' rather than just literal auto?
+                    // ponytail: should check 'behaves as auto' rather than literal auto
                     .any(|track| track.min_track_sizing_function.is_auto());
 
                 // if it spans more than one track in that axis, none of those tracks are flexible

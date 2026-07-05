@@ -632,4 +632,52 @@ mod tests {
         let dv = &sheet.rules[0].declarations[0].value;
         assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 255 && c.b == 0));
     }
+
+    #[test]
+    fn test_parse_rgb_color() {
+        let css = "div { color: rgb(255, 0, 0); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 0 && c.b == 0 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_rgba_color() {
+        let css = "div { color: rgba(0, 255, 0, 0.5); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 0 && c.g == 255 && c.b == 0 && c.a == 128));
+    }
+
+    #[test]
+    fn test_parse_rgba_alpha_one() {
+        let css = "div { color: rgba(255, 0, 0, 1.0); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 0 && c.b == 0 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_rgb_spaces_around_commas() {
+        let css = "div { color: rgb(100 , 200 , 50); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 100 && c.g == 200 && c.b == 50 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_rgb_percentage() {
+        let css = "div { color: rgb(100%, 0%, 0%); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 255 && c.g == 0 && c.b == 0 && c.a == 255));
+    }
+
+    #[test]
+    fn test_parse_hsla_color_with_alpha() {
+        let css = "div { color: hsla(240, 100%, 50%, 0.25); }";
+        let sheet = parse(css);
+        let dv = &sheet.rules[0].declarations[0].value;
+        assert!(matches!(dv, PropertyValue::Color(c) if c.r == 0 && c.g == 0 && c.b == 255 && c.a == 64));
+    }
 }

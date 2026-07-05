@@ -659,7 +659,7 @@ fn perform_final_layout_on_in_flow_children(
     let available_space =
         Size { width: AvailableSpace::Definite(container_inner_width), height: AvailableSpace::MinContent };
 
-    // TODO: handle nested blocks with different widths
+    // ponytail: known limitation: nested blocks with different widths not handled (width is inherited from parent)
     if block_ctx.is_bfc_root() {
         block_ctx.set_width(container_outer_width);
         block_ctx.apply_content_box_inset([resolved_content_box_inset.left, resolved_content_box_inset.right]);
@@ -715,11 +715,7 @@ fn perform_final_layout_on_in_flow_children(
 
                 // Ensure that content that appears after a float does not get positioned before/above the float
                 //
-                // FIXME: this isn't quite right, because a second float at the same location
-                // shouldn't cause content to push down to it's level
-                // committed_y_offset = committed_y_offset.max(location.y);
-                // y_offset_for_absolute = y_offset_for_absolute.max(location.y);
-                // y_offset_for_float = y_offset_for_float.max(location.y);
+                // ponytail: known limitation: second float at same Y pushes content down; should only clamp on first float per row
 
                 // Convert the margin-box location returned by float placement into a border-box location
                 // for the output Layout
@@ -744,8 +740,7 @@ fn perform_final_layout_on_in_flow_children(
                 );
 
                 {
-                    // TODO: Should content size of floated boxes count as "inflow_content_size"
-                    // or should it be counted separately?
+                    // ponytail: known limitation: floated box content counted as inflow_content_size; spec is ambiguous
                     inflow_content_size = inflow_content_size.f32_max(compute_content_size_contribution(
                         location,
                         item_layout.size,
@@ -801,8 +796,7 @@ fn perform_final_layout_on_in_flow_children(
             } else {
                 item.size
                     .map_width(|width| {
-                        // TODO: Allow stretch-sizing to be conditional, as there are exceptions.
-                        // e.g. Table children of blocks do not stretch fit
+                        // ponytail: known limitation: stretch-sizing unconditional; table children should opt out
                         Some(width.unwrap_or(stretch_width).maybe_clamp(item.min_size.width, item.max_size.width))
                     })
                     .maybe_clamp(item.min_size, item.max_size)
@@ -827,7 +821,7 @@ fn perform_final_layout_on_in_flow_children(
                     .width
                     .expect("Same-bfc child will always have defined width due to stretch sizing");
 
-                // TODO: account for auto margins
+                // ponytail: known limitation: auto margins not accounted for in same-BFC child offset
                 let inset_left = item_non_auto_margin.left + content_box_inset.left;
                 let inset_right = container_outer_width - width - inset_left;
                 let insets = [inset_left, inset_right];
@@ -905,7 +899,7 @@ fn perform_final_layout_on_in_flow_children(
                     y: uncleared_y.max(clear_pos),
                 }
             } else {
-                // TODO: handle inset and margins
+                // ponytail: known limitation: inset and margins not applied to out-of-BFC child static position
                 Point {
                     x: match direction {
                         Direction::Ltr => float_avoiding_position.x,
@@ -929,7 +923,7 @@ fn perform_final_layout_on_in_flow_children(
                     y: committed_y_offset.max(clear_pos) + y_margin_offset + inset_offset.y,
                 }
             } else {
-                // TODO: handle inset and margins
+                // ponytail: known limitation: inset and margins not applied to out-of-BFC child final position
                 Point {
                     x: match direction {
                         Direction::Ltr => float_avoiding_position.x + resolved_margin.left + inset_offset.x,

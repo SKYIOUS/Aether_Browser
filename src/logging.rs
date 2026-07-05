@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -32,9 +30,15 @@ impl PipelineLog {
         let path = log_dir().join(format!("pipeline_{}.log", ts));
         let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
         if let Some(ref mut f) = file {
-            let _ = writeln!(f, "═══ Aether Browser Pipeline Log ═══");
-            let _ = writeln!(f, "Started: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-            let _ = writeln!(f, "────────────────────────────────────");
+            if let Err(e) = writeln!(f, "═══ Aether Browser Pipeline Log ═══") {
+                eprintln!("[logging] write failed: {}", e);
+            }
+            if let Err(e) = writeln!(f, "Started: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")) {
+                eprintln!("[logging] write failed: {}", e);
+            }
+            if let Err(e) = writeln!(f, "────────────────────────────────────") {
+                eprintln!("[logging] write failed: {}", e);
+            }
         }
         PipelineLog { file, start: Instant::now(), enabled: false }
     }
@@ -44,8 +48,12 @@ impl PipelineLog {
         let elapsed = self.start.elapsed();
         let ms = elapsed.as_secs_f64() * 1000.0;
         if let Some(ref mut f) = self.file {
-            let _ = writeln!(f, "[{:>10.3}ms][{}] {}", ms, section, msg);
-            let _ = f.flush();
+            if let Err(e) = writeln!(f, "[{:>10.3}ms][{}] {}", ms, section, msg) {
+                eprintln!("[logging] write failed: {}", e);
+            }
+            if let Err(e) = f.flush() {
+                eprintln!("[logging] flush failed: {}", e);
+            }
         }
     }
 }
@@ -55,7 +63,9 @@ pub fn set_enabled(enabled: bool) {
         log.enabled = enabled;
         if enabled {
             if let Some(f) = log.file.as_mut() {
-                let _ = writeln!(f, "═══ Logging ENABLED ═══");
+                if let Err(e) = writeln!(f, "═══ Logging ENABLED ═══") {
+                    eprintln!("[logging] write failed: {}", e);
+                }
             }
         }
     }
@@ -77,6 +87,7 @@ macro_rules! plog {
     };
 }
 
+#[allow(dead_code)] // ponytail: public API, useful for forcing LazyLock init early
 pub fn init() {
     LazyLock::force(&LOGGER);
 }

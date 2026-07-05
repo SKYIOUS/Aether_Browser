@@ -1,5 +1,7 @@
-use std::sync::{Arc, Mutex, RwLock, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::collections::HashMap;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 
 use iced::Color;
 use iced::widget::image::Handle;
@@ -11,12 +13,12 @@ use crate::engine::parser::Parser;
 use crate::engine::js::{JsBridge, JSEngine};
 use crate::plog;
 
-use super::extractor::{extract_elements, StyledElement};
+use super::extractor::{extract_elements_flat, StyledElement};
 use super::layout::apply_caelum_layout;
 
-static CSS_CACHE: OnceLock<RwLock<HashMap<String, Stylesheet>>> = OnceLock::new();
-fn css_cache() -> &'static RwLock<HashMap<String, Stylesheet>> {
-    CSS_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+static CSS_CACHE: OnceLock<Mutex<LruCache<String, Stylesheet>>> = OnceLock::new();
+fn css_cache() -> &'static Mutex<LruCache<String, Stylesheet>> {
+    CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
 }
 
 fn extract_styles(node: &Node, styles: &mut Vec<String>) {
@@ -87,35 +89,20 @@ fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>) {
     }
 }
 
-fn inject_js_output(dom: &mut Node, text: &str) {
+// ponytail: injects document.write() output into FlatNode vec
+fn inject_js_output_flat(bridge: &mut crate::engine::js::JsBridge, text: &str) {
     if text.is_empty() { return; }
-    fn is_body(node: &Node) -> bool {
-        matches!(&node.node_type, NodeType::Element(data) if data.tag_name.to_lowercase() == "body")
-    }
-    fn find_body_mut<'a>(node: &'a mut Node) -> Option<&'a mut Node> {
-        if is_body(node) { return Some(node); }
-        for child in &mut node.children {
-            if let Some(found) = find_body_mut(child) {
-                return Some(found);
+    if let Some(body_id) = bridge.body_id {
+        let child_ids = bridge.parse_html_fragment(text);
+        for &child_id in &child_ids {
+            if let Some(child) = bridge.nodes.get_mut(child_id as usize) {
+                child.parent = Some(body_id);
             }
         }
-        None
+        if let Some(body) = bridge.nodes.get_mut(body_id as usize) {
+            body.children.extend(child_ids);
+        }
     }
-    let target = if let Some(body) = find_body_mut(dom) { body } else { dom };
-    // ponytail: parse document.write() output as HTML fragment
-    let mut parser = crate::engine::parser::Parser::new(text.to_string());
-    let fragment = parser.parse_node();
-    target.children.extend(fragment.children);
-}
-
-fn run_blocking<T, F>(f: F) -> Result<T, String>
-where
-    T: Send + 'static,
-    F: FnOnce() -> T + Send + 'static,
-{
-    std::thread::spawn(f)
-        .join()
-        .map_err(|_| "blocking task panicked".to_string())
 }
 
 fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
@@ -144,22 +131,25 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> V
 }
 
 pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+    tokio::task::spawn_blocking(move || do_fetch_page_content_sync(url, content_width, viewport_h))
+        .await
+        .unwrap_or_else(|e| {
+            plog!("FETCH", "spawn_blocking join error: {}", e);
+            (String::new(), vec![], None)
+        })
+}
+
+fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     plog!("FETCH", "URL={}", url);
-    let response = match run_blocking({
-        let url = url.clone();
-        move || net::fetch_with_redirects(&url, 5, None)
-    }) {
-        Ok(Ok(resp)) => {
+    let response = match net::fetch_with_redirects(&url, 5, None) {
+        Ok(resp) => {
             plog!("FETCH", "Status=OK len={}", resp.body.len());
             resp
         }
-        Ok(Err(e)) => {
-            plog!("FETCH", "Fetch error: {}", e);
-            return (url.clone(), error_page(&url, &e.to_string(), content_width, viewport_h), None);
-        }
         Err(e) => {
-            plog!("FETCH", "Fetch task join error: {}", e);
-            return (url.clone(), error_page(&url, &e, content_width, viewport_h), None);
+            plog!("FETCH", "Fetch error: {}", e);
+            let reason = format!("{}", e);
+            return (url.clone(), error_page(&url, &reason, content_width, viewport_h), None);
         }
     };
     let net::Response { body: html, headers, final_url: page_url, .. } = response;
@@ -174,7 +164,7 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
     };
 
     let mut parser = Parser::new(html);
-    let mut dom_node = parser.parse_node();
+    let dom_node = parser.parse_node();
     plog!("PARSE", "DOM root has {} children", dom_node.children.len());
 
     let mut styles = Vec::new();
@@ -211,7 +201,7 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
             plog!("CSP", "Blocked external CSS: {}", resolved);
             continue;
         }
-        if let Ok(cache) = css_cache().read() {
+        if let Ok(mut cache) = css_cache().lock() {
             if let Some(cached) = cache.get(&resolved) {
                 plog!("CSS", "Cache HIT: {}", resolved);
                 stylesheet.rules.extend(cached.rules.clone());
@@ -219,11 +209,8 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
             }
         }
         plog!("CSS", "Fetching external CSS from {}", resolved);
-        match run_blocking({
-            let resolved = resolved.clone();
-            move || net::fetch(&resolved)
-        }) {
-            Ok(Ok((css_content, css_status))) => {
+        match net::fetch(&resolved) {
+            Ok((css_content, css_status)) => {
                 if css_status >= 400 {
                     plog!("CSS", "External CSS HTTP error {} for {}", css_status, resolved);
                 } else {
@@ -235,12 +222,9 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                         css_content
                     };
                     let parsed = crate::engine::stratus::parse(&trimmed);
-                    if let Ok(mut cache) = css_cache().write() {
-                        if cache.len() > 100 {
-                            cache.clear();
-                            plog!("CSS", "Cache evicted (size > 100)");
-                        }
-                        cache.insert(resolved.clone(), parsed.clone());
+                    if let Ok(mut cache) = css_cache().lock() {
+                        // ponytail: LruCache::put auto-evicts LRU entry when over capacity
+                        cache.put(resolved.clone(), parsed.clone());
                     }
                     let rules = parsed.rules;
                     let count = rules.len();
@@ -248,72 +232,70 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                     plog!("CSS", "Parsed {} rules from external CSS", count);
                 }
             }
-            Ok(Err(e)) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
-            Err(e) => { plog!("CSS", "Fetch task join error: {}", e); }
+            Err(e) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
         }
     }
     plog!("CSS", "Total stylesheet rules: {}", stylesheet.rules.len());
 
+    let js_enabled = super::is_js_enabled();
     let mut scripts = Vec::new();
     extract_scripts(&dom_node, &mut scripts);
-    plog!("JS", "Found {} script blocks", scripts.len());
+    plog!("JS", "Found {} script blocks (js_enabled={})", scripts.len(), js_enabled);
     let bridge = Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)));
     let mut js_engine = JSEngine::new();
-    let inline_scripts_ok = net::csp_allows_inline_script(&csp_policy);
-    for (si, script) in scripts.iter().enumerate() {
-        let code = match script {
-            ScriptSource::Inline(s) => {
-                if !inline_scripts_ok {
-                    plog!("CSP", "Blocked inline script {} (no 'unsafe-inline')", si);
-                    continue;
-                }
-                plog!("JS", "Executing inline script {}", si);
-                s.clone()
-            }
-            ScriptSource::External(src) => {
-                let resolved = net::resolve_url(src, &url);
-                if !net::csp_allows_script_url(&resolved, &page_url, &csp_policy) {
-                    plog!("CSP", "Blocked external script: {}", resolved);
-                    continue;
-                }
-                plog!("JS", "Fetching external script from {}", resolved);
-                match run_blocking({
-                    let resolved = resolved.clone();
-                    move || net::fetch(&resolved)
-                }) {
-                    Ok(Ok((fetched, _status))) => fetched,
-                    Ok(Err(e)) => {
-                        plog!("JS", "Failed to fetch external script: {}", e);
+    if js_enabled {
+        let inline_scripts_ok = net::csp_allows_inline_script(&csp_policy);
+        for (si, script) in scripts.iter().enumerate() {
+            let code = match script {
+                ScriptSource::Inline(s) => {
+                    if !inline_scripts_ok {
+                        plog!("CSP", "Blocked inline script {} (no 'unsafe-inline')", si);
                         continue;
                     }
-                    Err(e) => {
-                        plog!("JS", "Fetch task join error: {}", e);
+                    plog!("JS", "Executing inline script {}", si);
+                    s.clone()
+                }
+                ScriptSource::External(src) => {
+                    let resolved = net::resolve_url(src, &url);
+                    if !net::csp_allows_script_url(&resolved, &page_url, &csp_policy) {
+                        plog!("CSP", "Blocked external script: {}", resolved);
                         continue;
                     }
+                    plog!("JS", "Fetching external script from {}", resolved);
+                    match net::fetch(&resolved) {
+                        Ok((fetched, _status)) => fetched,
+                        Err(e) => {
+                            plog!("JS", "Failed to fetch external script: {}", e);
+                            continue;
+                        }
+                    }
                 }
+            };
+            if let Err(e) = js_engine.execute_with_bridge(&code, &bridge) {
+                plog!("JS", "Script execution failed: {}", e);
             }
-        };
-        if let Err(e) = js_engine.execute_with_bridge(&code, &bridge) {
-            plog!("JS", "Script execution failed: {}", e);
         }
+    } else {
+        plog!("JS", "JavaScript disabled by user setting");
     }
-    let (modified_dom, js_output) = {
+    let flat_nodes = {
         let mut guard = bridge.lock().unwrap_or_else(|e| e.into_inner());
-        let dom = guard.to_dom();
         let output = guard.take_output();
-        (dom, output)
+        if !output.is_empty() {
+            plog!("JS", "Injecting JS output ({} chars)", output.len());
+            inject_js_output_flat(&mut guard, &output);
+        }
+        // ponytail: clone FlatNode vec for extraction; avoids to_dom() serialization
+        guard.nodes.clone()
     };
-    dom_node = modified_dom;
-    if !js_output.is_empty() {
-        plog!("JS", "Injecting JS output ({} chars)", js_output.len());
-        inject_js_output(&mut dom_node, &js_output);
-    }
 
-    let mut elements = Vec::new();
-    extract_elements(&dom_node, &mut elements, 0, &stylesheet, None, None, vec![], content_width, viewport_h);
+    let mut elements = Vec::with_capacity(flat_nodes.len().min(2000));
+    extract_elements_flat(&flat_nodes, &mut elements, &stylesheet, content_width, viewport_h);
     plog!("EXTRACT", "Extracted {} elements", elements.len());
     elements.truncate(2000);
 
+    // ponytail: per-page decoded image LRU, max 50 entries, evicted by clearing
+    let mut img_cache: HashMap<String, (f32, f32, Handle)> = HashMap::new();
     let mut img_count = 0;
     for el in elements.iter_mut() {
         if let Some(ref img_src) = el.image_url.clone() {
@@ -323,17 +305,16 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                 continue;
             }
             img_count += 1;
-            let bytes = match run_blocking({
-                let resolved = resolved.clone();
-                move || net::fetch_bytes(&resolved)
-            }) {
-                Ok(Ok(b)) => b,
-                Ok(Err(e)) => {
-                    plog!("IMAGES", "Failed to fetch image: {}", e);
-                    continue;
-                }
+            if let Some((w, h, handle)) = img_cache.get(&resolved) {
+                el.width = *w;
+                el.height = *h;
+                el.image_handle = Some(handle.clone());
+                continue;
+            }
+            let bytes = match net::fetch_bytes(&resolved) {
+                Ok(b) => b,
                 Err(e) => {
-                    plog!("IMAGES", "Fetch task join error: {}", e);
+                    plog!("IMAGES", "Failed to fetch image: {}", e);
                     continue;
                 }
             };
@@ -347,17 +328,20 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
                     } else {
                         1.0
                     };
-                    if scale < 1.0 {
+                    let (fw, fh, handle) = if scale < 1.0 {
                         let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
                         let (rw, rh) = resized.dimensions();
-                        el.width = rw as f32;
-                        el.height = rh as f32;
-                        el.image_handle = Some(Handle::from_rgba(rw, rh, resized.into_raw()));
+                        (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
                     } else {
-                        el.width = w as f32;
-                        el.height = h as f32;
-                        el.image_handle = Some(Handle::from_rgba(w, h, rgba.into_raw()));
+                        (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
+                    };
+                    el.width = fw;
+                    el.height = fh;
+                    el.image_handle = Some(handle.clone());
+                    if img_cache.len() >= 50 {
+                        img_cache.clear();
                     }
+                    img_cache.insert(resolved, (fw, fh, handle));
                 } else {
                     plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
                 }

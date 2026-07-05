@@ -85,7 +85,7 @@ impl<S: CheapCloneStr> NamedLineResolver<S> {
         let mut area_row_count = 0;
         if let Some(area_iter) = style.grid_template_areas() {
             for area in area_iter.into_iter() {
-                // TODO: Investigate eliminating clones
+                // ponytail: clone necessary because areas map owns entries
                 areas.insert(StrHasher(area.name.clone()), area.clone());
 
                 area_column_count = area_column_count.max(area.column_end.max(1) - 1);
@@ -338,7 +338,7 @@ impl<S: CheapCloneStr> NamedLineResolver<S> {
         if let Some(lines) = line_lookup.get(name) {
             return GridLine::from(get_line(filter_lines(lines), explicit_track_count, idx));
         } else {
-            // TODO: eliminate string allocations
+            // ponytail: string allocation needed for implicit name lookup; reuse if hot
             match end {
                 GridAreaEnd::Start => {
                     let implicit_name = format!("{name}-start");

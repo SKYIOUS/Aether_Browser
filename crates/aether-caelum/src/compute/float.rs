@@ -329,7 +329,7 @@ impl FloatContext {
             // to find the end segment:
             //   - The selected segment range must have enough height to contain the float
             //   - All of the segments in the range must have enough horizontal width to contain the float
-            //     TODO: must ensure that width is in the correct place.
+            //     ponytail: width check may be in wrong position for some edge cases
             loop {
                 // End segment does not exist:
                 //
@@ -370,7 +370,7 @@ impl FloatContext {
 
         // Short-circuit for zero-sized boxes
         if floated_box.width == 0.0 || floated_box.height == 0.0 {
-            // TODO: need to update last_placed_float?
+            // ponytail: last_placed_float not updated for zero-sized boxes; may affect subsequent placements
 
             return PlacedFloatedBox {
                 width: floated_box.width,

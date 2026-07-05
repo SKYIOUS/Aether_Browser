@@ -1,7 +1,3 @@
-#![allow(dead_code)]
-pub mod tokenizer;
-pub mod tree_builder;
-
 use aether_dom::Node;
 use std::collections::HashMap;
 

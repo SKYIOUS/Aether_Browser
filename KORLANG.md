@@ -44,7 +44,7 @@ Component BrowserHeader {
 
 ## 🔗 Rust Interoperability
 
-Korlang connects to Rust logic using the `Bridge` (`korlang/src/interop/`). Rust handlers are registered to respond to Korlang events like `on_click` or `on_submit`.
+Korlang connects to Rust logic via the VM's native function registry and event bridge. Rust handlers are registered to respond to Korlang events like `on_click` or `on_submit`.
 
 ## 📂 Implementation Location
 

@@ -104,12 +104,14 @@ pub(crate) fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSe
 pub(crate) fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
     let chars: Vec<char> = s.chars().collect();
     let mut simples = vec![];
-    while *pos < chars.len() {
-        skip_ws(s, pos);
-        if *pos >= chars.len() || chars[*pos] == '>' { break; }
+    skip_ws(s, pos);
+    loop {
+        if *pos >= chars.len() { break; }
+        if chars[*pos] == '>' || chars[*pos] == '+' || chars[*pos] == '~' || chars[*pos] == ',' { break; }
         if let Some(simple) = parse_simple_selector(s, pos) {
             simples.push(simple);
         } else { break; }
+        if *pos < chars.len() && chars[*pos].is_whitespace() { break; }
     }
     if simples.is_empty() { simples.push(SimpleSel::Universal); }
     CompoundSel { simples }
@@ -123,15 +125,13 @@ pub(crate) fn skip_ws(s: &str, pos: &mut usize) {
 pub(crate) fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
     let chars: Vec<char> = s.chars().collect();
     skip_ws(s, pos);
-    if *pos < chars.len() && chars[*pos] == '>' {
+    if *pos >= chars.len() { return None; }
+    if chars[*pos] == '>' {
         *pos += 1;
         skip_ws(s, pos);
         Some(Combinator::Child)
-    } else if *pos < chars.len() && chars[*pos].is_whitespace() {
-        skip_ws(s, pos);
-        if *pos < chars.len() { Some(Combinator::Descendant) } else { None }
     } else {
-        None
+        Some(Combinator::Descendant)
     }
 }
 
@@ -155,24 +155,35 @@ pub(crate) fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
 }
 
 pub(crate) fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
-    if let Some(node) = nodes.get(node_id as usize) {
-        if !matches_compound(node, &sel.compound) { return false; }
-        if let Some((combinator, rest)) = &sel.combinator {
-            match combinator {
-                Combinator::Descendant => {
-                    let mut current = node.parent;
-                    while let Some(pid) = current {
-                        if matches_complex(nodes, pid, rest) { return true; }
-                        current = nodes.get(pid as usize).and_then(|n| n.parent);
+    fn inner(nodes: &[FlatNode], node_id: u32, compound: &CompoundSel, combinator: &Option<(Combinator, Box<ComplexSel>)>) -> bool {
+        match combinator {
+            Some((combinator, rest)) => {
+                if !inner(nodes, node_id, &rest.compound, &rest.combinator) { return false; }
+                let node = match nodes.get(node_id as usize) { Some(n) => n, None => return false };
+                match combinator {
+                    Combinator::Child => {
+                        node.parent.is_some_and(|pid| {
+                            nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound))
+                        })
                     }
-                    false
-                }
-                Combinator::Child => {
-                    node.parent.is_some_and(|pid| matches_complex(nodes, pid, rest))
+                    Combinator::Descendant => {
+                        let mut current = node.parent;
+                        while let Some(pid) = current {
+                            if nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound)) {
+                                return true;
+                            }
+                            current = nodes.get(pid as usize).and_then(|n| n.parent);
+                        }
+                        false
+                    }
                 }
             }
-        } else { true }
-    } else { false }
+            None => {
+                nodes.get(node_id as usize).is_some_and(|n| matches_compound(n, compound))
+            }
+        }
+    }
+    inner(nodes, node_id, &sel.compound, &sel.combinator)
 }
 
 // ── Timer entry ─────────────────────────────────────────────────────
@@ -252,7 +263,10 @@ pub(crate) fn parse_rfc1123_date(s: &str) -> Option<Instant> {
     let hour: u32 = time[0].parse().ok()?;
     let min: u32 = time[1].parse().ok()?;
     let sec: u32 = time[2].parse().ok()?;
-    // ponytail: naive date→duration, ignores leap seconds and pre-1970 dates
+    // ponytail: naive date→duration, ignores leap seconds
+    if year < 1970 {
+        return Some(Instant::now()); // pre-1970 = already expired
+    }
     let days = (year - 1970) * 365 + (year - 1969) / 4
         + [0,31,59,90,120,151,181,212,243,273,304,334][month_idx as usize] as i64
         + if month_idx > 1 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 }
@@ -366,6 +380,7 @@ pub struct JsBridge {
     pub(crate) next_timer_id: u32,
     pub(crate) timers: Vec<TimerEntry>,
     pub(crate) event_listeners: Vec<EventListenerEntry>,
+    pub(crate) js_errors: Vec<String>,
 }
 
 impl JsBridge {
@@ -386,11 +401,19 @@ impl JsBridge {
             next_timer_id: 1,
             timers: vec![],
             event_listeners: vec![],
+            js_errors: vec![],
         }
     }
 
     pub fn new() -> Self {
         Self::new_internal("https://localhost")
+    }
+
+    pub fn report_js_error(&mut self, msg: String) {
+        self.js_errors.push(msg);
+        if self.js_errors.len() > 50 {
+            self.js_errors.remove(0);
+        }
     }
 
     pub fn document_write(&mut self, text: &str) {
@@ -438,7 +461,7 @@ impl JsBridge {
             Self::flatten(root, &mut n);
             n
         };
-        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![] };
+        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![], js_errors: vec![] };
         bridge.body_id = bridge.find_body();
         bridge
     }
@@ -675,7 +698,7 @@ impl JsBridge {
         });
     }
 
-    fn parse_html_fragment(&mut self, html: &str) -> Vec<u32> {
+    pub(crate) fn parse_html_fragment(&mut self, html: &str) -> Vec<u32> {
         self.parse_html_fragment_depth(html, 0)
     }
 
@@ -1006,6 +1029,34 @@ const SHIM_JS: &str = r#"
 (function() {
     if (window.__domShimLoaded) return;
     window.__domShimLoaded = true;
+
+    // ── Closure registry (preserves captured variables across timer/event ticks) ──
+    var __closureRegistry = {};
+    var __nextClosureId = 0;
+    var __handlerRegistry = {};
+    var __nextHandlerId = 0;
+
+    window.__executeClosure = function(id) {
+        var fn = __closureRegistry[id];
+        if (fn) {
+            try { fn(); } catch(e) { __reportError(String(e), e.lineNumber || 0); }
+        }
+    };
+    window.__executeHandler = function(id, nodeId) {
+        var fn = __handlerRegistry[id];
+        if (fn) {
+            try { fn({ target: { __id: nodeId } }); } catch(e) { __reportError(String(e), e.lineNumber || 0); }
+        }
+    };
+
+    // ── window.onerror ────────────────────────────────────────────────
+    window.onerror = null;
+    window.__triggerOnError = function(msg, url, line) {
+        if (typeof window.onerror === 'function') {
+            try { window.onerror(msg, url, line); } catch(e) {}
+        }
+    };
+
     window.location = {
         href: "",
         reload: function() { __window_reload(); }
@@ -1016,11 +1067,10 @@ const SHIM_JS: &str = r#"
     };
     window.fetch = function(url) {
         return Promise.resolve({
-            json: function() { return Promise.resolve(JSON.parse(__window_fetch(url))); },
-            text: function() { return Promise.resolve(__window_fetch(url)); }
+            json: function() { return Promise.resolve(JSON.parse(__fetch(url))); },
+            text: function() { return Promise.resolve(__fetch(url)); }
         });
     };
-
 
     function makeStyleObject(id) {
         var style = {};
@@ -1087,7 +1137,7 @@ const SHIM_JS: &str = r#"
             },
             click: function() {
                 __dom_dispatch_click(id);
-            }
+            },
 
             get id() {
                 return __dom_getAttribute(id, "id") || "";
@@ -1112,7 +1162,13 @@ const SHIM_JS: &str = r#"
                 __dom_setAttribute(id, String(name), "");
             },
             addEventListener: function(type, handler) {
-                __addEventListener(id, String(type), handler.toString());
+                if (typeof handler === 'function') {
+                    var hid = __nextHandlerId++;
+                    __handlerRegistry[hid] = handler;
+                    __addEventListener(id, String(type), '__executeHandler(' + hid + ',' + id + ')');
+                } else {
+                    __addEventListener(id, String(type), String(handler));
+                }
             },
             removeEventListener: function(type, handler) {
                 __removeEventListener(id, String(type), handler.toString());
@@ -1297,13 +1353,21 @@ const SHIM_JS: &str = r#"
     // ── window.setTimeout / setInterval ─────────────────────────────
 
     window.setTimeout = function(fn, ms) {
-        var src = fn.toString();
-        return __setTimeout(src, ms || 0);
+        if (typeof fn === 'function') {
+            var cid = __nextClosureId++;
+            __closureRegistry[cid] = fn;
+            return __setTimeout('__executeClosure(' + cid + ')', ms || 0);
+        }
+        return __setTimeout(String(fn), ms || 0);
     };
 
     window.setInterval = function(fn, ms) {
-        var src = fn.toString();
-        return __setInterval(src, ms || 0);
+        if (typeof fn === 'function') {
+            var cid = __nextClosureId++;
+            __closureRegistry[cid] = fn;
+            return __setInterval('__executeClosure(' + cid + ')', ms || 0);
+        }
+        return __setInterval(String(fn), ms || 0);
     };
 
     window.clearTimeout = function(id) {
@@ -1477,6 +1541,11 @@ const SHIM_JS: &str = r#"
         storage.key = function(i) { return _localStorageKey(Number(i)); };
         window.localStorage = storage;
     })();
+
+    // ── Korlang ────────────────────────────────────────────────────
+    window.evalKorlang = function(code) {
+        return __evalKorlang(String(code));
+    };
 
 })();
 "#;
@@ -2034,11 +2103,31 @@ pub fn register_browser_api(
     fn_history_go.set_name("_historyGo")?;
     globals.set("_historyGo", fn_history_go)?;
 
-    // ── Inject JS shim ──────────────────────────────────────────────
-    if let Err(e) = ctx.eval::<(), _>(SHIM_JS) {
-        eprintln!("[JS] SHIM_JS eval failed: {:?}", e);
+    // ── Error reporting ────────────────────────────────────────────
+    {
+        let bridge_clone = Arc::clone(bridge);
+        let fn_report = Function::new(ctx.clone(), move |msg: String, line: i32| {
+            if let Ok(mut b) = bridge_clone.lock() {
+                let entry = if line > 0 { format!("Error: {} (line {})", msg, line) } else { format!("Error: {}", msg) };
+                b.report_js_error(entry);
+            }
+        })?;
+        fn_report.set_name("__reportError")?;
+        globals.set("__reportError", fn_report)?;
     }
 
+    // ── Inject JS shim ──────────────────────────────────────────────
+    if let Err(e) = ctx.eval::<(), _>(SHIM_JS) {
+        plog!("JS", "SHIM_JS eval failed: {:?}", e);
+    }
+
+
+    // ── Korlang integration ──────────────────────────────────────────
+    let fn_eval_korlang = Function::new(ctx.clone(), move |code: String| -> String {
+        crate::engine::korlang::eval_korlang(&code).unwrap_or_else(|e| e)
+    })?;
+    fn_eval_korlang.set_name("__evalKorlang")?;
+    globals.set("__evalKorlang", fn_eval_korlang)?;
 
     // ponytail: __vault_savePassword removed — would need encrypted storage, add when login forms are supported
 Ok(())

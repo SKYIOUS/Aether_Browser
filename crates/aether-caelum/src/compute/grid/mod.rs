@@ -309,7 +309,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         &mut columns,
         &mut items,
         |track: &GridTrack, _, _| Some(track.base_size),
-        false, // TODO: Support baseline alignment in the vertical axis
+        false, // ponytail: baseline alignment in vertical axis not implemented
     );
     let initial_row_sum = rows.iter().map(|track| track.base_size).sum::<f32>();
     inner_node_size.height = inner_node_size.height.or_else(|| initial_row_sum.into());
@@ -372,7 +372,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Column sizing must be re-run (once) if:
     //   - The grid container's width was initially indefinite and there are any columns with percentage track sizing functions
     //   - Any grid item crossing an intrinsically sized track's min content contribution width has changed
-    // TODO: Only rerun sizing for tracks that actually require it rather than for all tracks if any need it.
+    // ponytail: reruns sizing for ALL tracks instead of only affected tracks (performance)
     let mut rerun_column_sizing;
 
     let has_percentage_column = columns.iter().any(|track| track.uses_percentage());
@@ -432,7 +432,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         // Row sizing must be re-run (once) if:
         //   - The grid container's height was initially indefinite and there are any rows with percentage track sizing functions
         //   - Any grid item crossing an intrinsically sized track's min content contribution height has changed
-        // TODO: Only rerun sizing for tracks that actually require it rather than for all tracks if any need it.
+        // ponytail: reruns sizing for ALL tracks instead of only affected tracks (performance)
         let mut rerun_row_sizing;
 
         let has_percentage_row = rows.iter().any(|track| track.uses_percentage());
@@ -486,7 +486,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 &mut columns,
                 &mut items,
                 |track: &GridTrack, _, _| Some(track.base_size),
-                false, // TODO: Support baseline alignment in the vertical axis
+        false, // ponytail: baseline alignment in vertical axis not implemented
             );
         }
     }
@@ -632,7 +632,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             };
             drop(child_style);
 
-            // TODO: Baseline alignment support for absolutely positioned items (should check if is actually specified)
+            // ponytail: baseline alignment for absolutely positioned items not implemented
             #[cfg_attr(not(feature = "content_size"), allow(unused_variables))]
             let (content_size_contribution, _, _) =
                 align_and_position_item(tree, child, order, grid_area, container_alignment_styles, 0.0, direction);
