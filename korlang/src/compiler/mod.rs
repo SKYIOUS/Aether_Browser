@@ -1,9 +1,9 @@
 //! Two-phase compiler: lexer → tokens → parser → AST → bytecode.
-//! The public entry point is [`compile()`] which takes Korlang source text
-//! and returns a `Vec<OpCode>` consumable by [`VirtualMachine`](crate::vm::VirtualMachine).
+//! The public entry point is compile() which takes Korlang source text
+//! and returns a Vec<OpCode> consumable by VirtualMachine.
 
-pub mod lexer; pub mod parser;
-use lexer::Lexer;
+pub mod lexer; pub mod parser; pub mod formatter;
+use lexer::{Lexer, Token};
 use parser::{Parser, Node, Element, Expr};
 use crate::vm::{OpCode, Value};
 
@@ -16,16 +16,16 @@ pub fn compile(source: &str) -> Vec<OpCode> {
     bytecode
 }
 
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-
-static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
-fn next_label() -> usize {
-    LABEL_COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
 fn emit_component(comp: &parser::Component, ops: &mut Vec<OpCode>) {
-    for state in &comp.states { emit_expr(&state.default_value, ops); ops.push(OpCode::Store(state.name.clone())); }
+    for state in &comp.states {
+        emit_expr(&state.default_value, ops);
+        ops.push(OpCode::Store(state.name.clone()));
+    }
+    for func in &comp.functions {
+        let mut body_ops = Vec::new();
+        for node in &func.body { emit_node(node, &mut body_ops); }
+        ops.push(OpCode::StoreFn(func.name.clone(), func.params.clone(), body_ops));
+    }
     emit_node(&comp.root, ops);
 }
 
@@ -33,12 +33,11 @@ fn emit_node(node: &Node, ops: &mut Vec<OpCode>) {
     match node {
         Node::Element(el) => emit_element(el, ops),
         Node::IfElse { condition, then_branch, else_branch } => emit_if_else(condition, then_branch, else_branch, ops),
-        Node::ForLoop { var, count, body } => emit_for_loop(var, count, body, ops),
+        Node::ForLoop { var, collection, body } => emit_for_loop(var, collection, body, ops),
     }
 }
 
 fn emit_if_else(condition: &Expr, then_branch: &[Node], else_branch: &[Node], ops: &mut Vec<OpCode>) {
-    let _label_id = next_label();
     emit_expr(condition, ops);
     ops.push(OpCode::JumpIfFalse(0));
     let else_jump_idx = ops.len() - 1;
@@ -52,23 +51,16 @@ fn emit_if_else(condition: &Expr, then_branch: &[Node], else_branch: &[Node], op
     ops[end_jump_idx] = OpCode::Jump(end_ip);
 }
 
-fn emit_for_loop(var: &str, count: &Expr, body: &[Node], ops: &mut Vec<OpCode>) {
-    match count {
-        Expr::Number(n) => {
-            let c = *n as usize;
-            let for_ip = ops.len();
-            ops.push(OpCode::ForEach(var.to_string(), c));
-            for child in body { emit_node(child, ops); }
-            ops.push(OpCode::Jump(for_ip));
-        }
-        _ => {
-            let c = 0;
-            let for_ip = ops.len();
-            ops.push(OpCode::ForEach(var.to_string(), c));
-            for child in body { emit_node(child, ops); }
-            ops.push(OpCode::Jump(for_ip));
-        }
-    }
+fn emit_for_loop(var: &str, collection: &Expr, body: &[Node], ops: &mut Vec<OpCode>) {
+    emit_expr(collection, ops);
+    let for_ip = ops.len();
+    ops.push(OpCode::ForEach(var.to_string(), 0));
+    ops.push(OpCode::JumpIfFalse(0));
+    let exit_jump_idx = ops.len() - 1;
+    for child in body { emit_node(child, ops); }
+    ops.push(OpCode::Jump(for_ip));
+    let end_ip = ops.len();
+    ops[exit_jump_idx] = OpCode::JumpIfFalse(end_ip);
 }
 
 fn emit_element(el: &Element, ops: &mut Vec<OpCode>) {
@@ -83,6 +75,16 @@ fn emit_expr(expr: &Expr, ops: &mut Vec<OpCode>) {
         Expr::Literal(s) => ops.push(OpCode::Push(Value::String(s.clone()))),
         Expr::Number(n) => ops.push(OpCode::Push(Value::Number(*n))),
         Expr::Identifier(id) | Expr::Binding(id) => ops.push(OpCode::Load(id.clone())),
+        Expr::Call { name, args } => {
+            let argc = args.len();
+            for arg in args { emit_expr(arg, ops); }
+            ops.push(OpCode::Call(name.clone(), argc));
+        }
+        Expr::List(items) => {
+            let n = items.len();
+            for item in items { emit_expr(item, ops); }
+            ops.push(OpCode::MakeList(n));
+        }
         Expr::Interpolated { parts, vars } => {
             for i in 0..vars.len() {
                 ops.push(OpCode::Push(Value::String(parts[i].clone())));
@@ -93,6 +95,36 @@ fn emit_expr(expr: &Expr, ops: &mut Vec<OpCode>) {
             }
             let total = parts.len() + vars.len();
             ops.push(OpCode::Interpolate(total));
+        }
+        Expr::BinaryOp { left, op, right } => {
+            emit_expr(left, ops);
+            emit_expr(right, ops);
+            match op {
+                Token::Plus => ops.push(OpCode::Add),
+                Token::Minus => ops.push(OpCode::Sub),
+                Token::Star => ops.push(OpCode::Mul),
+                Token::Slash => ops.push(OpCode::Div),
+                Token::And => ops.push(OpCode::And),
+                Token::Or => ops.push(OpCode::Or),
+                Token::Eq => ops.push(OpCode::Eq),
+                Token::Neq => ops.push(OpCode::Neq),
+                Token::Lt => ops.push(OpCode::Lt),
+                Token::Gt => ops.push(OpCode::Gt),
+                Token::Le => ops.push(OpCode::Le),
+                Token::Ge => ops.push(OpCode::Ge),
+                _ => {}
+            }
+        }
+        Expr::UnaryOp { op, expr } => {
+            emit_expr(expr, ops);
+            match op {
+                Token::Not => ops.push(OpCode::Not),
+                Token::Minus => {
+                    ops.push(OpCode::Push(Value::Number(-1.0)));
+                    ops.push(OpCode::Mul);
+                }
+                _ => {}
+            }
         }
     }
 }

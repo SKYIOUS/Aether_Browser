@@ -28,6 +28,32 @@ pub fn eval_korlang(source: &str) -> Result<String, String> {
 }
 
 pub fn register_default_callbacks(vm: &mut korlang::VirtualMachine) {
+    vm.register_native("String.split", Arc::new(|args: &[korlang::Value]| {
+        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(sep))) = (args.get(0), args.get(1)) {
+            let parts: Vec<korlang::Value> = s.split(sep).map(|p| korlang::Value::String(p.to_string())).collect();
+            return korlang::Value::List(parts);
+        }
+        korlang::Value::List(vec![])
+    }));
+    vm.register_native("String.replace", Arc::new(|args: &[korlang::Value]| {
+        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(from)), Some(korlang::Value::String(to))) = (args.get(0), args.get(1), args.get(2)) {
+            return korlang::Value::String(s.replace(from, to));
+        }
+        korlang::Value::None
+    }));
+        vm.register_native("String.split", Arc::new(|args: &[korlang::Value]| {
+        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(sep))) = (args.get(0), args.get(1)) {
+            let parts: Vec<korlang::Value> = s.split(sep).map(|p| korlang::Value::String(p.to_string())).collect();
+            return korlang::Value::List(parts);
+        }
+        korlang::Value::List(vec![])
+    }));
+    vm.register_native("String.replace", Arc::new(|args: &[korlang::Value]| {
+        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(from)), Some(korlang::Value::String(to))) = (args.get(0), args.get(1), args.get(2)) {
+            return korlang::Value::String(s.replace(from, to));
+        }
+        korlang::Value::None
+    }));
     vm.register_native("print", Arc::new(|args: &[korlang::Value]| {
         let s: Vec<String> = args.iter().map(|v| v.to_string_val()).collect();
         println!("[korlang] {}", s.join(" "));

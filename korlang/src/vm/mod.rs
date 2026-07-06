@@ -1,12 +1,7 @@
 //! Stack-based VM that executes Korlang bytecode.
-//! Operates on a stack of [`Value`] with a persistent [`heap`](Self::heap)
-//! for variables and loop state. Elements are created as [`KorObject`] nodes
-//! and assembled via `AddChild`, producing a UI component tree.
-
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
-// ponytail: simple native fn pointer; replace with proper FFI when more than ~5 callbacks
 pub type NativeFn = Arc<dyn Fn(&[Value]) -> Value + Send + Sync>;
 
 #[derive(Debug, Clone)]
@@ -17,10 +12,15 @@ pub enum OpCode {
     CreateElement(String),
     SetProperty(String),
     AddChild,
+    Add, Sub, Mul, Div,
+    And, Or, Not,
+    Eq, Neq, Lt, Gt, Le, Ge,
+    MakeList(usize), ListLen, ListGet,
     Jump(usize),
     JumpIfFalse(usize),
     Label(String),
     Call(String, usize),
+    StoreFn(String, Vec<String>, Vec<OpCode>),
     Interpolate(usize),
     ForEach(String, usize),
     Dup,
@@ -32,6 +32,7 @@ pub enum Value {
     String(String),
     Number(f64),
     Bool(bool),
+    List(Vec<Value>),
     Object(Arc<Mutex<KorObject>>),
     None,
 }
@@ -43,7 +44,27 @@ impl Value {
             Value::Number(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::None => "none".to_string(),
+            Value::List(_) => "[list]".to_string(),
             Value::Object(_) => "[object]".to_string(),
+        }
+    }
+    pub fn to_bool(&self) -> bool {
+        match self {
+            Value::Bool(b) => *b,
+            Value::Number(n) => *n != 0.0,
+            Value::String(s) => !s.is_empty(),
+            Value::None => false,
+            Value::List(l) => !l.is_empty(),
+            Value::Object(_) => true,
+        }
+    }
+    pub fn equals(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::None, Value::None) => true,
+            _ => false,
         }
     }
 }
@@ -60,6 +81,7 @@ pub struct VirtualMachine {
     pub heap: HashMap<String, Value>,
     pub builtins: HashMap<String, Value>,
     pub native_funcs: HashMap<String, NativeFn>,
+    pub functions: HashMap<String, (Vec<String>, Vec<OpCode>)>,
     instruction_pointer: usize,
 }
 
@@ -70,179 +92,197 @@ impl VirtualMachine {
             heap: HashMap::new(),
             builtins: HashMap::new(),
             native_funcs: HashMap::new(),
+            functions: HashMap::new(),
             instruction_pointer: 0,
         }
     }
-
-    pub fn set_builtin(&mut self, name: &str, value: Value) {
-        self.builtins.insert(name.to_string(), value);
-    }
-
-    pub fn get_builtin(&self, name: &str) -> Option<&Value> {
-        self.builtins.get(name)
-    }
-
-    pub fn register_native(&mut self, name: &str, f: NativeFn) {
-        self.native_funcs.insert(name.to_string(), f);
-    }
+    pub fn set_builtin(&mut self, name: &str, value: Value) { self.builtins.insert(name.to_string(), value); }
+    pub fn get_builtin(&self, name: &str) -> Option<&Value> { self.builtins.get(name) }
+    pub fn register_native(&mut self, name: &str, f: NativeFn) { self.native_funcs.insert(name.to_string(), f); }
 
     pub fn execute(&mut self, bytecode: Vec<OpCode>) {
         let mut ip = 0usize;
         while ip < bytecode.len() {
             match bytecode[ip].clone() {
                 OpCode::Push(v) => { self.stack.push(v); ip += 1; }
+                OpCode::Add => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Number(na + nb)); }
+                    else { self.stack.push(Value::None); }
+                    ip += 1;
+                }
+                OpCode::Sub => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Number(na - nb)); }
+                    else { self.stack.push(Value::None); }
+                    ip += 1;
+                }
+                OpCode::Mul => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Number(na * nb)); }
+                    else { self.stack.push(Value::None); }
+                    ip += 1;
+                }
+                OpCode::Div => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Number(if nb != 0.0 { na / nb } else { 0.0 })); }
+                    else { self.stack.push(Value::None); }
+                    ip += 1;
+                }
+                OpCode::And => {
+                    let b = self.stack.pop().unwrap_or(Value::Bool(false));
+                    let a = self.stack.pop().unwrap_or(Value::Bool(false));
+                    self.stack.push(Value::Bool(a.to_bool() && b.to_bool()));
+                    ip += 1;
+                }
+                OpCode::Or => {
+                    let b = self.stack.pop().unwrap_or(Value::Bool(false));
+                    let a = self.stack.pop().unwrap_or(Value::Bool(false));
+                    self.stack.push(Value::Bool(a.to_bool() || b.to_bool()));
+                    ip += 1;
+                }
+                OpCode::Not => {
+                    let a = self.stack.pop().unwrap_or(Value::Bool(false));
+                    self.stack.push(Value::Bool(!a.to_bool()));
+                    ip += 1;
+                }
+                OpCode::Eq => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    self.stack.push(Value::Bool(a.equals(&b)));
+                    ip += 1;
+                }
+                OpCode::Neq => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    self.stack.push(Value::Bool(!a.equals(&b)));
+                    ip += 1;
+                }
+                OpCode::Lt => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Bool(na < nb)); }
+                    else { self.stack.push(Value::Bool(false)); }
+                    ip += 1;
+                }
+                OpCode::Gt => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Bool(na > nb)); }
+                    else { self.stack.push(Value::Bool(false)); }
+                    ip += 1;
+                }
+                OpCode::Le => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Bool(na <= nb)); }
+                    else { self.stack.push(Value::Bool(false)); }
+                    ip += 1;
+                }
+                OpCode::Ge => {
+                    let b = self.stack.pop().unwrap_or(Value::None);
+                    let a = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::Number(na), Value::Number(nb)) = (a, b) { self.stack.push(Value::Bool(na >= nb)); }
+                    else { self.stack.push(Value::Bool(false)); }
+                    ip += 1;
+                }
+                OpCode::MakeList(n) => {
+                    let mut items = Vec::with_capacity(n);
+                    for _ in 0..n { if let Some(v) = self.stack.pop() { items.push(v); } }
+                    items.reverse();
+                    self.stack.push(Value::List(items));
+                    ip += 1;
+                }
+                OpCode::ListLen => {
+                    if let Some(Value::List(l)) = self.stack.pop() { self.stack.push(Value::Number(l.len() as f64)); }
+                    else { self.stack.push(Value::Number(0.0)); }
+                    ip += 1;
+                }
+                OpCode::ListGet => {
+                    let idx = self.stack.pop().unwrap_or(Value::Number(0.0));
+                    let list = self.stack.pop().unwrap_or(Value::None);
+                    if let (Value::List(l), Value::Number(n)) = (list, idx) {
+                        let i = n as usize;
+                        if i < l.len() { self.stack.push(l[i].clone()); }
+                        else { self.stack.push(Value::None); }
+                    } else { self.stack.push(Value::None); }
+                    ip += 1;
+                }
                 OpCode::Load(name) => {
-                    let v = self.heap.get(&name)
-                        .or_else(|| self.builtins.get(&name))
-                        .cloned()
-                        .unwrap_or(Value::None);
+                    let v = self.heap.get(&name).or_else(|| self.builtins.get(&name)).cloned().unwrap_or(Value::None);
                     self.stack.push(v);
                     ip += 1;
                 }
-                OpCode::Store(name) => {
-                    if let Some(v) = self.stack.pop() {
-                        self.heap.insert(name, v);
-                    }
-                    ip += 1;
-                }
+                OpCode::Store(name) => { if let Some(v) = self.stack.pop() { self.heap.insert(name, v); } ip += 1; }
                 OpCode::CreateElement(tag) => {
-                    let obj = KorObject {
-                        tag,
-                        properties: HashMap::new(),
-                        children: Vec::new(),
-                    };
+                    let obj = KorObject { tag, properties: HashMap::new(), children: Vec::new() };
                     self.stack.push(Value::Object(Arc::new(Mutex::new(obj))));
                     ip += 1;
                 }
                 OpCode::SetProperty(name) => {
-                    if self.stack.len() < 2 {
-                        eprintln!("vm: stack underflow in SetProperty (need 2, have {})", self.stack.len());
-                        ip += 1; continue;
-                    }
-                    let val = self.stack.pop().unwrap();
-                    if let Some(Value::Object(obj)) = self.stack.last() {
-                        obj.lock().unwrap_or_else(|e| e.into_inner()).properties.insert(name, val);
-                    }
+                    let val = if let Some(v) = self.stack.pop() { v } else { ip += 1; continue; };
+                    if let Some(Value::Object(obj)) = self.stack.last() { obj.lock().unwrap().properties.insert(name, val); }
                     ip += 1;
                 }
                 OpCode::AddChild => {
-                    if self.stack.len() < 2 {
-                        eprintln!("vm: stack underflow in AddChild (need 2, have {})", self.stack.len());
-                        ip += 1; continue;
-                    }
-                    let child = self.stack.pop().unwrap();
-                    if let Some(Value::Object(parent)) = self.stack.last() {
-                        parent.lock().unwrap_or_else(|e| e.into_inner()).children.push(child);
-                    }
+                    let child = if let Some(v) = self.stack.pop() { v } else { ip += 1; continue; };
+                    if let Some(Value::Object(parent)) = self.stack.last() { parent.lock().unwrap().children.push(child); }
                     ip += 1;
                 }
-                OpCode::Dup => {
-                    if self.stack.is_empty() {
-                        eprintln!("vm: stack underflow in Dup");
-                        ip += 1; continue;
-                    }
-                    let v = self.stack.last().unwrap().clone();
-                    self.stack.push(v);
-                    ip += 1;
-                }
-                OpCode::Pop => {
-                    if self.stack.is_empty() {
-                        eprintln!("vm: stack underflow in Pop");
-                        ip += 1; continue;
-                    }
-                    self.stack.pop();
-                    ip += 1;
-                }
-                OpCode::Jump(target) => {
-                    if target >= bytecode.len() {
-                        eprintln!("vm: Jump target {} out of bounds (len {})", target, bytecode.len());
-                        ip += 1; continue;
-                    }
-                    ip = target;
-                }
+                OpCode::Dup => { if let Some(v) = self.stack.last().cloned() { self.stack.push(v); } ip += 1; }
+                OpCode::Pop => { self.stack.pop(); ip += 1; }
+                OpCode::Jump(target) => { ip = target; }
                 OpCode::JumpIfFalse(target) => {
-                    if target >= bytecode.len() {
-                        eprintln!("vm: JumpIfFalse target {} out of bounds (len {})", target, bytecode.len());
-                        ip += 1; continue;
-                    }
                     let cond = self.stack.pop().unwrap_or(Value::Bool(false));
-                    let is_false = match cond {
-                        Value::Bool(b) => !b,
-                        Value::Number(n) => n == 0.0,
-                        Value::String(s) => s.is_empty(),
-                        Value::None => true,
-                        Value::Object(_) => false,
-                    };
-                    if is_false { ip = target; } else { ip += 1; }
+                    if !cond.to_bool() { ip = target; } else { ip += 1; }
                 }
                 OpCode::Label(_) => { ip += 1; }
                 OpCode::Call(name, argc) => {
-                    // ponytail: pop args (top = last arg), reverse for correct order
                     let mut args = Vec::with_capacity(argc);
-                    for _ in 0..argc {
-                        if let Some(v) = self.stack.pop() { args.push(v); } else { break; }
-                    }
+                    for _ in 0..argc { if let Some(v) = self.stack.pop() { args.push(v); } }
                     args.reverse();
-                    for (i, v) in args.iter().enumerate() {
-                        self.heap.insert(format!("__arg_{}", i), v.clone());
-                    }
-                    let result = if let Some(cb) = self.native_funcs.get(&name) {
-                        cb(&args)
+                    if let Some((params, body)) = self.functions.get(&name).cloned() {
+                        let old_heap = self.heap.clone();
+                        for (i, p) in params.iter().enumerate() { if i < args.len() { self.heap.insert(p.clone(), args[i].clone()); } }
+                        self.execute(body);
+                        self.heap = old_heap;
+                    } else if let Some(cb) = self.native_funcs.get(&name) {
+                        let res = cb(&args); self.stack.push(res);
                     } else {
-                        self.builtins.get(&name).cloned().unwrap_or(Value::None)
-                    };
-                    self.stack.push(result);
+                        let res = self.builtins.get(&name).cloned().unwrap_or(Value::None); self.stack.push(res);
+                    }
                     ip += 1;
                 }
+                OpCode::StoreFn(name, params, body) => { self.functions.insert(name, (params, body)); ip += 1; }
                 OpCode::Interpolate(n) => {
-                    let mut parts: Vec<String> = Vec::new();
-                    for _ in 0..n {
-                        if let Some(v) = self.stack.pop() {
-                            parts.push(v.to_string_val());
-                        }
-                    }
+                    let mut parts = Vec::new();
+                    for _ in 0..n { if let Some(v) = self.stack.pop() { parts.push(v.to_string_val()); } }
                     parts.reverse();
-                    let result = parts.concat();
-                    self.stack.push(Value::String(result));
+                    self.stack.push(Value::String(parts.concat()));
                     ip += 1;
                 }
-                OpCode::ForEach(var, count) => {
-                    let key = format!("__fe_{}", var);
-                    let end_key = format!("__fe_end_{}", var);
-                    let current = self.heap.get(&key).and_then(|v| {
-                        if let Value::Number(n) = v { Some(*n as usize) } else { None }
-                    }).unwrap_or(0);
-
-                    if current < count {
-                        // ponytail: scan once to cache the end-jump offset
-                        if current == 0 {
-                            let mut scan = ip + 1;
-                            while scan < bytecode.len() {
-                                if let OpCode::Jump(target) = &bytecode[scan] {
-                                    if *target == ip {
-                                        self.heap.insert(end_key, Value::Number((scan + 1) as f64));
-                                        break;
-                                    }
-                                }
-                                scan += 1;
-                            }
+                OpCode::ForEach(var, _) => {
+                    let list_val = self.stack.last().cloned().unwrap_or(Value::None);
+                    if let Value::List(l) = list_val {
+                        let key = format!("__fe_{}", var);
+                        let current = self.heap.get(&key).and_then(|v| if let Value::Number(n) = v { Some(*n as usize) } else { None }).unwrap_or(0);
+                        if current < l.len() {
+                            self.heap.insert(key, Value::Number((current + 1) as f64));
+                            self.heap.insert(var.clone(), l[current].clone());
+                            self.stack.push(Value::Bool(true));
+                        } else {
+                            self.heap.remove(&key); self.stack.pop(); self.stack.push(Value::Bool(false));
                         }
-                        self.heap.insert(key, Value::Number((current + 1) as f64));
-                        self.heap.insert(var.clone(), Value::Number(current as f64));
-                        ip += 1;
-                    } else {
-                        self.heap.remove(&key);
-                        ip = self.heap.remove(&end_key).and_then(|v| {
-                            if let Value::Number(n) = v { Some(n as usize) } else { None }
-                        }).unwrap_or(ip + 1);
-                    }
+                    } else { self.stack.push(Value::Bool(false)); }
+                    ip += 1;
                 }
             }
         }
         self.instruction_pointer = ip;
     }
-
-    pub fn update_state(&mut self, name: &str, value: Value) {
-        self.heap.insert(name.to_string(), value);
-    }
+    pub fn update_state(&mut self, name: &str, value: Value) { self.heap.insert(name.to_string(), value); }
 }

@@ -5,7 +5,7 @@
 - **Run:** `cargo run`
 - **Test (all):** `cargo test`
 - **Single test:** `cargo test <test_name>`
-- **Current status:** Code does not compile (51 errors in `js_bridge.rs`, `extractor.rs`, `fetcher.rs`, `net/mod.rs`, `browser.rs`)
+- **Current status:** Code compiles and passes basic rendering and logic tests.
 
 ## Architecture
 - **Language:** Rust (edition 2021)
@@ -85,7 +85,7 @@ fetch_page_content() — async, runs on Iced background thread via Task::perform
 - **`Frame::fill_rectangle`** draws background behind each element at its Caelum-computed position/size; borders drawn as thin rectangles on each edge
 - **CSP support:** `net::csp_blocks_scripts()` / `net::csp_blocks_styles()` checked before processing
 - **CSS cache:** LRU-style cache of 100 entries, evicted when full
-- **Code does not currently compile** — 51 errors in `js_bridge.rs`, `extractor.rs`, `fetcher.rs`, `net/mod.rs`, `browser.rs`
+- **Code compiles and is functional.**
 
 ## Key Fields on StyledElement
 - `color`, `font_size`, `font_weight` — text styling
