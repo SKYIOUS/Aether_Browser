@@ -1,33 +1,35 @@
-﻿# AETHER BROWSER — COMPLETE REFACTOR & ACTION PLAN v2
+﻿# AETHER BROWSER — COMPLETE REFACTOR & ACTION PLAN v3
 
-> Generated: 2026-07-05
-> Status: **Compiles cleanly (0 errors)** — Substantially improved since v1 report
-> Test count: **~283 tests across 11 files**
-> Line count: **~7,209 src/ lines + ~18,000 crates/ lines + ~671 korlang/ lines**
+> Generated: 2026-07-05 | **MCP snapshots:** 3,376 nodes, 15,021 edges
+> Status: **Compiles cleanly (0 errors, 1 warning)**
+> Test count: **183 passing / 3 FAILING** (Korlang ForEach VM bugs)
+> Published crates: **aether-caelum v0.2.0** on crates.io
+> Line count: **~7,209 src/ + ~18,000 crates/ + ~800 korlang/ + ~3,500 tests/**
+> Top complexity: `extract_elements` (80), `register_browser_api` (64), `apply_declarations_vp` (55)
 
 ---
 
 ## TABLE OF CONTENTS
 
-1. [CURRENT STATE SUMMARY](#1-current-state-summary)
-2. [WHAT'S BEEN FIXED vs v1 REPORT](#2-whats-been-fixed-vs-v1-report)
-3. [REMAINING ISSUES — PRIORITY STACK](#3-remaining-issues)
-4. [PHASE 0: TEST THE FOUNDATION](#4-phase-0-test-the-foundation)
+1. [CURRENT STATE — THE GOOD](#1-current-state--the-good)
+2. [WHAT'S STILL BROKEN](#2-whats-still-broken)
+3. [SHOULD A DEVELOPER USE THIS?](#3-should-a-developer-use-this)
+4. [PHASE 0: FIX THE 3 KORLANG VM BUGS](#4-phase-0-fix-the-3-korlang-vm-bugs)
 5. [PHASE 1: FINISH THE CSS ENGINE](#5-phase-1-finish-the-css-engine)
 6. [PHASE 2: FIX JAVASCRIPT BRIDGE](#6-phase-2-fix-javascript-bridge)
-7. [PHASE 3: COMPLETE KORLANG](#7-phase-3-complete-korlang)
+7. [PHASE 3: COMPLETE KORLANG INTEGRATION](#7-phase-3-complete-korlang-integration)
 8. [PHASE 4: HARDEN AETHER-CAELUM](#8-phase-4-harden-aether-caelum)
 9. [PHASE 5: KILL REMAINING DEAD CODE](#9-phase-5-kill-remaining-dead-code)
 10. [PHASE 6: PRODUCTION NETWORKING](#10-phase-6-production-networking)
 11. [PHASE 7: ADVANCED RENDERING](#11-phase-7-advanced-rendering)
-12. [PHASE 8: KORLANG — BEST LANGUAGE & UI FRAMEWORK](#12-phase-8-korlang-best-language--ui-framework)
+12. [PHASE 8: KORLANG — BEST UI LANGUAGE (THE FULL VISION)](#12-phase-8-korlang--best-ui-language-the-full-vision)
 13. [PHASE 9: MODERN BROWSER FEATURES](#13-phase-9-modern-browser-features)
 14. [PHASE 10: PUBLICATION & ECOSYSTEM](#14-phase-10-publication--ecosystem)
-15. [SUMMARY: WHAT TO DO AS A DEVELOPER](#15-summary-what-to-do-as-a-developer)
+15. [SUMMARY: WHAT TO DO & THE 5 MOST IMPACTFUL NEXT STEPS](#15-summary-what-to-do--the-5-most-impactful-next-steps)
 
 ---
 
-## 1. CURRENT STATE SUMMARY
+## 1. CURRENT STATE — THE GOOD
 
 ### 1.1 Compilation
 
@@ -35,8 +37,24 @@
 |--------|-----------|---------|---|
 | Compile errors | 51 | **0** | ✅ All fixed |
 | Panic points (unwrap/expect) | 35+ | **~0** | ✅ All replaced |
-| Warnings | N/A | **1** | `FormInputChanged`, `FormElementClicked` unused at `browser.rs:53-54` |
-| Tests passing | ~225 | **~283** | +58 tests |
+| Warnings | 0 | **1** | Unused imports `Element`, `Property`, `State` in `korlang/src/compiler/formatter.rs:1` |
+| Tests total | ~225 | **~271** (183 pass, 3 FAIL, cleanup needed) |
+| Published crates | 0 | **1** (aether-caelum v0.2.0) |
+
+### 1.2 What was NEWLY built since last MCP snapshot
+
+| Feature | Where | Status |
+|---------|-------|--------|
+| `aether-caelum v0.2.0` published on crates.io | — | ✅ Published |
+| `impl_parse_for_keyword_enum!` macro fixed | `crates/aether-caelum/src/macros.rs` | ✅ Now generates real `from_css_str()` |
+| Debug macros gated behind `debug_layout` feature | `crates/aether-caelum/src/macros.rs` | ✅ Configurable |
+| HTML entity decoding | `extractor.rs` | ✅ `&amp;` → `&` etc |
+| Korlang arithmetic (`10 + 5 * 2` → `20`) | `korlang/src/` | ✅ Overhaul tests pass |
+| Korlang functions (`fn add(a,b) { a + b }`) | `korlang/src/compiler/parser.rs:27-38` | ✅ Overhaul tests pass |
+| Korlang list iteration (`for x in list`) | `korlang/src/compiler/parser.rs` | ✅ Overhaul tests pass |
+| Korlang formatter (`format_component()`) | `korlang/src/compiler/formatter.rs` (124 lines) | ✅ Roundtrip tested |
+| `Expr::BinaryOp`, `UnaryOp`, `Call`, `List` | `korlang/src/compiler/parser.rs` | ✅ AST extended |
+| Token expansion (Plus, Minus, Star, Slash, And, Or, Eq, Neq, etc.) | `korlang/src/compiler/lexer.rs` | ✅ Full operator set |
 
 ### 1.2 Architecture (files + lines)
 
@@ -188,7 +206,7 @@ browser.rs (was ~1800 lines)
   → DevTools logic removed (was placeholder anyway)
 ```
 
-### 2.5 Korlang (old: barely works — now 12 bugs fixed)
+### 2.5 Korlang (old: barely works — now 12 bugs fixed + arithmetic + functions + list iteration + formatter)
 
 ```
 unsafe static mut       → AtomicUsize           ✅
@@ -215,7 +233,79 @@ NEW: sidebar_tests.rs            698 lines, ~50 tests  (tabs, nav, settings, his
 
 ---
 
-## 3. REMAINING ISSUES — PRIORITY STACK
+## 2. WHAT'S STILL BROKEN
+
+### 2.1 CRITICAL: 3 Korlang VM Tests FAIL (includes memory crash)
+
+```
+test korlang_advanced_tests:
+  test_for_each_single_item      → FAILED     (logic error in ForEach opcode)
+  test_for_each_empty_array      → FAILED     (empty array handling)
+  test_for_each_with_jump_back   → CRASH      → 32 GB memory allocation, STATUS_STACK_BUFFER_OVERRUN
+                                              → infinite loop in VM bytecode loop
+```
+
+**Root cause:** The `ForEach` opcode in `korlang/src/vm/mod.rs` has bugs in:
+- Jump-target calculation (wrong cached end offset)
+- Loop termination condition (infinite loop for jump_back case → allocates forever)
+- Empty collection handling (no early-exit path)
+
+**Priority:** This is the **#1 most important fix** in the entire codebase.
+
+### 2.2 Remaining Gaps (verified this run)
+
+| # | Issue | File:Line | Severity |
+|---|-------|-----------|----------|
+| C1 | 3 Korlang ForEach VM bugs | `korlang/src/vm/mod.rs` | 🚨 CRITICAL |
+| C2 | `Load` opcode ignores builtins | `korlang/src/vm/mod.rs:94-97` | `⬆ HIGH` |
+| C3 | `chrome.*` callbacks are no-op stubs | `src/engine/korlang.rs:26-45` | `⬆ HIGH` |
+| C4 | Descendant combinator broken in JS selectors | `js_bridge.rs:118-136` | `⬆ HIGH` |
+| C5 | `rgb()`/`rgba()`/`hsl()` CSS colors not parsed | `crates/aether-css/src/parser.rs:286-308` | `⬆ HIGH` |
+| C6 | Only 13/148 named CSS colors | `crates/aether-css/src/style_value.rs:72-89` | `⬆ HIGH` |
+| C7 | `overflow-checks = false` in dev profile | `Cargo.toml:32` | `⬆ HIGH` |
+| C8 | `should_skip_tag` out of sync with test | `extractor.rs:105` vs `tests/html5_compliance.rs` | MEDIUM |
+| C9 | `parse_length_vp_vertical` exists but unused | `crates/aether-css/src/resolver.rs:183-196` | MEDIUM |
+| C10 | `FormInputChanged`/`FormElementClicked` unused (1 warning) | `browser.rs:53-54` | LOW |
+| C11 | Pre-1970 cookie dates ignored (ponytail) | `js_bridge.rs:256` | LOW |
+| C12 | No SSL cert pinning | `net/mod.rs:54-58` | MEDIUM |
+| C13 | `tokenizer.rs` (985) + `tree_builder.rs` (337) still DEAD | `crates/aether-html/src/` | LOW |
+| C14 | `#[allow(dead_code)]` still at crate level | `style.rs:1`, `logging.rs:90`, `aether-css/lib.rs:1`, `aether-caelum/macros.rs:48` | LOW |
+| C15 | `serde`/`rmp-serde` unused in korlang/Cargo.toml | `korlang/Cargo.toml:6-7` | LOW |
+| C16 | Duplicate `#[cfg(test)]` in lib.rs | `korlang/src/lib.rs:22-23` | LOW |
+| C17 | KORLANG.md references deleted `interop/` | `KORLANG.md:47` | LOW |
+| C18 | No source location tracking in Korlang | `korlang/src/compiler/lexer.rs` | LOW |
+
+## 3. SHOULD A DEVELOPER USE THIS?
+
+### 3.1 The Verdict
+
+**YES — with caveats.** This is now a **legitimate development codebase**, not just a research prototype. The 51 compile errors are gone, security is real (CSP, CORS, cookies, XSS prevention), god-files are split, and the architecture is sound. However, 3 remaining VM bugs and several CSS gaps mean you'll spend the first week fixing things before you can ship.
+
+### 3.2 Five Reasons to Say YES
+
+1. **Workspace architecture is clean** — 5 crates with clear boundaries (aether-dom, aether-html, aether-css, aether-caelum, korlang). The bridge between CSS and layout types is code-generated from `css-caelum-bridge.json` — clever and maintainable.
+2. **Security is real** — CSP parser, CORS checking, cookie isolation, event handler blocking, dangerous URL blocking, innerHTML sanitization. All verified in this audit.
+3. **Korlang is evolving fast** — Arithmetic, functions, list iteration, and a formatter were added since the last report. The VM is 14 opcodes with 42 inline tests.
+4. **aether-caelum is published** — v0.2.0 on crates.io with the unsafe transmute fixed and the keyword macro working. You get a real layout engine with block, flexbox, and grid support.
+5. **10 test files, ~271 tests** — JS bridge, rendering pipeline, CSS regression, Korlang advanced, sidebar, layout stress — all with real assertions.
+
+### 3.3 Five Reasons to Say NO (and what to do about each)
+
+| Reason | Workaround |
+|--------|-----------|
+| 3 Korlang VM tests FAIL (incl. memory crash) | Fix is 1-2 days — jump-target in ForEach opcode |
+| CSS colors: no rgb(), no hsl(), only 13 named | 1-2 days — pure additive work, no refactoring |
+| No SSL pinning, no scheme downgrade protection | 1 day — add to net/mod.rs |
+| 1,300+ lines dead tokenizer/tree_builder | 30 minutes — git rm |
+| No form inputs, no tables, no SVG, no iframes | Months of work — this is a real browser gap |
+
+### 3.4 Bottom Line
+
+> **Build on this if:** You want a compact, hackable browser engine with good security and a unique UI DSL (Korlang). The hard parts (CSP, CORS, layout engine, JS bridge, pipeline) are done.
+>
+> **Don't build on this if:** You need to render real-world websites today (forms, tables, iframes, WebSocket, WebRTC are all missing), or if you can't afford 1-2 weeks of upfront fixes.
+>
+> **Perfect for:** Education (learn how browsers work), prototyping (build a custom kiosk browser), or as a foundation for a Korlang-powered app UI.
 
 ### P0: CRITICAL — Blocks functionality
 
@@ -259,47 +349,70 @@ NEW: sidebar_tests.rs            698 lines, ~50 tests  (tabs, nav, settings, his
 
 ---
 
-## 4. PHASE 0 — TEST THE FOUNDATION
+## 4. PHASE 0 — FIX THE 3 KORLANG VM BUGS (🚨 CRITICAL)
 
-**Goal:** `cargo test` passes with zero failures and zero warnings.
+**Goal:** Fix the 3 failing VM tests. This is the #1 priority — until these pass, the test suite is RED.
 
-### 0.1 Fix the 1 compilation warning
-
-```
-File: src/ui/screens/browser.rs
-Lines: 53-54
-What: FormInputChanged(usize, String) and FormElementClicked(usize) declared but never constructed
-Action: Either:
-  (a) Remove the variants and update match arms → simplest fix
-  (b) Implement form input handling in the rendering pipeline → feature work
-Recommendation: (a) — these are stubs from the form-input plan, remove until form handling is real
-```
-
-### 0.2 Run `cargo test` and catalog failures
+### 0.1 The Root Cause
 
 ```
-Expected: ~283 tests across 11 test files
-Action:
-  1. cargo test 2>&1 | tee test_results.txt
-  2. Count total tests, passed, failed
-  3. For each failure, fix or update the test to match current behavior
-  4. If a deliberate limitation (e.g., rgb() not parsed), update the test expectation
+File: korlang/src/vm/mod.rs (ForEach opcode implementation)
+
+The ForEach opcode has 3 bugs:
+1. Jump-target miscalculation — the cached end-offset is computed wrong
+2. Empty collection — no early-exit when list has 0 items, so it enters the loop body anyway
+3. Jump-back infinite loop — when ForEach encounters a Jump(back) instruction,
+   the loop termination check is wrong, causing an infinite loop that allocates
+   32 GB of memory before crashing with STATUS_STACK_BUFFER_OVERRUN
+
+Failing tests:
+  - test_for_each_single_item  → "expected 1 child, got 0"
+  - test_for_each_empty_array  → "expected 0 children, got N"
+  - test_for_each_with_jump_back → INFINITE LOOP → 32GB alloc → CRASH
 ```
 
-### 0.3 Fix `should_skip_tag` test gap
+### 0.2 The Fix Strategy
 
 ```
-File: src/engine/pipeline/extractor.rs (approx line 105)
-File: tests/compliance/html5.rs (approx line 9)
+1. Trace the ForEach execution flow:
+   - OpCode::ForEach pushes current index (0) into heap as "{var}_idx"
+   - Executes loop body instructions
+   - At end of loop body, Jump(back) repositions IP to start of ForEach
+   - ForEach handler at top of loop: increment index, check if >= list length
 
-Problem: Test expects these tags to be skipped:
-  iframe, textarea, select, option
-
-But extractor's should_skip_tag() does NOT include them.
-Fix: Add the 4 missing tags to should_skip_tag() OR update the test list.
+Bugs:
+   a) In ForEach handler: the index comparison is wrong for the cached end-offset
+      Fix: recalculate the comparison: index >= list.len() → exit
+   
+   b) No early-exit path: when list is empty (ListLen == 0 or list is None),
+      the ForEach must jump directly to the cached end-offset without executing the body
+      Fix: add `if list_len == 0 { ip = end_offset; continue; }`
+   
+   c) Jump-back infinite loop: the Jump instruction at the end of the ForEach body
+      repositions IP to the ForEach handler, which checks index/list.
+      If the cached end-offset points to the wrong location, the index advance
+      is skipped and the same iteration repeats forever.
+      Fix: ensure the end-offset points to the instruction AFTER the Jump(back)
 ```
 
-**Deliverable:** `cargo test` — 283+ tests all green.
+### 0.3 Additional Immediate Fixes
+
+```
+1. Fix the duplicate #[cfg(test)] in korlang/src/lib.rs:22-23
+   (Two #[cfg(test)] attributes on the same module — harmless but sloppy)
+
+2. Fix unused imports in korlang/src/compiler/formatter.rs:1
+   Element, Property, and State are imported but unused
+   Action: remove them from the use line
+
+3. Fix the Load opcode to check self.builtins (korlang/src/vm/mod.rs:94-97)
+   add: .or_else(|| self.builtins.get(&name))
+
+4. Fix chrome.* stubs (src/engine/korlang.rs:26-45)
+   Add real implementations (see Phase 3)
+```
+
+**Deliverable:** `cargo test` — 183+3=186 tests all green.
 
 ---
 
@@ -307,25 +420,13 @@ Fix: Add the 4 missing tags to should_skip_tag() OR update the test list.
 
 **Goal:** CSS parsing matches what the rendering pipeline consumes. No broken property should silently produce wrong output.
 
-### 1.1 Fix `impl_parse_for_keyword_enum!` macro (P0 — 1 line)
+### 1.1 `impl_parse_for_keyword_enum!` macro — ✅ ALREADY FIXED
 
 ```
 File: crates/aether-caelum/src/macros.rs
-Current (line 18-20):
-    #[allow(unused_macros)]
-    macro_rules! impl_parse_for_keyword_enum {
-        ($e:ident, $($rest:tt)*) => {};
-    }
-
-Fix: Replace the no-op body with the actual parse implementation.
-This macro generates FromCss implementations for keyword enums (Display, Position, TextAlign, Float, etc.)
-Without it, ALL keyword-based CSS properties silently fail to parse.
-
-Action:
-  1. Find a working FromCss impl in the existing crate (check other files in style/ directory)
-  2. Replace the macro body with the correct implementation
-  3. Test: `display: flex`, `text-align: center`, `position: absolute`, `float: left`
-     should ALL produce correct enum values instead of returning defaults
+Status: ✅ FIXED — now generates real from_css_str() implementations
+Note: This was a no-op in v1 report. The macro was fixed as part of
+      the aether-caelum v0.2.0 publication.
 ```
 
 ### 1.2 Parse `rgb()`/`rgba()`/`hsl()`/`hsla()` CSS color functions (P1)
@@ -588,25 +689,16 @@ Fix: Remove the reference or replace with current architecture description
 
 **Goal:** The published crate is safe, documented, and its public API works correctly.
 
-### 8.1 Remove dead code artifacts (P3)
+### 8.1 Dead code artifacts — ✅ MOSTLY FIXED
 
 ```
 File: crates/aether-caelum/src/macros.rs
-Current:
-  - debug_log!({})               — 4 no-op debug macros
-  - debug_log_node!({})          ─ can be removed or made configurable
-  - debug_push_node!({})         └ via a feature flag
-  - debug_pop_node!({})          
-  - impl_parse_for_keyword_enum!(...) — FIXED in Phase 1.1 above
+Status: ✅ debug_log macros → gated behind "debug_layout" feature
+        ✅ impl_parse_for_keyword_enum! → generates real from_css_str()
+        ✅ stubbed parse.rs → REMOVED
+        ✅ unsafe transmutes → f32::to_bits()
 
-Action:
-  - Replace no-op debug macros with cfg-gated implementations:
-    #[cfg(feature = "debug_layout")]
-    macro_rules! debug_log { ($($t:tt)*) => { eprintln!($($t)*) }; }
-    #[cfg(not(feature = "debug_layout"))]
-    macro_rules! debug_log { ($($t:tt)*) => {}; }
-  - Add feature "debug_layout" to Cargo.toml
-  - impl_parse_for_keyword_enum! — fixed in Phase 1.1
+Remaining: Check if any #[allow(dead_code)] remains on specific functions
 ```
 
 ### 8.2 Fix remaining TODO/FIXME markers
@@ -647,17 +739,21 @@ Add tests for:
 ### 8.4 Review published crate status (P2)
 
 ```
-Published on crates.io as aether-caelum v0.1.0
+✅ aether-caelum v0.2.0 — ALREADY PUBLISHED on crates.io
 
-Actions:
-  1. Add prominent README.md disclaimer listing known limitations
-  2. Document which features are experimental/broken
-  3. Fix unsafe transmutes → already done (f32::to_bits())
-  4. Consider yanking v0.1.0 and publishing v0.2.0 with all fixes
-  5. Ensure Cargo.toml features section is accurate:
-     - content_size feature should actually gate content_size behavior
-     - Add debug_layout feature for layout debugging
-  6. Add a CONTRIBUTING.md specific to aether-caelum
+Fixes in v0.2.0:
+  - Unsafe transmutes removed (f32::to_bits())
+  - Keyword macro working (from_css_str())
+  - Debug macros gated behind "debug_layout" feature
+  - Dead parse.rs removed
+  - AtomicUsize label counter in Korlang
+
+Remaining actions:
+  1. ✅ Add "debug_layout" feature to Cargo.toml
+  2. ⬜ Add prominent README.md disclaimer listing known limitations (~20 TODOs)
+  3. ⬜ Document which features are experimental/broken
+  4. ⬜ Audit content_size feature — does it gate anything?
+  5. ⬜ Add a CONTRIBUTING.md specific to aether-caelum
 ```
 
 **Deliverable:** No unsafe code, reduced TODO count, debug logging configurable, published crate status clear.
@@ -1293,10 +1389,16 @@ Theming:
 ### 14.3 Package publishing (P3)
 
 ```
-- aether-caelum: Audit, fix, and publish v0.2.0 (or yank v0.1.0)
+✅ aether-caelum: v0.2.0 ALREADY PUBLISHED on crates.io
+   - Unsafe transmute fixed (f32::to_bits())
+   - Keyword macro generating real from_css_str()
+   - Debug macros gated behind "debug_layout" feature
+   - REMOVE: stubbed parse.rs was deleted
+   - TODO: Add README with examples and known-limitations disclaimer
+
 - aether-css: Consider publishing as Stratus CSS engine crate
-- aether-html: Consider publishing as standalone HTML parser
-- korlang: Consider publishing as standalone UI language crate
+- aether-html: Consider publishing as standalone HTML parser (once dead code removed)
+- korlang: Consider publishing as standalone UI language crate (once VM bugs fixed)
 - Each published crate needs:
   - README.md with examples
   - API documentation with doc tests
@@ -1326,7 +1428,7 @@ Theming:
 
 ### In One Sentence
 
-This codebase was a **research prototype** that has undergone **significant improvement** (compiles now, security is real, god-files are split, Korlang bugs are fixed). It is now **workable for development** but still has critical gaps that must be addressed before it can render real websites.
+This codebase was a **research prototype** that has undergone **massive improvement** (compiles cleanly, security is real, god-files are split, most Korlang bugs are fixed, aether-caelum is published). **3 VM bugs remain** (1 causes a 32GB memory crash). Fixing those 3 bugs is the #1 priority — then the test suite is fully green and the browser is genuinely usable for development.
 
 ### If You Want to...
 
@@ -1334,30 +1436,30 @@ This codebase was a **research prototype** that has undergone **significant impr
 |------|---------|--------|
 | **Learn browser internals** | ✅ **Good for learning** | The crates (aether-html, aether-css, aether-caelum) are clean, separated, and documented. The JS bridge is interesting. Korlang's VM is a great learning example. |
 | **Build a production browser** | ⚠️ **Not yet** | Too many gaps: no form inputs, no tables, no SVG, no iframe, no WASM, no workers. If that's your goal, add the Phases 6→7→9 features first. |
-| **Contribute to this project** | ✅ **Start now** | Begin with Phase 0-1 (low risk, high impact). Fix `impl_parse_for_keyword_enum!`, add `rgb()` parsing, add named colors. These are 1-2 day tasks with major impact. |
-| **Use aether-caelum (published crate)** | ⚠️ **With caution** | Layout algorithms are good, but many features are incomplete (38 TODOs, noop debug macros). Phase 4 (crate hardening) is important. |
-| **Use Korlang** | ⚠️ **Limited** | If you need a simple DSL for iced UIs, it works. If you need a full language with functions, arithmetic, and standard library, wait for Phase 8. |
+| **Contribute to this project** | ✅ **Start now** | Begin with Phase 0 (fix 3 VM bugs — the test suite is RED). Then Phase 1: add `rgb()` parsing, named colors. 1-2 day tasks with major impact. |
+| **Use aether-caelum (published crate)** | ✅ **v0.2.0 is usable** | Unsafe transmute fixed, keyword macro works, debug macros gated. Still has ~20 TODOs but block/flexbox/grid layout algorithms are solid. |
+| **Use Korlang** | ✅ **Functional, 3 bugs away** | Arithmetic, functions, list iteration, and a formatter exist. Fix the 3 ForEach VM bugs (Phase 0) and it's a legitimate UI DSL. |
 | **Publish your own Rust crate** | ✅ **Learn from this project** | Keep: clean workspace separation, type-safe CSS↔layout bridge. Avoid: publishing with 38 known TODOs, stubbed features. |
 
-### The 5 Most Impactful Next Steps
+### The 5 Most Impactful Next Steps (UPDATED for current state)
 
 Ranked by effort/impact ratio:
 
 | # | Task | Phase | Effort | Impact |
 |---|------|-------|--------|--------|
-| 1 | Fix `impl_parse_for_keyword_enum!` macro | Phase 1.1 | **1 line** | Unlocks ALL keyword CSS properties |
+| 🚨 1 | **Fix 3 ForEach VM bugs** (incl. 32GB memory crash) | Phase 0.1 | **~50 lines in vm/mod.rs** | ✅ Test suite goes GREEN. Korlang VM stable. |
 | 2 | Fix `Load` opcode to check builtins | Phase 3.1 | **1 line** | Status bar actually renders values |
-| 3 | Wire up `chrome.*` native callbacks | Phase 3.2 | ~90 lines | Sidebar buttons actually work |
+| 3 | Wire up `chrome.*` native callbacks | Phase 3.2 | ~90 lines | Sidebar/status bar buttons actually work |
 | 4 | Fix descendant combinator in selectors | Phase 2.1 | ~2 lines | CSS descendant selectors work |
 | 5 | Fix `rgb()`/`rgba()` color parsing | Phase 1.2 | ~100 lines | Most websites get their colors |
 
-These 5 tasks are the **critical path** to making the browser functional. They are small, isolated, and high-reward.
+> **Note:** `impl_parse_for_keyword_enum!` is ✅ **already fixed** in aether-caelum v0.2.0. It was #1 on the old list and has been resolved.
 
 ### Timeline Estimate
 
 | Phase | Work | Estimated Time |
 |-------|------|---------------|
-| 0 | Test the foundation | 1-2 days |
+| 0 | Fix 3 Korlang VM bugs | 1-2 days |
 | 1 | Finish the CSS engine | 1-2 weeks |
 | 2 | Fix JavaScript bridge | 3-5 days |
 | 3 | Complete Korlang | 1-2 weeks |
