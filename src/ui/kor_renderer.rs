@@ -106,6 +106,28 @@ fn convert_object(obj_arc: Arc<std::sync::Mutex<KorObject>>, vm: &VirtualMachine
             }
             column![].into()
         }
+                "ScrollView" => {
+            let mut c = column![].spacing(5);
+            for child in &obj.children {
+                if let Value::Object(ch) = child { c = c.push(convert_object(ch.clone(), vm)); }
+            }
+            iced::widget::scrollable(c).into()
+        }
+        "Divider" => {
+            let height = get_number(&obj.properties, "height").unwrap_or(1.0);
+            container(Space::with_height(Length::Fixed(height)))
+                .width(Length::Fill)
+                .style(|_| container::Style { background: Some(Background::Color(Color::from_rgb(0.8, 0.8, 0.8))), ..Default::default() })
+                .into()
+        }
+        "ZStack" => {
+            // Iced Stack is what we want here
+            let mut s = iced::widget::stack![];
+            for child in &obj.children {
+                if let Value::Object(ch) = child { s = s.push(convert_object(ch.clone(), vm)); }
+            }
+            s.into()
+        }
         "Space" => Space::with_height(Length::Fixed(get_number(&obj.properties, "height").unwrap_or(0.0))).into(),
         _ => text(format!("Unknown: {}", obj.tag)).into()
     }
