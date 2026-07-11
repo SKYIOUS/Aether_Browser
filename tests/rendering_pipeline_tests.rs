@@ -46,6 +46,7 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
         input_placeholder: String::new(), checked: false,
         position: "static".to_string(),
         inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        svg_stroke: None, svg_stroke_width: 1.0, z_index: 0, is_svg: false, svg_path_data: String::new(), colspan: 1, rowspan: 1, grid_row: None, grid_col: None, table_col_count: 0, table_row_count: 0, attrs: std::collections::HashMap::new(),
     }
 }
 
@@ -189,7 +190,7 @@ fn test_skip_tag_noscript() {
 
 #[test]
 fn test_skip_tag_svg() {
-    assert!(should_skip_tag("svg"));
+    assert!(!should_skip_tag("svg"));
 }
 
 #[test]

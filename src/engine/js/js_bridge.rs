@@ -74,6 +74,10 @@ pub(crate) fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
     let ss = simple_sel_to_stratus(sel);
     ss.matches(&element)
 }
+pub(crate) fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
+    sel.simples.iter().all(|s| matches_simple(node, s))
+}
+
 
 pub(crate) fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
     let chars: Vec<char> = s.chars().collect();
@@ -139,56 +143,52 @@ pub(crate) fn parse_complex(s: &str) -> Option<ComplexSel> {
     let s = s.trim();
     if s.is_empty() { return None; }
     let mut pos = 0;
-    let compound = parse_compound(s, &mut pos);
-    let combinator = if pos < s.len() {
-        let comb = parse_combinator(s, &mut pos);
-        comb.map(|c| {
-            let rest = parse_complex(&s[pos..]).unwrap_or(ComplexSel { compound: CompoundSel { simples: vec![SimpleSel::Universal] }, combinator: None });
-            (c, Box::new(rest))
-        })
-    } else { None };
-    Some(ComplexSel { compound, combinator })
-}
+    let mut compounds = vec![];
+    let mut combinators = vec![];
 
-pub(crate) fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
-    sel.simples.iter().all(|s| matches_simple(node, s))
-}
-
-pub(crate) fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
-    fn inner(nodes: &[FlatNode], node_id: u32, compound: &CompoundSel, combinator: &Option<(Combinator, Box<ComplexSel>)>) -> bool {
-        match combinator {
-            Some((combinator, rest)) => {
-                if !inner(nodes, node_id, &rest.compound, &rest.combinator) { return false; }
-                let node = match nodes.get(node_id as usize) { Some(n) => n, None => return false };
-                match combinator {
-                    Combinator::Child => {
-                        node.parent.is_some_and(|pid| {
-                            nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound))
-                        })
-                    }
-                    Combinator::Descendant => {
-                        let mut current = node.parent;
-                        while let Some(pid) = current {
-                            if nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound)) {
-                                return true;
-                            }
-                            current = nodes.get(pid as usize).and_then(|n| n.parent);
-                        }
-                        false
-                    }
-                }
-            }
-            None => {
-                nodes.get(node_id as usize).is_some_and(|n| matches_compound(n, compound))
-            }
+    compounds.push(parse_compound(s, &mut pos));
+    while pos < s.len() {
+        let saved_pos = pos;
+        if let Some(c) = parse_combinator(s, &mut pos) {
+            combinators.push(c);
+            compounds.push(parse_compound(s, &mut pos));
+        } else if pos == saved_pos {
+            break;
         }
     }
-    inner(nodes, node_id, &sel.compound, &sel.combinator)
+
+    let mut res = ComplexSel { compound: compounds.pop()?, combinator: None };
+    while !compounds.is_empty() {
+        let comp = compounds.pop()?;
+        let comb = combinators.pop()?;
+        let mut last = &mut res;
+        while let Some((_, ref mut next)) = last.combinator {
+            last = next;
+        }
+        last.combinator = Some((comb, Box::new(ComplexSel { compound: comp, combinator: None })));
+    }
+    Some(res)
 }
-
-// ── Timer entry ─────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
+pub(crate) fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
+    if !matches_compound(&nodes[node_id as usize], &sel.compound) { return false; }
+    match &sel.combinator {
+        Some((Combinator::Child, parent_sel)) => {
+            if let Some(pid) = nodes[node_id as usize].parent {
+                matches_complex(nodes, pid, &*parent_sel)
+            } else { false }
+        }
+        Some((Combinator::Descendant, parent_sel)) => {
+            let mut current = nodes[node_id as usize].parent;
+            while let Some(pid) = current {
+                if matches_complex(nodes, pid, &*parent_sel) { return true; }
+                current = nodes[pid as usize].parent;
+            }
+            false
+        }
+        None => true,
+    }
+}
+#[derive(Debug)]
 pub(crate) struct TimerEntry {
     pub(crate) id: u32,
     pub(crate) source: String,

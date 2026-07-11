@@ -1,7 +1,7 @@
 use iced::widget::{
     button, canvas, column, container, row, scrollable, text, text_input, Space,
 };
-use iced::widget::canvas::{Cache, Geometry, Image as CanvasImage};
+use iced::widget::canvas::{Cache, Geometry, Image as CanvasImage, Path};
 use iced::keyboard;
 use iced::mouse;
 use iced::{Alignment, Background, Color, Element, Length, Point, Rectangle, Size, Task};
@@ -54,6 +54,8 @@ pub enum BrowserMessage {
     AutocompleteDismiss,
     FormElementClicked(usize),
     FormInputKeyPressed(char),
+    FormSubmit(usize),
+    FormSubmitActive,
     None,
 }
 
@@ -95,14 +97,25 @@ pub struct BrowserScreen {
     pub settings: AetherSettings,
 }
 
+
 struct PageCanvas {
     elements: Vec<StyledElement>,
     cache: Cache,
+    active_form_element: Option<usize>,
+    form_inputs: std::collections::HashMap<usize, String>,
 }
 
 impl PageCanvas {
-    fn new(elements: Vec<StyledElement>) -> Self {
-        Self { elements, cache: Cache::new() }
+    fn new(elements: Vec<StyledElement>, active_form_element: Option<usize>, form_inputs: std::collections::HashMap<usize, String>) -> Self {
+        Self { elements, cache: Cache::new(), active_form_element, form_inputs }
+    }
+    fn clone_with_state(&self, active: Option<usize>, inputs: std::collections::HashMap<usize, String>) -> Self {
+        Self {
+            elements: self.elements.clone(),
+            cache: Cache::new(),
+            active_form_element: active,
+            form_inputs: inputs,
+        }
     }
 }
 
@@ -121,8 +134,29 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         vec![self.cache.draw(renderer, size, |frame| {
             plog!("DRAW", "Rendering {} elements into {:?}", self.elements.len(), size);
             frame.fill_rectangle(Point::new(0.0, 0.0), size, iced::Color::WHITE);
-            for el in &self.elements {
-                if let Some(ref handle) = el.image_handle {
+            let mut sorted_elements: Vec<(usize, &StyledElement)> = self.elements.iter().enumerate().collect();
+            sorted_elements.sort_by(|(_, a), (_, b)| a.z_index.cmp(&b.z_index));
+            for (el_idx, el) in sorted_elements {
+                if el.is_svg {
+                    let ex = if el.x.is_finite() { el.x } else { 0.0 };
+                    let ey = if el.y.is_finite() { el.y } else { 0.0 };
+                    if el.tag == "path" && !el.svg_path_data.is_empty() {
+                        let path = Path::new(|b| {
+                            // ponytail: naive path parser for demonstration, in real life use lyon-extra or similar
+                            // for now, just draw a rect based on width/height if path data present
+                            b.rectangle(Point::new(ex, ey), Size::new(el.width.max(1.0), el.height.max(1.0)));
+                        });
+                        frame.fill(&path, el.background_color.unwrap_or(el.color));
+                    } else if el.tag == "circle" {
+                        let r = el.width.max(el.height) / 2.0;
+                        let path = Path::circle(Point::new(ex + r, ey + r), r);
+                        frame.fill(&path, el.background_color.unwrap_or(el.color));
+                    } else if el.tag == "rect" {
+                        frame.fill_rectangle(Point::new(ex, ey), Size::new(el.width.max(1.0), el.height.max(1.0)), el.background_color.unwrap_or(el.color));
+                    }
+                    continue;
+                }
+                if let Some(handle) = &el.image_handle {
                     let iw = if el.width.is_finite() { el.width.max(50.0) } else { 50.0 };
                     let ih = if el.height.is_finite() { el.height.max(50.0) } else { 50.0 };
                     let ix = el.x.max(0.0);
@@ -135,12 +169,12 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     let ey = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
                     let ew = if el.width.is_finite() { el.width.max(60.0) } else { 200.0 };
                     let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { 32.0 };
-                    let border_col = el.border_color.unwrap_or(iced::Color::from_rgb(0.7, 0.7, 0.7));
+                    let is_focused = self.active_form_element == Some(el_idx); let border_col = if is_focused { iced::Color::from_rgb(0.2, 0.5, 1.0) } else { el.border_color.unwrap_or(iced::Color::from_rgb(0.7, 0.7, 0.7)) };
                     let bg_col = if el.tag == "button" { iced::Color::from_rgb(0.92, 0.92, 0.92) } else { iced::Color::WHITE };
                     frame.fill_rectangle(Point::new(ex, ey), Size::new(ew, eh), bg_col);
                     frame.stroke_rectangle(Point::new(ex, ey), Size::new(ew, eh), iced::widget::canvas::Stroke::default().with_color(border_col).with_width(1.0));
                     let fs = if el.font_size.is_finite() { el.font_size.clamp(8.0, 64.0) } else { 14.0 };
-                    let label = if el.text.is_empty() {
+                    let label = if let Some(val) = self.form_inputs.get(&el_idx) { val.clone() } else if el.text.is_empty() {
                         if el.tag == "button" { "Button".to_string() }
                         else if el.tag == "select" { "▾ Select".to_string() }
                         else { "".to_string() }
@@ -461,7 +495,7 @@ Component SidebarWS {
                 self.is_history_nav = false;
                 self.styled_elements = elements;
                 self.layout_gen += 1;
-                self.page_canvas = Some(PageCanvas::new(self.styled_elements.clone()));
+                self.page_canvas = Some(PageCanvas::new(self.styled_elements.clone(), self.active_form_element, self.form_inputs.clone()));
                 let page_title = bridge_opt.as_ref().and_then(|b| {
                     b.lock()
                         .ok()
@@ -637,10 +671,48 @@ Component SidebarWS {
                         let val = self.form_inputs.entry(idx).or_default();
                         val.push(ch);
                     }
+                    if let Some(ref bridge) = self.bridge {
+                        if let Ok(mut b) = bridge.lock() {
+                            let el = &self.styled_elements[idx];
+                            if let Some(node_id) = b.find_node_by_path(&el.dom_path) {
+                                let val = self.form_inputs.get(&idx).cloned().unwrap_or_default();
+                                b.set_attribute(node_id, "value", &val);
+                            }
+                        }
+                    }
                 }
                 Task::none()
             }
-            _ => Task::none(),
+            BrowserMessage::FormSubmit(idx) => {
+                if let Some(ref bridge) = self.bridge {
+                    let el = &self.styled_elements[idx];
+                    let listeners = {
+                        let b = bridge.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut all = vec![];
+                        if let Some(node_id) = b.find_node_by_path(&el.dom_path) {
+                            all.extend(b.get_event_listeners_bubbling(node_id, "submit"));
+                            all.extend(b.get_event_listeners_bubbling(node_id, "click"));
+                        }
+                        all
+                    };
+                    if !listeners.is_empty() {
+                        if let Some(ref mut js) = self.js_engine {
+                            for (source, _node_id) in listeners {
+                                let _ = js.execute_source(&source, bridge);
+                            }
+                            js.process_pending_js_work();
+                        }
+                    }
+                }
+                Task::none()
+            }
+            BrowserMessage::FormSubmitActive => {
+                if let Some(idx) = self.active_form_element {
+                    return self.update(BrowserMessage::FormSubmit(idx));
+                }
+                Task::none()
+            }
+            BrowserMessage::OpenSettings | BrowserMessage::OpenPalette | BrowserMessage::None => Task::none(),
         }
     }
 
@@ -660,6 +732,7 @@ Component SidebarWS {
                     c.chars().next().map(BrowserMessage::FormInputKeyPressed)
                 }
                 key::Key::Named(key::Named::Backspace) => Some(BrowserMessage::FormInputKeyPressed('\x08')),
+                key::Key::Named(key::Named::Enter) => Some(BrowserMessage::FormSubmitActive),
                 _ => None,
             }
         });
@@ -782,7 +855,9 @@ Component SidebarWS {
             .style(|_| container::Style { background: Some(Background::Color(C::PAGE_BG)), ..Default::default() })
             .into()
         } else if self.page_canvas.is_some() {
-            let pc = self.page_canvas.as_ref().unwrap();
+            let pc = self.page_canvas.as_ref().unwrap().clone_with_state(self.active_form_element, self.form_inputs.clone());
+
+
             let total_h = pc.elements.iter()
                 .map(|el| { let ey = if el.y.is_finite() { el.y } else { 0.0 }; ey + el.height.max(el.font_size.clamp(6.0, 200.0)) + 40.0 })
                 .fold(0.0, f32::max);
@@ -1030,6 +1105,7 @@ mod tests {
             input_placeholder: String::new(), checked: false,
             position: "static".to_string(),
             inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+            z_index: 0, is_svg: false, svg_path_data: String::new(), colspan: 1, rowspan: 1, grid_row: None, grid_col: None, table_col_count: 0, table_row_count: 0,
         }
     }
 

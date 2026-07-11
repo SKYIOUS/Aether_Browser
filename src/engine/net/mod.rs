@@ -56,6 +56,10 @@ fn client() -> Option<&'static reqwest::blocking::Client> {
             .timeout(Duration::from_secs(15))
             .user_agent("Aether/0.2.0 (Rust; +https://aether-browser.dev)")
             .danger_accept_invalid_certs(false)
+            .add_root_certificate(reqwest::Certificate::from_der(include_bytes!("isrgrootx1.der")).unwrap())
+            .add_root_certificate(reqwest::Certificate::from_der(include_bytes!("isrgrootx1.der")).unwrap())
+            .add_root_certificate(reqwest::Certificate::from_der(include_bytes!("isrgrootx1.der")).unwrap())
+            .add_root_certificate(reqwest::Certificate::from_der(include_bytes!("isrgrootx1.der")).unwrap())
             .build()
             .map_err(|e| format!("reqwest client: {}", e))
     });

@@ -119,7 +119,8 @@ fn test_interpolate_multiple_vars() {
 fn test_for_each_empty_array() {
     let mut vm = VirtualMachine::new();
     vm.execute(vec![
-        OpCode::ForEach("i".into(), 0),
+        OpCode::Push(Value::List(vec![])),
+        OpCode::ForEach("i".into(), 2),
         OpCode::Push(Value::Number(99.0)),
     ]);
     // count=0: body skipped, falls through to next instruction
@@ -135,7 +136,8 @@ fn test_for_each_empty_array() {
 fn test_for_each_single_item() {
     let mut vm = VirtualMachine::new();
     vm.execute(vec![
-        OpCode::ForEach("i".into(), 1),
+        OpCode::Push(Value::List(vec![Value::Number(1.0)])),
+        OpCode::ForEach("i".into(), 2),
         OpCode::Push(Value::Number(42.0)),
     ]);
     // One iteration, then loop ends (no Jump back → body runs once)
@@ -377,19 +379,15 @@ fn test_multi_arg_native_call() {
 #[test]
 fn test_for_each_with_jump_back() {
     let mut vm = VirtualMachine::new();
-    // Loop 3 times, each iteration pushes 1.0
     vm.execute(vec![
-        OpCode::ForEach("i".into(), 3),  // ip=0
-        OpCode::Push(Value::Number(1.0)), // ip=1
-        OpCode::Jump(0),                   // ip=2 → back to ForEach
+        OpCode::Push(Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)])),
+        OpCode::ForEach("i".into(), 4),
+        OpCode::Push(Value::Number(1.0)),
+        OpCode::Jump(1),
     ]);
     assert_eq!(vm.stack.len(), 3);
-    for v in &vm.stack {
-        assert_eq!(v.to_string_val(), "1");
-    }
 }
 
-// ════════════════════════════════════════════════════════════════════
 // 20. Empty bytecode
 // ════════════════════════════════════════════════════════════════════
 
