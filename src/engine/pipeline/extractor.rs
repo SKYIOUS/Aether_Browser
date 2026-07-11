@@ -45,6 +45,17 @@ pub struct FullStyle {
     pub inset_right: f32,
     pub inset_bottom: f32,
     pub inset_left: f32,
+    pub z_index: i32,
+    pub svg_stroke: Option<Color>,
+    pub svg_stroke_width: f32,
+    pub is_svg: bool,
+    pub svg_path_data: String,
+    pub colspan: usize,
+    pub rowspan: usize,
+    pub grid_row: Option<usize>,
+    pub grid_col: Option<usize>,
+    pub table_col_count: usize,
+    pub table_row_count: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -101,6 +112,18 @@ pub struct StyledElement {
     pub inset_right: f32,
     pub inset_bottom: f32,
     pub inset_left: f32,
+    pub z_index: i32,
+    pub svg_stroke: Option<Color>,
+    pub svg_stroke_width: f32,
+    pub is_svg: bool,
+    pub svg_path_data: String,
+    pub colspan: usize,
+    pub rowspan: usize,
+    pub grid_row: Option<usize>,
+    pub attrs: std::collections::HashMap<String, String>,
+    pub grid_col: Option<usize>,
+    pub table_col_count: usize,
+    pub table_row_count: usize,
 }
 
 fn stratus_color(c: &stratus::Color) -> Color {
@@ -116,11 +139,11 @@ fn is_html_block_tag(tag: &str) -> bool {
 }
 
 pub fn should_skip_tag(tag: &str) -> bool {
-    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "svg" | "path" | "br" | "hr" | "template" | "iframe" | "option")
+    matches!(tag, "script" | "style" | "noscript" | "meta" | "link" | "head" | "title" | "br" | "hr" | "template" | "iframe" | "option")
 }
 
 pub fn should_skip_content(tag: &str) -> bool {
-    matches!(tag, "script" | "style" | "noscript" | "template" | "svg" | "title")
+    matches!(tag, "script" | "style" | "noscript" | "template" | "title")
 }
 
 // ponytail: single-pass entity decode, no recursion for &amp;lt; etc.
@@ -282,6 +305,17 @@ fn compute_full_style_inner(
         inset_right: cs.right.unwrap_or(0.0),
         inset_bottom: cs.bottom.unwrap_or(0.0),
         inset_left: cs.left.unwrap_or(0.0),
+        svg_stroke: attrs.get("stroke").and_then(|s| crate::engine::stratus::parser::parse_color_function(s)).map(|c| stratus_color(&c)),
+        svg_stroke_width: attrs.get("stroke-width").and_then(|s| s.parse().ok()).unwrap_or(1.0),
+        z_index: cs.z_index.unwrap_or(0),
+        is_svg: tag == "svg" || tag == "path" || tag == "circle" || tag == "rect" || tag == "line",
+        svg_path_data: attrs.get("d").cloned().unwrap_or_default(),
+        colspan: attrs.get("colspan").and_then(|v| v.parse().ok()).unwrap_or(1),
+        rowspan: attrs.get("rowspan").and_then(|v| v.parse().ok()).unwrap_or(1),
+        grid_row: None,
+        grid_col: None,
+        table_col_count: 0,
+        table_row_count: 0,
     }
 }
 
@@ -325,6 +359,17 @@ fn make_element(
         inset_right: fs.inset_right,
         inset_bottom: fs.inset_bottom,
         inset_left: fs.inset_left,
+        z_index: fs.z_index,
+        svg_stroke: fs.svg_stroke, svg_stroke_width: fs.svg_stroke_width,
+        is_svg: fs.is_svg,
+        attrs: std::collections::HashMap::new(),
+        svg_path_data: fs.svg_path_data.clone(),
+        colspan: 1,
+        rowspan: 1,
+        grid_row: None,
+        grid_col: None,
+        table_col_count: 0,
+        table_row_count: 0,
     }
 }
 
@@ -386,7 +431,7 @@ pub fn extract_elements(
             let mut extra_input_placeholder = String::new();
             let mut extra_checked = false;
 
-            let (text_content, is_link, href, indent, tag_override, skip_element, recurse_into_children) = match tag.as_str() {
+            let (text_content, is_link, href, indent, tag_override, skip_element, _recurse_into_children) = match tag.as_str() {
                 "a" => {
                     let href = elem.attributes.get("href").map(|v| decode_html_entities(v));
                     let text = get_all_text(node);
@@ -504,6 +549,12 @@ pub fn extract_elements(
                 "iframe" => {
                     (String::new(), false, None, 0, "iframe", false, false)
                 }
+                "table" | "thead" | "tbody" | "tfoot" | "tr" | "td" | "th" => {
+                    (String::new(), false, None, 0, tag.as_str(), false, true)
+                }
+                "svg" | "path" | "circle" | "rect" | "line" => {
+                    (String::new(), false, None, 0, tag.as_str(), false, true)
+                }
                 _ => {
                     if fs.display == "inline" && tag != "span" {
                         (String::new(), false, None, 0, "", true, true)
@@ -512,10 +563,6 @@ pub fn extract_elements(
                     }
                 }
             };
-
-            if !recurse_into_children && skip_element {
-                return;
-            }
 
             let this_idx = if !skip_element {
                 let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());

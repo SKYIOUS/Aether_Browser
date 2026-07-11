@@ -1,17 +1,24 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
-static WINDOW_TITLE: Mutex<Option<String>> = Mutex::new(None);
-static PENDING_NAVIGATION: Mutex<Option<String>> = Mutex::new(None);
+static WINDOW_TITLE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static PENDING_NAVIGATION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn get_window_title() -> &'static Mutex<Option<String>> {
+    WINDOW_TITLE.get_or_init(|| Mutex::new(None))
+}
+
+fn get_pending_navigation() -> &'static Mutex<Option<String>> {
+    PENDING_NAVIGATION.get_or_init(|| Mutex::new(None))
+}
 
 pub fn take_window_title() -> Option<String> {
-    WINDOW_TITLE.lock().ok()?.take()
+    get_window_title().lock().ok()?.take()
 }
 
 pub fn take_navigation_url() -> Option<String> {
-    PENDING_NAVIGATION.lock().ok()?.take()
+    get_pending_navigation().lock().ok()?.take()
 }
 
-// ponytail: thin wrapper; replace with a shared VM pool when throughput matters
 pub fn eval_korlang(source: &str) -> Result<String, String> {
     let bytecode = korlang::compile(source);
     if bytecode.is_empty() {
@@ -29,19 +36,6 @@ pub fn eval_korlang(source: &str) -> Result<String, String> {
 
 pub fn register_default_callbacks(vm: &mut korlang::VirtualMachine) {
     vm.register_native("String.split", Arc::new(|args: &[korlang::Value]| {
-        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(sep))) = (args.get(0), args.get(1)) {
-            let parts: Vec<korlang::Value> = s.split(sep).map(|p| korlang::Value::String(p.to_string())).collect();
-            return korlang::Value::List(parts);
-        }
-        korlang::Value::List(vec![])
-    }));
-    vm.register_native("String.replace", Arc::new(|args: &[korlang::Value]| {
-        if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(from)), Some(korlang::Value::String(to))) = (args.get(0), args.get(1), args.get(2)) {
-            return korlang::Value::String(s.replace(from, to));
-        }
-        korlang::Value::None
-    }));
-        vm.register_native("String.split", Arc::new(|args: &[korlang::Value]| {
         if let (Some(korlang::Value::String(s)), Some(korlang::Value::String(sep))) = (args.get(0), args.get(1)) {
             let parts: Vec<korlang::Value> = s.split(sep).map(|p| korlang::Value::String(p.to_string())).collect();
             return korlang::Value::List(parts);
@@ -75,7 +69,7 @@ pub fn register_default_callbacks(vm: &mut korlang::VirtualMachine) {
     }));
     vm.register_native("chrome.setTitle", Arc::new(|args: &[korlang::Value]| {
         if let Some(korlang::Value::String(title)) = args.first() {
-            if let Ok(mut t) = WINDOW_TITLE.lock() {
+            if let Ok(mut t) = get_window_title().lock() {
                 *t = Some(title.clone());
             }
         }
@@ -83,7 +77,7 @@ pub fn register_default_callbacks(vm: &mut korlang::VirtualMachine) {
     }));
     vm.register_native("chrome.navigate", Arc::new(|args: &[korlang::Value]| {
         if let Some(korlang::Value::String(url)) = args.first() {
-            if let Ok(mut nav) = PENDING_NAVIGATION.lock() {
+            if let Ok(mut nav) = get_pending_navigation().lock() {
                 *nav = Some(url.clone());
             }
         }

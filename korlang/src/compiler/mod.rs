@@ -51,16 +51,23 @@ fn emit_if_else(condition: &Expr, then_branch: &[Node], else_branch: &[Node], op
     ops[end_jump_idx] = OpCode::Jump(end_ip);
 }
 
-fn emit_for_loop(var: &str, collection: &Expr, body: &[Node], ops: &mut Vec<OpCode>) {
+fn emit_for_loop(var: &str, collection: &Expr, _body: &[Node], ops: &mut Vec<OpCode>) {
     emit_expr(collection, ops);
+    let _for_ip = ops.len();
+    ops.push(OpCode::ForEach(var.to_string(), 0));
+    let _for_each_idx = ops.len() - 1;
     let for_ip = ops.len();
     ops.push(OpCode::ForEach(var.to_string(), 0));
-    ops.push(OpCode::JumpIfFalse(0));
+    let _for_each_idx = ops.len() - 1;
+    let for_each_idx = ops.len() - 1;
     let exit_jump_idx = ops.len() - 1;
-    for child in body { emit_node(child, ops); }
+    ops.push(OpCode::Jump(for_ip));
+    let end_ip = ops.len();
+    ops[for_each_idx] = OpCode::ForEach(var.to_string(), end_ip);
     ops.push(OpCode::Jump(for_ip));
     let end_ip = ops.len();
     ops[exit_jump_idx] = OpCode::JumpIfFalse(end_ip);
+    ops[for_each_idx] = OpCode::ForEach(var.to_string(), end_ip);
 }
 
 fn emit_element(el: &Element, ops: &mut Vec<OpCode>) {

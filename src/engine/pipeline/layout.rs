@@ -68,7 +68,9 @@ fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
 
 fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     if el.display == "none" { return None; }
-    let cd = crate::bridge_gen::str_display_to_caelum(&el.display);
+    let mut cd = crate::bridge_gen::str_display_to_caelum(&el.display);
+    if el.tag == "table" { cd = Display::Grid; }
+    if el.tag == "td" || el.tag == "th" { cd = Display::Block; }
     let auto = |v: Option<f32>| v.map(LengthPercentageAuto::length).unwrap_or(LengthPercentageAuto::auto());
     let dim = |v: Option<f32>| v.map(Dimension::from_length).unwrap_or(Dimension::auto());
     let mm = |min: Option<f32>, max: Option<f32>| {
@@ -80,13 +82,31 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
         margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: auto(el.margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: auto(el.margin_left) },
         padding: Rect { top: LengthPercentage::length(el.padding[0]), right: LengthPercentage::length(el.padding[1]), bottom: LengthPercentage::length(el.padding[2]), left: LengthPercentage::length(el.padding[3]) },
         border: Rect { top: LengthPercentage::length(el.border_widths[0]), right: LengthPercentage::length(el.border_widths[1]), bottom: LengthPercentage::length(el.border_widths[2]), left: LengthPercentage::length(el.border_widths[3]) },
-        size: Size { width: dim(el.css_width), height: dim(el.css_height) },
         ..Default::default()
     };
+    if el.tag == "table" {
+        let mut cols = vec![];
+        for _ in 0..el.table_col_count { cols.push(GridTemplateComponent::Single(TrackSizingFunction::from_fr(1.0))); }
+        s.grid_template_columns = cols;
+    }
     let (min_w, max_w) = mm(el.min_width, el.max_width);
     let (min_h, max_h) = mm(el.min_height, el.max_height);
     s.min_size = Size { width: min_w, height: min_h };
     s.max_size = Size { width: max_w, height: max_h };
+    if el.tag == "td" || el.tag == "th" {
+        if let Some(r) = el.grid_row { s.grid_row = Line { start: GridPlacement::from_line_index(r as i16 + 1), end: GridPlacement::Auto }; }
+        if let Some(c) = el.grid_col { s.grid_column = Line { start: GridPlacement::from_line_index(c as i16 + 1), end: GridPlacement::Auto }; }
+    }
+    s.size = Size { width: dim(el.css_width), height: dim(el.css_height) };
+    if el.position == "absolute" || el.position == "fixed" {
+        s.position = Position::Absolute;
+        s.inset = Rect {
+            top: LengthPercentageAuto::length(el.inset_top),
+            right: LengthPercentageAuto::length(el.inset_right),
+            bottom: LengthPercentageAuto::length(el.inset_bottom),
+            left: LengthPercentageAuto::length(el.inset_left),
+        };
+    }
     if cd == Display::Flex {
         s.flex_direction = crate::bridge_gen::str_flex_direction_to_caelum(&el.flex_direction);
         s.flex_wrap = crate::bridge_gen::str_flex_wrap_to_caelum(&el.flex_wrap);
@@ -100,6 +120,51 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
 }
 
 pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
+    // Table Layout: Assign grid coordinates to cells
+    let mut i = 0;
+    while i < elements.len() {
+        if elements[i].tag == "table" {
+            let mut row_idx = 0;
+            let mut occupied: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+
+            let table_idx = i;
+            let mut j = i + 1;
+            while j < elements.len() && elements[j].parent_index.is_some() {
+                let mut is_descendant = false;
+                let mut curr = elements[j].parent_index;
+                while let Some(p) = curr {
+                    if p == table_idx { is_descendant = true; break; }
+                    curr = elements[p].parent_index;
+                }
+                if !is_descendant { break; }
+
+                if elements[j].tag == "tr" {
+                    let mut col_idx = 0;
+                    let tr_idx = j;
+                    let mut k = j + 1;
+                    while k < elements.len() && elements[k].parent_index == Some(tr_idx) {
+                        if elements[k].tag == "td" || elements[k].tag == "th" {
+                            while occupied.contains(&(row_idx, col_idx)) { col_idx += 1; }
+                            elements[k].grid_row = Some(row_idx);
+                            elements[k].grid_col = Some(col_idx);
+                            for dr in 0..elements[k].rowspan {
+                                for dc in 0..elements[k].colspan {
+                                    occupied.insert((row_idx + dr, col_idx + dc));
+                                }
+                            }
+                            col_idx += elements[k].colspan;
+                            elements[table_idx].table_col_count = elements[table_idx].table_col_count.max(col_idx);
+                        }
+                        k += 1;
+                    }
+                    elements[table_idx].table_row_count = row_idx + 1;
+                    row_idx += 1;
+                }
+                j += 1;
+            }
+        }
+        i += 1;
+    }
     if elements.is_empty() { return; }
 
     // ponytail: estimate heights for text elements so Caelum can stack block elements correctly

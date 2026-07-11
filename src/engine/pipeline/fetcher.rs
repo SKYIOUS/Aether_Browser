@@ -122,7 +122,7 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> V
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
         x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0, svg_stroke: None, svg_stroke_width: 1.0, z_index: 0, is_svg: false, svg_path_data: String::new(), colspan: 1, rowspan: 1, grid_row: None, grid_col: None, table_col_count: 0, table_row_count: 0, attrs: std::collections::HashMap::new(),
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),

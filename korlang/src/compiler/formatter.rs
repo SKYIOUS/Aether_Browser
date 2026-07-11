@@ -1,4 +1,4 @@
-use super::parser::{Component, Node, Expr, Element, Property, FunctionDef, State};
+use super::parser::{Component, Node, Expr, FunctionDef};
 use super::lexer::Token;
 
 pub fn format_component(comp: &Component) -> String {

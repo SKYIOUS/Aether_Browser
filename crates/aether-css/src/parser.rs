@@ -352,7 +352,7 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     ((r * 255.0).round() as u8, (g * 255.0).round() as u8, (b * 255.0).round() as u8)
 }
 
-fn parse_color_function(s: &str) -> Option<Color> {
+pub fn parse_color_function(s: &str) -> Option<Color> {
     let s = s.trim().to_lowercase();
     if s.starts_with("rgba(") && s.ends_with(')') {
         let inner = &s[5..s.len() - 1];

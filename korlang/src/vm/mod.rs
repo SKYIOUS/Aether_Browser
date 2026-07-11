@@ -265,22 +265,39 @@ impl VirtualMachine {
                     self.stack.push(Value::String(parts.concat()));
                     ip += 1;
                 }
-                OpCode::ForEach(var, _) => {
-                    let list_val = self.stack.last().cloned().unwrap_or(Value::None);
-                    if let Value::List(l) = list_val {
-                        let key = format!("__fe_{}", var);
-                        let current = self.heap.get(&key).and_then(|v| if let Value::Number(n) = v { Some(*n as usize) } else { None }).unwrap_or(0);
-                        if current < l.len() {
-                            self.heap.insert(key, Value::Number((current + 1) as f64));
-                            self.heap.insert(var.clone(), l[current].clone());
-                            self.stack.push(Value::Bool(true));
+                OpCode::ForEach(var, end_ip) => {
+                    let key_coll = format!("__fe_coll_{}", var);
+                    let key_idx = format!("__fe_idx_{}", var);
+                    if !self.heap.contains_key(&key_coll) {
+                        if let Some(coll @ Value::List(_)) = self.stack.pop() {
+                            self.heap.insert(key_coll.clone(), coll);
+                            self.heap.insert(key_idx.clone(), Value::Number(0.0));
                         } else {
-                            self.heap.remove(&key); self.stack.pop(); self.stack.push(Value::Bool(false));
+                            ip = end_ip;
+                            continue;
                         }
-                    } else { self.stack.push(Value::Bool(false)); }
-                    ip += 1;
+                    }
+                    let (is_done, val) = {
+                        let coll = self.heap.get(&key_coll).unwrap();
+                        let idx_val = self.heap.get(&key_idx).unwrap();
+                        if let (Value::List(l), Value::Number(n)) = (coll, idx_val) {
+                            let idx = *n as usize;
+                            if idx < l.len() { (false, Some(l[idx].clone())) } else { (true, None) }
+                        } else { (true, None) }
+                    };
+                    if is_done {
+                        self.heap.remove(&key_coll);
+                        self.heap.remove(&key_idx);
+                        ip = end_ip;
+                    } else {
+                        if let Some(Value::Number(n)) = self.heap.get(&key_idx).cloned() {
+                            self.heap.insert(key_idx, Value::Number(n + 1.0));
+                        }
+                        if let Some(v) = val { self.heap.insert(var, v); }
+                        ip += 1;
+                    }
                 }
-            }
+                }
         }
         self.instruction_pointer = ip;
     }
