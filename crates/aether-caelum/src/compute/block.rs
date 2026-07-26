@@ -718,11 +718,6 @@ fn perform_final_layout_on_in_flow_children(
                 let mut location =
                     block_ctx.place_floated_box(margin_box, y_offset_for_float, float_direction, item.clear);
 
-                // Ensure that content that appears after a float does not get positioned before/above the float
-                //
-                // FIX: Track first float per row to avoid pushing content down unnecessarily
-                let is_first_float_in_row = block_ctx.is_first_float_in_row(y_offset_for_float);
-
                 // Convert the margin-box location returned by float placement into a border-box location
                 // for the output Layout
                 location.y += item_non_auto_margin.top;
