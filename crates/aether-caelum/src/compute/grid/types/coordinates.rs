@@ -34,7 +34,7 @@ impl GridLine {
         let oz_line = match self.0.cmp(&0) {
             Ordering::Greater => self.0 - 1,
             Ordering::Less => self.0 + explicit_line_count as i16,
-            Ordering::Equal => panic!("Grid line of zero is invalid"),
+            Ordering::Equal => unreachable!("Invalid state - should have been validated earlier"),
         };
         OriginZeroLine(oz_line)
     }
@@ -88,9 +88,9 @@ impl OriginZeroLine {
     pub(crate) fn into_track_vec_index(self, track_counts: TrackCounts) -> usize {
         self.try_into_track_vec_index(track_counts).unwrap_or_else(|| {
             if self.0 > 0 {
-                panic!("OriginZero grid line cannot be more than the number of positive grid lines");
+                unreachable!("Invalid state - should have been validated earlier");
             } else {
-                panic!("OriginZero grid line cannot be less than the number of negative grid lines");
+                unreachable!("Invalid state - should have been validated earlier");
             }
         })
     }

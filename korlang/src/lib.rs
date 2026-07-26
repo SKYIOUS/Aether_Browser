@@ -31,10 +31,10 @@ mod overhaul_tests {
         let mut vm = VirtualMachine::new();
         vm.execute(bc);
         if let Some(Value::Object(obj)) = vm.stack.last() {
-            let obj = obj.lock().unwrap();
+            let obj = obj.lock().expect("Operation failed");
             if let Some(Value::Object(text_obj)) = obj.children.first() {
-                let text_obj = text_obj.lock().unwrap();
-                assert_eq!(text_obj.properties.get("text").unwrap().to_string_val(), "20");
+                let text_obj = text_obj.lock().expect("Operation failed");
+                assert_eq!(text_obj.properties.get("text").expect("Operation failed").to_string_val(), "20");
             }
         }
     }
@@ -46,10 +46,10 @@ mod overhaul_tests {
         let mut vm = VirtualMachine::new();
         vm.execute(bc);
         if let Some(Value::Object(obj)) = vm.stack.last() {
-            let obj = obj.lock().unwrap();
+            let obj = obj.lock().expect("Mutex poisoned");
             if let Some(Value::Object(text_obj)) = obj.children.first() {
-                let text_obj = text_obj.lock().unwrap();
-                assert_eq!(text_obj.properties.get("text").unwrap().to_string_val(), "30");
+                let text_obj = text_obj.lock().expect("Mutex poisoned");
+                assert_eq!(text_obj.properties.get("text").expect("Operation failed").to_string_val(), "30");
             }
         }
     }
@@ -61,7 +61,7 @@ mod overhaul_tests {
         let mut vm = VirtualMachine::new();
         vm.execute(bc);
         if let Some(Value::Object(obj)) = vm.stack.last() {
-            let obj = obj.lock().unwrap();
+            let obj = obj.lock().expect("Mutex poisoned");
             assert_eq!(obj.children.len(), 3);
         }
     }

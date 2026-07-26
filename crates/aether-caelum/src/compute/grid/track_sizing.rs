@@ -509,7 +509,7 @@ fn resolve_item_baselines(
 
         // Compute the max baseline of all items in the row
         let row_max_baseline =
-            row_items.iter().map(|item| item.baseline.unwrap_or(0.0)).max_by(|a, b| a.total_cmp(b)).unwrap();
+            row_items.iter().map(|item| item.baseline.unwrap_or(0.0)).max_by(|a, b| a.total_cmp(b)).expect("Unexpected None value");
 
         // Compute the baseline shim for each item in the row
         for item in row_items.iter_mut() {
@@ -1392,7 +1392,7 @@ fn distribute_space_up_to_limits(
             .filter(|track| track_is_affected(track))
             .map(|track| (track_limit(track) - track_affected_property(track)) / track_distribution_proportion(track))
             .min_by(|a, b| a.total_cmp(b))
-            .unwrap(); // We will never pass an empty track list to this function
+            .expect("Unexpected None value"); // We will never pass an empty track list to this function
         let iteration_item_incurred_increase =
             f32_min(min_increase_limit, space_to_distribute / track_distribution_proportion_sum);
 

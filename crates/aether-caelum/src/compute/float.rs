@@ -407,7 +407,7 @@ impl FloatContext {
         }
 
         // Else unwrap the index of the segment that the start of the floating box is placed in
-        let mut start_idx = start.unwrap();
+        let mut start_idx = start.expect("Unexpected None value");
 
         // If the floated box doesn't start at the exact same y-offset as the segment it starts in, then
         // subdivide that segment into two segments at the y-offset that the floated box starts at, and increment

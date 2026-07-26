@@ -155,7 +155,7 @@ impl CellOccupancyMatrix {
             }
             // Push existing columns
             for col in 0..old_col_count {
-                data.push(*self.inner.get(row, col).unwrap());
+                data.push(*self.inner.get(row, col).expect("Key not found"));
             }
             // Push new positive columns
             for _ in 0..req_positive_cols {
@@ -203,7 +203,7 @@ impl CellOccupancyMatrix {
 
         for x in row_range {
             for y in col_range.clone() {
-                *self.inner.get_mut(x as usize, y as usize).unwrap() = value;
+                *self.inner.get_mut(x as usize, y as usize).expect("Unexpected None value") = value;
             }
         }
     }

@@ -73,13 +73,13 @@ mod integration_tests {
     #[test]
     fn flexbox_items_larger_than_container() {
         let mut t = ctree();
-        let a = t.new_leaf(Style { size: Size::from_lengths(200.0, 50.0), ..Default::default() }).unwrap();
-        let b = t.new_leaf(Style { size: Size::from_lengths(50.0, 200.0), ..Default::default() }).unwrap();
+        let a = t.new_leaf(Style { size: Size::from_lengths(200.0, 50.0), ..Default::default() }).expect("Layout failed");
+        let b = t.new_leaf(Style { size: Size::from_lengths(50.0, 200.0), ..Default::default() }).expect("Layout failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(100.0, 100.0), ..Default::default() }, &[a, b],
-            ).unwrap();
-        t.compute_layout(container, make_avail(100.0, 100.0)).unwrap();
-        let layout = t.layout(container).unwrap();
+            ).expect("Unexpected None");
+        t.compute_layout(container, make_avail(100.0, 100.0)).expect("Layout failed");
+        let layout = t.layout(container).expect("Layout failed");
         assert_eq!(layout.size.width, 100.0);
         assert_eq!(layout.size.height, 100.0);
     }
@@ -87,13 +87,13 @@ mod integration_tests {
     #[test]
     fn flexbox_zero_size_items() {
         let mut t = ctree();
-        let a = t.new_leaf(Style { size: Size::from_lengths(0.0, 0.0), ..Default::default() }).unwrap();
-        let b = t.new_leaf(Style { size: Size::from_lengths(0.0, 0.0), ..Default::default() }).unwrap();
+        let a = t.new_leaf(Style { size: Size::from_lengths(0.0, 0.0), ..Default::default() }).expect("Layout failed");
+        let b = t.new_leaf(Style { size: Size::from_lengths(0.0, 0.0), ..Default::default() }).expect("Layout failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, ..Default::default() }, &[a, b],
-            ).unwrap();
-        t.compute_layout(container, make_avail(500.0, 500.0)).unwrap();
-        let layout = t.layout(container).unwrap();
+            ).expect("Unexpected None");
+        t.compute_layout(container, make_avail(500.0, 500.0)).expect("Layout failed");
+        let layout = t.layout(container).expect("Layout failed");
         assert!(layout.size.width >= 0.0);
         assert!(layout.size.height >= 0.0);
     }
@@ -101,15 +101,15 @@ mod integration_tests {
     #[test]
     fn flexbox_nested_containers() {
         let mut t = ctree();
-        let child = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).unwrap();
+        let child = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).expect("Layout failed");
         let inner = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(100.0, 100.0), ..Default::default() }, &[child],
-            ).unwrap();
+            ).expect("Unexpected None");
         let outer = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(300.0, 300.0), ..Default::default() }, &[inner],
-            ).unwrap();
-        t.compute_layout(outer, make_avail(300.0, 300.0)).unwrap();
-        let inner_layout = t.layout(inner).unwrap();
+            ).expect("Unexpected None");
+        t.compute_layout(outer, make_avail(300.0, 300.0)).expect("Layout failed");
+        let inner_layout = t.layout(inner).expect("Layout failed");
         assert_eq!(inner_layout.size.width, 100.0);
         assert_eq!(inner_layout.size.height, 100.0);
     }
@@ -123,15 +123,15 @@ mod integration_tests {
             max_size: Size::from_lengths(120.0, 100.0),
             ..Default::default()
         };
-        let a = t.new_leaf(ch.clone()).unwrap();
-        let b = t.new_leaf(ch.clone()).unwrap();
-        let c = t.new_leaf(ch).unwrap();
+        let a = t.new_leaf(ch.clone()).expect("Operation failed");
+        let b = t.new_leaf(ch.clone()).expect("Operation failed");
+        let c = t.new_leaf(ch).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, flex_wrap: FlexWrap::Wrap,
                     size: Size::from_lengths(150.0, 200.0), ..Default::default() }, &[a, b, c],
-            ).unwrap();
-        t.compute_layout(container, make_avail(150.0, 200.0)).unwrap();
-        let layout = t.layout(container).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(150.0, 200.0)).expect("Operation failed");
+        let layout = t.layout(container).expect("Operation failed");
         assert_eq!(layout.size.width, 150.0);
     }
 
@@ -141,16 +141,16 @@ mod integration_tests {
     fn grid_auto_placement() {
         let mut t = ctree();
         let items: Vec<_> = (0..4)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Grid, size: Size::from_lengths(200.0, 200.0),
                     grid_template_columns: vec![fr(1.0), fr(1.0)],
                     grid_template_rows: vec![fr(1.0), fr(1.0)], ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
         for item in &items {
-            let layout = t.layout(*item).unwrap();
+            let layout = t.layout(*item).expect("Operation failed");
             assert!(layout.size.width > 0.0);
             assert!(layout.size.height > 0.0);
         }
@@ -163,15 +163,15 @@ mod integration_tests {
                 grid_column: Line { start: GridPlacement::from_line_index(1),
                     end: GridPlacement::from_line_index(3) },
                 ..Default::default()
-            }).unwrap();
-        let small = t.new_leaf(Style { ..Default::default() }).unwrap();
+            }).expect("Operation failed");
+        let small = t.new_leaf(Style { ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Grid, size: Size::from_lengths(200.0, 200.0),
                     grid_template_columns: vec![fr(1.0), fr(1.0)],
                     grid_template_rows: vec![fr(1.0), fr(1.0)], ..Default::default() }, &[wide, small],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let wide_layout = t.layout(wide).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
+        let wide_layout = t.layout(wide).expect("Operation failed");
         assert_eq!(wide_layout.size.width, 200.0);
     }
 
@@ -181,13 +181,13 @@ mod integration_tests {
     fn block_float_left() {
         let mut t = ctree();
         let float = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(300.0, 200.0), ..Default::default() },
                 &[float],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 200.0)).unwrap();
-        let float_layout = t.layout(float).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 200.0)).expect("Operation failed");
+        let float_layout = t.layout(float).expect("Operation failed");
         assert_eq!(float_layout.location.x, 0.0);
     }
 
@@ -195,15 +195,15 @@ mod integration_tests {
     fn block_clear_both() {
         let mut t = ctree();
         let left = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, ..Default::default() }).expect("Operation failed");
         let right = t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0),
-                float: crate::Float::Right, clear: crate::Clear::Both, ..Default::default() }).unwrap();
+                float: crate::Float::Right, clear: crate::Clear::Both, ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(300.0, 300.0), ..Default::default() },
                 &[left, right],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 300.0)).unwrap();
-        let right_layout = t.layout(right).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 300.0)).expect("Operation failed");
+        let right_layout = t.layout(right).expect("Operation failed");
         assert!(right_layout.location.y >= 0.0);
     }
 
@@ -212,29 +212,29 @@ mod integration_tests {
     #[test]
     fn zero_height_container() {
         let mut t = ctree();
-        let child = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).unwrap();
+        let child = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(100.0, 0.0), ..Default::default() }, &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(100.0, 0.0)).unwrap();
-        let layout = t.layout(container).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(100.0, 0.0)).expect("Operation failed");
+        let layout = t.layout(container).expect("Operation failed");
         assert_eq!(layout.size.height, 0.0);
     }
 
     #[test]
     fn deeply_nested_layout() {
         let mut t = ctree();
-        let mut parent = t.new_leaf(Style { size: Size::from_lengths(10.0, 10.0), ..Default::default() }).unwrap();
+        let mut parent = t.new_leaf(Style { size: Size::from_lengths(10.0, 10.0), ..Default::default() }).expect("Operation failed");
         for _ in 0..50 {
-            let child = t.new_leaf(Style { size: Size::from_lengths(10.0, 10.0), ..Default::default() }).unwrap();
+            let child = t.new_leaf(Style { size: Size::from_lengths(10.0, 10.0), ..Default::default() }).expect("Operation failed");
             let new_parent = t.new_with_children(
                     Style { display: Display::Flex, size: Size::from_lengths(50.0, 50.0), ..Default::default() },
                     &[parent, child],
-                ).unwrap();
+                ).expect("Operation failed");
             parent = new_parent;
         }
-        t.compute_layout(parent, make_avail(500.0, 500.0)).unwrap();
-        let layout = t.layout(parent).unwrap();
+        t.compute_layout(parent, make_avail(500.0, 500.0)).expect("Operation failed");
+        let layout = t.layout(parent).expect("Operation failed");
         assert!(layout.size.width > 0.0);
         assert!(layout.size.height > 0.0);
     }
@@ -245,9 +245,9 @@ mod integration_tests {
         let node = t.new_leaf(Style {
                 size: Size { width: Dimension::from_length(200.0), height: Dimension::auto() },
                 aspect_ratio: Some(2.0), ..Default::default()
-            }).unwrap();
-        t.compute_layout(node, make_avail(500.0, 500.0)).unwrap();
-        let layout = t.layout(node).unwrap();
+            }).expect("Operation failed");
+        t.compute_layout(node, make_avail(500.0, 500.0)).expect("Operation failed");
+        let layout = t.layout(node).expect("Operation failed");
         assert_eq!(layout.size.width, 200.0);
         assert_eq!(layout.size.height, 100.0);
     }
@@ -255,13 +255,13 @@ mod integration_tests {
     #[test]
     fn overflow_hidden() {
         let mut t = ctree();
-        let inner = t.new_leaf(Style { size: Size::from_lengths(200.0, 200.0), ..Default::default() }).unwrap();
+        let inner = t.new_leaf(Style { size: Size::from_lengths(200.0, 200.0), ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(100.0, 100.0),
                     overflow: Point { x: Overflow::Hidden, y: Overflow::Hidden }, ..Default::default() }, &[inner],
-            ).unwrap();
-        t.compute_layout(container, make_avail(100.0, 100.0)).unwrap();
-        let layout = t.layout(container).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(100.0, 100.0)).expect("Layout failed");
+        let layout = t.layout(container).expect("Operation failed");
         assert_eq!(layout.size.width, 100.0);
         assert_eq!(layout.size.height, 100.0);
     }
@@ -270,37 +270,37 @@ mod integration_tests {
 
     #[test]
     fn from_css_width_height() {
-        let s = Style::<String>::from_css("width", "100px").unwrap();
+        let s = Style::<String>::from_css("width", "100px").expect("Operation failed");
         assert_eq!(s.size.width.into_option(), Some(100.0));
-        let s = Style::<String>::from_css("height", "50%").unwrap();
+        let s = Style::<String>::from_css("height", "50%").expect("CSS parse failed");
         assert_eq!(s.size.height.tag(), Dimension::percent(0.5).tag());
-        let s = Style::<String>::from_css("width", "auto").unwrap();
+        let s = Style::<String>::from_css("width", "auto").expect("Operation failed");
         assert!(s.size.width.is_auto());
     }
 
     #[test]
     fn from_css_display() {
-        let s = Style::<String>::from_css("display", "flex").unwrap();
+        let s = Style::<String>::from_css("display", "flex").expect("Operation failed");
         assert_eq!(s.display, Display::Flex);
-        let s = Style::<String>::from_css("display", "none").unwrap();
+        let s = Style::<String>::from_css("display", "none").expect("Operation failed");
         assert_eq!(s.display, Display::None);
         assert!(Style::<String>::from_css("display", "bogus").is_err());
     }
 
     #[test]
     fn from_css_position() {
-        let s = Style::<String>::from_css("position", "absolute").unwrap();
+        let s = Style::<String>::from_css("position", "absolute").expect("Operation failed");
         assert_eq!(s.position, Position::Absolute);
     }
 
     #[test]
     fn from_css_margin_padding() {
-        let s = Style::<String>::from_css("margin", "10px").unwrap();
+        let s = Style::<String>::from_css("margin", "10px").expect("Operation failed");
         assert_eq!(s.margin.left.into_raw().value(), 10.0);
-        let s = Style::<String>::from_css("margin", "10px 20px").unwrap();
+        let s = Style::<String>::from_css("margin", "10px 20px").expect("Operation failed");
         assert_eq!(s.margin.left.into_raw().value(), 20.0);
         assert_eq!(s.margin.top.into_raw().value(), 10.0);
-        let s = Style::<String>::from_css("padding", "1px 2px 3px 4px").unwrap();
+        let s = Style::<String>::from_css("padding", "1px 2px 3px 4px").expect("Operation failed");
         assert_eq!(s.padding.top.into_raw().value(), 1.0);
         assert_eq!(s.padding.right.into_raw().value(), 2.0);
         assert_eq!(s.padding.bottom.into_raw().value(), 3.0);
@@ -318,16 +318,16 @@ mod integration_tests {
     fn flexbox_wrap_items() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, flex_wrap: FlexWrap::Wrap,
                     size: Size::from_lengths(150.0, 200.0), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(150.0, 200.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(150.0, 200.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert_eq!(l0.location.x, 0.0);
         assert!(l1.location.y > l0.location.y, "wrapped item[1] y {} not > item[0] y {}", l1.location.y, l0.location.y);
         assert!(l2.location.y > l0.location.y, "wrapped item[2] y {} not > item[0] y {}", l2.location.y, l0.location.y);
@@ -337,17 +337,17 @@ mod integration_tests {
     fn flexbox_nowrap_shrink() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(150.0, 50.0), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(150.0, 50.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(150.0, 50.0)).expect("Operation failed");
         for (i, item) in items.iter().enumerate() {
-            let l = t.layout(*item).unwrap();
+            let l = t.layout(*item).expect("Layout failed");
             assert!(l.size.width <= 60.0, "item[{}] width {} > 60", i, l.size.width);
         }
-        let last = t.layout(items[2]).unwrap();
+        let last = t.layout(items[2]).expect("Operation failed");
         assert!((last.location.x + last.size.width - 150.0).abs() < 1.0);
     }
 
@@ -358,15 +358,15 @@ mod integration_tests {
             .map(|_| t.new_leaf(Style {
                     size: Size { width: Dimension::from_length(80.0), height: Dimension::auto() },
                     ..Default::default()
-                }).unwrap())
+                }).expect("Unexpected None"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(400.0, 100.0),
                     align_items: Some(AlignItems::Stretch), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 100.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 100.0)).expect("Operation failed");
         for (i, item) in items.iter().enumerate() {
-            let l = t.layout(*item).unwrap();
+            let l = t.layout(*item).expect("Operation failed");
             assert_eq!(l.size.height, 100.0, "item[{}] height {} != 100", i, l.size.height);
         }
     }
@@ -375,15 +375,15 @@ mod integration_tests {
     fn flexbox_align_items_center() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(60.0, 30.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(60.0, 30.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(400.0, 100.0),
                     align_items: Some(AlignItems::Center), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 100.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 100.0)).expect("Operation failed");
         for (i, item) in items.iter().enumerate() {
-            let l = t.layout(*item).unwrap();
+            let l = t.layout(*item).expect("Operation failed");
             assert!((l.location.y - 35.0).abs() < 1.0, "item[{}] y {} != 35", i, l.location.y);
         }
     }
@@ -392,15 +392,15 @@ mod integration_tests {
     fn flexbox_justify_space_between() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 30.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 30.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(400.0, 50.0),
                     justify_content: Some(JustifyContent::SpaceBetween), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 50.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 50.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert_eq!(l0.location.x, 0.0);
         assert!((l2.location.x + l2.size.width - 400.0).abs() < 1.0,
             "last item right edge {} != 400", l2.location.x + l2.size.width);
@@ -411,17 +411,17 @@ mod integration_tests {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
             .map(|i| t.new_leaf(Style { size: Size::from_lengths(50.0, 30.0),
-                    flex_grow: i as f32, ..Default::default() }).unwrap())
+                    flex_grow: i as f32, ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(300.0, 50.0), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 50.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 50.0)).expect("Operation failed");
         // flex_grow = [0, 1, 2], remaining = 150
         // item0: 50 + 0 = 50, item1: 50 + 50 = 100, item2: 50 + 100 = 150
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert!((l0.size.width - 50.0).abs() < 1.0, "item0 width {}", l0.size.width);
         assert!((l1.size.width - 100.0).abs() < 1.0, "item1 width {}", l1.size.width);
         assert!((l2.size.width - 150.0).abs() < 1.0, "item2 width {}", l2.size.width);
@@ -434,15 +434,15 @@ mod integration_tests {
     fn flexbox_column_direction() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 80.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 80.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style { display: Display::Flex, flex_direction: FlexDirection::Column,
                     size: Size::from_lengths(100.0, 300.0), ..Default::default() }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(100.0, 300.0)).unwrap();
+            ).expect("Unexpected None");
+        t.compute_layout(container, make_avail(100.0, 300.0)).expect("Operation failed");
         for (i, item) in items.iter().enumerate() {
-            let l = t.layout(*item).unwrap();
+            let l = t.layout(*item).expect("Operation failed");
             assert_eq!(l.location.x, 0.0);
             assert!((l.location.y - (i as f32 * 80.0)).abs() < 1.0,
                 "item[{}] y {} != {}", i, l.location.y, i * 80);
@@ -453,7 +453,7 @@ mod integration_tests {
     fn flexbox_gap_between_items() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -462,11 +462,11 @@ mod integration_tests {
                     size: Size::from_lengths(300.0, 50.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 50.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 50.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert_eq!(l0.location.x, 0.0);
         assert!((l1.location.x - 90.0).abs() < 1.0, "item1 x {}", l1.location.x);
         assert!((l2.location.x - 180.0).abs() < 1.0, "item2 x {}", l2.location.x);
@@ -478,7 +478,7 @@ mod integration_tests {
     fn grid_explicit_fr_columns() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -488,11 +488,11 @@ mod integration_tests {
                     size: Size::from_lengths(400.0, 100.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 100.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 100.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert!((l0.size.width - 100.0).abs() < 1.0, "col0 width {}", l0.size.width);
         assert!((l1.size.width - 200.0).abs() < 1.0, "col1 width {}", l1.size.width);
         assert!((l2.size.width - 100.0).abs() < 1.0, "col2 width {}", l2.size.width);
@@ -502,7 +502,7 @@ mod integration_tests {
     fn grid_column_gap() {
         let mut t = ctree();
         let items: Vec<_> = (0..4)
-            .map(|_| t.new_leaf(Style { ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -513,11 +513,11 @@ mod integration_tests {
                     size: Size::from_lengths(220.0, 200.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(220.0, 200.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(220.0, 200.0)).expect("Operation failed");
         let col_w = (220.0 - 20.0) / 2.0;
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
         assert!((l0.size.width - col_w).abs() < 1.0);
         assert!((l1.location.x - (col_w + 20.0)).abs() < 1.0, "item1 x {}", l1.location.x);
     }
@@ -526,7 +526,7 @@ mod integration_tests {
     fn grid_auto_rows() {
         let mut t = ctree();
         let items: Vec<_> = (0..4)
-            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 30.0), ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { size: Size::from_lengths(50.0, 30.0), ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -535,10 +535,10 @@ mod integration_tests {
                     size: Size::from_lengths(200.0, 200.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
         for (i, item) in items.iter().enumerate() {
-            let l = t.layout(*item).unwrap();
+            let l = t.layout(*item).expect("Operation failed");
             assert!(l.size.width > 0.0, "item[{}] width", i);
             assert!(l.size.height > 0.0, "item[{}] height", i);
         }
@@ -548,7 +548,7 @@ mod integration_tests {
     fn grid_fixed_px_columns() {
         let mut t = ctree();
         let items: Vec<_> = (0..3)
-            .map(|_| t.new_leaf(Style { ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -562,10 +562,10 @@ mod integration_tests {
                     size: Size::from_lengths(400.0, 100.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 100.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l1 = t.layout(items[1]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 100.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l1 = t.layout(items[1]).expect("Operation failed");
         assert!((l0.size.width - 100.0).abs() < 1.0, "col0 width {}", l0.size.width);
         assert!((l1.size.width - 200.0).abs() < 1.0, "col1 width {}", l1.size.width);
     }
@@ -574,7 +574,7 @@ mod integration_tests {
     fn grid_explicit_row_height() {
         let mut t = ctree();
         let items: Vec<_> = (0..4)
-            .map(|_| t.new_leaf(Style { ..Default::default() }).unwrap())
+            .map(|_| t.new_leaf(Style { ..Default::default() }).expect("Operation failed"))
             .collect();
         let container = t.new_with_children(
                 Style {
@@ -587,10 +587,10 @@ mod integration_tests {
                     size: Size::from_lengths(200.0, 200.0),
                     ..Default::default()
                 }, &items,
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let l0 = t.layout(items[0]).unwrap();
-        let l2 = t.layout(items[2]).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
+        let l0 = t.layout(items[0]).expect("Operation failed");
+        let l2 = t.layout(items[2]).expect("Operation failed");
         assert!((l0.size.height - 80.0).abs() < 1.0, "row1 height {}", l0.size.height);
         assert!((l2.size.height - 120.0).abs() < 1.0, "row2 height {}", l2.size.height);
     }
@@ -603,29 +603,29 @@ mod integration_tests {
         let child = t.new_leaf(Style {
                 size: Size { width: Dimension::percent(0.5), height: Dimension::from_length(50.0) },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(400.0, 100.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(400.0, 100.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(400.0, 100.0)).expect("Operation failed");
+        let l = t.layout(child).expect("Operation failed");
         assert!((l.size.width - 200.0).abs() < 1.0, "child width {} != 200", l.size.width);
     }
 
     #[test]
     fn block_auto_height_expands() {
         let mut t = ctree();
-        let child = t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).unwrap();
+        let child = t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block,
                     size: Size { width: Dimension::from_length(200.0), height: Dimension::auto() },
                     ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 600.0)).unwrap();
-        let cl = t.layout(child).unwrap();
-        let pl = t.layout(container).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 600.0)).expect("Operation failed");
+        let cl = t.layout(child).expect("Operation failed");
+        let pl = t.layout(container).expect("Operation failed");
         assert!(pl.size.height >= cl.size.height,
             "container height {} < child height {}", pl.size.height, cl.size.height);
         assert!(pl.size.height > 0.0);
@@ -638,13 +638,13 @@ mod integration_tests {
                 size: Size::from_lengths(100.0, 50.0),
                 margin: Rect { top: LengthPercentageAuto::length(20.0), ..Rect::zero() },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(200.0, 200.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
+        let l = t.layout(child).expect("Operation failed");
         assert_eq!(l.location.y, 20.0);
         assert_eq!(l.location.x, 0.0);
     }
@@ -652,19 +652,19 @@ mod integration_tests {
     #[test]
     fn block_negative_margin_overlap() {
         let mut t = ctree();
-        let a = t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).unwrap();
+        let a = t.new_leaf(Style { size: Size::from_lengths(100.0, 50.0), ..Default::default() }).expect("Operation failed");
         let b = t.new_leaf(Style {
                 size: Size::from_lengths(100.0, 50.0),
                 margin: Rect { top: LengthPercentageAuto::length(-10.0), ..Rect::zero() },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(200.0, 200.0), ..Default::default() },
                 &[a, b],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let la = t.layout(a).unwrap();
-        let lb = t.layout(b).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
+        let la = t.layout(a).expect("Operation failed");
+        let lb = t.layout(b).expect("Layout failed");
         assert!(lb.location.y < la.location.y + la.size.height,
             "second item y {} not overlapping first item bottom {}",
             lb.location.y, la.location.y + la.size.height);
@@ -677,13 +677,13 @@ mod integration_tests {
                 position: Position::Absolute,
                 size: Size::from_lengths(50.0, 30.0),
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(200.0, 200.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Layout failed");
+        let l = t.layout(child).expect("Operation failed");
         assert!(l.size.width > 0.0);
         assert!(l.size.height > 0.0);
     }
@@ -694,16 +694,16 @@ mod integration_tests {
     fn float_left_two_items() {
         let mut t = ctree();
         let f1 = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, ..Default::default() }).expect("Operation failed");
         let f2 = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(300.0, 200.0), ..Default::default() },
                 &[f1, f2],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 200.0)).unwrap();
-        let l1 = t.layout(f1).unwrap();
-        let l2 = t.layout(f2).unwrap();
+            ).expect("Unexpected None");
+        t.compute_layout(container, make_avail(300.0, 200.0)).expect("Operation failed");
+        let l1 = t.layout(f1).expect("Operation failed");
+        let l2 = t.layout(f2).expect("Operation failed");
         assert_eq!(l1.location.x, 0.0);
         assert_eq!(l2.location.x, 80.0);
         assert_eq!(l1.location.y, 0.0);
@@ -714,13 +714,13 @@ mod integration_tests {
     fn float_right_position() {
         let mut t = ctree();
         let float = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Right, ..Default::default() }).unwrap();
+                float: crate::Float::Right, ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(300.0, 200.0), ..Default::default() },
                 &[float],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 200.0)).unwrap();
-        let l = t.layout(float).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 200.0)).expect("Operation failed");
+        let l = t.layout(float).expect("Operation failed");
         assert!((l.location.x - 220.0).abs() < 1.0, "float right x {}", l.location.x);
     }
 
@@ -728,15 +728,15 @@ mod integration_tests {
     fn float_clear_left_block() {
         let mut t = ctree();
         let f1 = t.new_leaf(Style { size: Size::from_lengths(80.0, 100.0),
-                float: crate::Float::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, ..Default::default() }).expect("Operation failed");
         let f2 = t.new_leaf(Style { size: Size::from_lengths(80.0, 50.0),
-                float: crate::Float::Left, clear: crate::Clear::Left, ..Default::default() }).unwrap();
+                float: crate::Float::Left, clear: crate::Clear::Left, ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Block, size: Size::from_lengths(300.0, 300.0), ..Default::default() },
                 &[f1, f2],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 300.0)).unwrap();
-        let l2 = t.layout(f2).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 300.0)).expect("Operation failed");
+        let l2 = t.layout(f2).expect("Operation failed");
         assert!(l2.location.y >= 100.0, "cleared float y {} < 100", l2.location.y);
     }
 
@@ -749,28 +749,28 @@ mod integration_tests {
                 size: Size::from_lengths(50.0, 0.0),
                 min_size: Size { width: Dimension::auto(), height: Dimension::from_length(100.0) },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(200.0, 200.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 200.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 200.0)).expect("Operation failed");
+        let l = t.layout(child).expect("Operation failed");
         assert!(l.size.height >= 100.0, "child height {} < 100", l.size.height);
     }
 
     #[test]
     fn display_none_child_takes_no_space() {
         let mut t = ctree();
-        let visible = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).unwrap();
-        let hidden = t.new_leaf(Style { display: Display::None, size: Size::from_lengths(100.0, 100.0), ..Default::default() }).unwrap();
+        let visible = t.new_leaf(Style { size: Size::from_lengths(50.0, 50.0), ..Default::default() }).expect("Operation failed");
+        let hidden = t.new_leaf(Style { display: Display::None, size: Size::from_lengths(100.0, 100.0), ..Default::default() }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(300.0, 100.0), ..Default::default() },
                 &[visible, hidden],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 100.0)).unwrap();
-        let lv = t.layout(visible).unwrap();
-        let lh = t.layout(hidden).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 100.0)).expect("Operation failed");
+        let lv = t.layout(visible).expect("Operation failed");
+        let lh = t.layout(hidden).expect("Operation failed");
         assert_eq!(lh.size.width, 0.0);
         assert_eq!(lh.size.height, 0.0);
         assert_eq!(lv.location.x, 0.0);
@@ -783,13 +783,13 @@ mod integration_tests {
                 size: Size::from_lengths(300.0, 50.0),
                 max_size: Size { width: Dimension::from_length(100.0), height: Dimension::auto() },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(200.0, 100.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(200.0, 100.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(200.0, 100.0)).expect("Operation failed");
+        let l = t.layout(child).expect("Operation failed");
         assert!(l.size.width <= 101.0, "child width {} > 100", l.size.width);
     }
 
@@ -799,13 +799,13 @@ mod integration_tests {
         let child = t.new_leaf(Style {
                 size: Size { width: Dimension::percent(0.5), height: Dimension::from_length(50.0) },
                 ..Default::default()
-            }).unwrap();
+            }).expect("Operation failed");
         let container = t.new_with_children(
                 Style { display: Display::Flex, size: Size::from_lengths(300.0, 100.0), ..Default::default() },
                 &[child],
-            ).unwrap();
-        t.compute_layout(container, make_avail(300.0, 100.0)).unwrap();
-        let l = t.layout(child).unwrap();
+            ).expect("Operation failed");
+        t.compute_layout(container, make_avail(300.0, 100.0)).expect("Operation failed");
+        let l = t.layout(child).expect("Operation failed");
         assert!((l.size.width - 150.0).abs() < 1.0, "child width {} != 150", l.size.width);
     }
 }

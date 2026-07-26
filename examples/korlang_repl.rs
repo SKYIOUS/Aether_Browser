@@ -8,10 +8,10 @@ fn main() {
 
     loop {
         print!("kor> ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush().expect("Unexpected None value");
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input).expect("Unexpected None value");
         let input = input.trim();
 
         if input == "exit" { break; }
@@ -29,9 +29,9 @@ fn main() {
         vm.execute(bytecode);
 
         if let Some(korlang::Value::Object(obj)) = vm.stack.last() {
-            let obj = obj.lock().unwrap();
+            let obj = obj.lock().expect("Mutex poisoned");
             if let Some(korlang::Value::Object(text_obj)) = obj.children.first() {
-                let text_obj = text_obj.lock().unwrap();
+                let text_obj = text_obj.lock().expect("Mutex poisoned");
                 if let Some(val) = text_obj.properties.get("text") {
                     println!("=> {}", val.to_string_val());
                 }

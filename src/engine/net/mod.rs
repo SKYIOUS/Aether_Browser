@@ -129,7 +129,7 @@ fn save_cookies() {
 fn maybe_save_cookies() {
     static LAST_SAVE: OnceLock<Mutex<Instant>> = OnceLock::new();
     let last = LAST_SAVE.get_or_init(|| Mutex::new(Instant::now()));
-    let mut last = last.lock().unwrap();
+    let mut last = last.lock().expect("Mutex poisoned");
     if last.elapsed() > Duration::from_secs(30) {
         save_cookies();
         *last = Instant::now();

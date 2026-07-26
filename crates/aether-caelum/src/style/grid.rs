@@ -435,7 +435,7 @@ impl<T: GridCoordinate> Line<GenericGridPlacement<T>> {
             (GP::Span(span), GP::Auto) => span,
             (GP::Auto, GP::Span(span)) => span,
             (GP::Span(span), GP::Span(_)) => span,
-            (GP::Line(_), GP::Line(_)) => panic!("indefinite_span should only be called on indefinite grid tracks"),
+            (GP::Line(_), GP::Line(_)) => unreachable!("Internal invariant violated"),
         }
     }
 }
@@ -502,7 +502,7 @@ impl Line<OriginZeroGridPlacement> {
             (GP::Line(line), GP::Auto) => Line { start: line, end: line + 1 },
             (GP::Span(span), GP::Line(line)) => Line { start: line - span, end: line },
             (GP::Auto, GP::Line(line)) => Line { start: line - 1, end: line },
-            _ => panic!("resolve_definite_grid_tracks should only be called on definite grid tracks"),
+            _ => unreachable!("Internal invariant violated"),
         }
     }
 
@@ -542,7 +542,7 @@ impl Line<OriginZeroGridPlacement> {
             (GP::Span(span), GP::Auto) => Line { start, end: start + span },
             (GP::Auto, GP::Span(span)) => Line { start, end: start + span },
             (GP::Span(span), GP::Span(_)) => Line { start, end: start + span },
-            _ => panic!("resolve_indefinite_grid_tracks should only be called on indefinite grid tracks"),
+            _ => unreachable!("Internal invariant violated"),
         }
     }
 }

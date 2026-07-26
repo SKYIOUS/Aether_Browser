@@ -18,7 +18,7 @@ use super::layout::apply_caelum_layout;
 
 static CSS_CACHE: OnceLock<Mutex<LruCache<String, Stylesheet>>> = OnceLock::new();
 fn css_cache() -> &'static Mutex<LruCache<String, Stylesheet>> {
-    CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
+    CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).expect("Invalid NonZeroUsize value"))))
 }
 
 fn extract_styles(node: &Node, styles: &mut Vec<String>) {
