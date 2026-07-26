@@ -1,12 +1,6 @@
 ```
-# Rust/Cargo specific
-target/
-Cargo.lock
-**/*.rs.bk
-**/*.rlib
-
 # Dependencies
-vendor/
+target/
 
 # Logs and temp files
 *.log
@@ -15,15 +9,13 @@ vendor/
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
 
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Rust-specific
+**/*.rs.bk
+Cargo.lock
 ```
