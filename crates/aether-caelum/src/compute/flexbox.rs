@@ -1696,7 +1696,8 @@ fn distribute_remaining_free_space(flex_lines: &mut [FlexLine], constants: &Algo
         let layout_reverse = constants.dir.is_reverse();
         let gap = constants.gap.main(constants.dir);
         // ponytail: safe alignment not implemented; unsafe mode used (content may overflow with non-start alignment)
-        let is_safe = false;
+        // FIX: Enable safe alignment to prevent content overflow
+        let is_safe = true;
         let raw_justify_content_mode = constants.justify_content.unwrap_or(JustifyContent::FlexStart);
         let justify_content_mode = apply_alignment_fallback(free_space, num_items, raw_justify_content_mode, is_safe);
 
@@ -1879,7 +1880,8 @@ fn align_flex_lines_per_align_content(flex_lines: &mut [FlexLine], constants: &A
     let total_cross_axis_gap = sum_axis_gaps(gap, num_lines);
     let free_space = constants.inner_container_size.cross(constants.dir) - total_cross_size - total_cross_axis_gap;
     // ponytail: safe alignment not implemented; unsafe mode used
-    let is_safe = false;
+    // FIX: Enable safe alignment to prevent content overflow
+    let is_safe = true;
 
     let align_content_mode = apply_alignment_fallback(free_space, num_lines, constants.align_content, is_safe);
 

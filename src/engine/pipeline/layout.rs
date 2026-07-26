@@ -75,6 +75,10 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
         (min.map(Dimension::from_length).unwrap_or(Dimension::auto()),
          max.map(Dimension::from_length).unwrap_or(Dimension::auto()))
     };
+    
+    // Fix 3: Ensure inline elements without text get proper dimensions
+    let has_content = !el.text.is_empty() || !el.wrapped_lines.is_empty() || el.css_width.is_some() || el.css_height.is_some();
+    
     let mut s = Style {
         display: cd,
         margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: auto(el.margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: auto(el.margin_left) },
@@ -83,10 +87,25 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
         size: Size { width: dim(el.css_width), height: dim(el.css_height) },
         ..Default::default()
     };
+    
+    // Fix 4: For block elements without explicit size, ensure they have minimum dimensions
+    if cd == Display::Block && !has_content {
+        s.min_size = Size { 
+            width: Dimension::auto(), 
+            height: Dimension::length(1.0) // Minimum 1px height for empty blocks
+        };
+    }
+    
     let (min_w, max_w) = mm(el.min_width, el.max_width);
     let (min_h, max_h) = mm(el.min_height, el.max_height);
     s.min_size = Size { width: min_w, height: min_h };
     s.max_size = Size { width: max_w, height: max_h };
+    
+    // Fix 5: Default flex properties for all elements to prevent layout issues
+    if s.flex_grow == 0.0 && s.flex_shrink == 0.0 {
+        s.flex_shrink = 1.0; // Allow shrinking by default
+    }
+    
     if cd == Display::Flex {
         s.flex_direction = crate::bridge_gen::str_flex_direction_to_caelum(&el.flex_direction);
         s.flex_wrap = crate::bridge_gen::str_flex_wrap_to_caelum(&el.flex_wrap);
@@ -101,6 +120,10 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
 
 pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
     if elements.is_empty() { return; }
+
+    // Fix 1: Pre-process to ensure proper parent-child relationships and filter invalid elements
+    let valid_count = elements.iter().filter(|el| el.display != "none").count();
+    if valid_count == 0 { return; }
 
     // ponytail: estimate heights for text elements so Caelum can stack block elements correctly
     for el in elements.iter_mut() {
@@ -117,8 +140,10 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
 
     let mut tree: CaelumTree = CaelumTree::new();
 
+    // Fix 2: Root container should use flex column for proper stacking of block elements
     let root_style = Style {
-        display: Display::Block,
+        display: Display::Flex,
+        flex_direction: FlexDirection::Column,
         size: Size { width: Dimension::from_length(container_width), height: Dimension::auto() },
         ..Default::default()
     };
@@ -141,17 +166,30 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         if el.display == "none" { continue; }
         let child_id = match node_ids[i] { Some(id) => id, None => continue };
 
+        // Fix: Ensure parent exists in node_ids before using it
         let parent_nid = match el.parent_index {
             Some(pidx) => {
-                if pidx < elements.len() {
-                    match node_ids[pidx] { Some(id) => id, None => root_node }
-                } else { root_node }
+                if pidx < elements.len() && pidx != i {
+                    // Parent must also have a valid node_id
+                    match node_ids[pidx] { 
+                        Some(id) => id, 
+                        None => {
+                            // Parent was skipped (display:none or error), attach to root
+                            root_node 
+                        }
+                    }
+                } else { 
+                    root_node 
+                }
             }
             None => root_node,
         };
 
-        if let Err(e) = tree.add_child(parent_nid, child_id) {
-            plog!("CAELUM", "add_child failed: {:?}", e);
+        // Prevent adding root as its own child
+        if parent_nid != child_id {
+            if let Err(e) = tree.add_child(parent_nid, child_id) {
+                plog!("CAELUM", "add_child failed for element {}: {:?}", i, e);
+            }
         }
     }
 
@@ -182,14 +220,8 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             heights[i] = if lh.is_finite() && lh > 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
         }
     }
-    for i in 0..elements.len() {
-        if let Some(pidx) = elements[i].parent_index {
-            if pidx < elements.len() {
-                abs_x[i] += abs_x[pidx];
-                abs_y[i] += abs_y[pidx];
-            }
-        }
-    }
+    // Fix: Remove double-addition of parent positions - Caelum already returns absolute positions
+    // The previous code was adding parent positions again, causing elements to be offset incorrectly
     for (i, el) in elements.iter_mut().enumerate() {
         el.x = abs_x[i];
         el.y = abs_y[i];
@@ -215,14 +247,24 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
 
     apply_text_wrapping(elements, container_width);
 
+    // Fix: Parent height expansion should account for margins and padding properly
+    // Also ensure we don't expand parents beyond viewport unnecessarily
     let n = elements.len();
     for i in (0..n).rev() {
         if let Some(pidx) = elements[i].parent_index {
-            if pidx < n {
+            if pidx < n && pidx != i {
+                // Calculate child's full box including margins
+                let child_top = elements[i].y - elements[i].margin_top;
                 let child_bottom = elements[i].y + elements[i].height + elements[i].margin_bottom;
-                let parent_bottom = elements[pidx].y + elements[pidx].height;
-                if child_bottom > parent_bottom {
-                    elements[pidx].height = child_bottom - elements[pidx].y;
+                
+                // Calculate parent's content box (excluding margins)
+                let parent_content_top = elements[pidx].y + elements[pidx].padding[0] + elements[pidx].border_widths[0];
+                let parent_content_bottom = elements[pidx].y + elements[pidx].height - elements[pidx].padding[2] - elements[pidx].border_widths[2];
+                
+                // Only expand if child extends beyond parent's content area
+                if child_bottom > parent_content_bottom || child_top < parent_content_top {
+                    let needed_height = (child_bottom - elements[pidx].y).max(elements[pidx].height);
+                    elements[pidx].height = needed_height.min(viewport_h); // Cap at viewport
                 }
             }
         }

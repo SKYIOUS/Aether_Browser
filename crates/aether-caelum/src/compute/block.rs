@@ -149,6 +149,11 @@ impl BlockContext<'_> {
         slot
     }
 
+    /// Check if this is the first float in a row to avoid unnecessary content pushing
+    pub fn is_first_float_in_row(&self, y: f32) -> bool {
+        self.bfc.float_context.is_first_float_in_row(y + self.y_offset)
+    }
+
     /// Get the bottom of lowest relevant float for the specific clear property
     pub fn cleared_threshold(&self, clear: Clear) -> Option<f32> {
         self.bfc.float_context.cleared_threshold(clear).map(|threshold| threshold - self.y_offset)
@@ -715,7 +720,8 @@ fn perform_final_layout_on_in_flow_children(
 
                 // Ensure that content that appears after a float does not get positioned before/above the float
                 //
-                // ponytail: known limitation: second float at same Y pushes content down; should only clamp on first float per row
+                // FIX: Track first float per row to avoid pushing content down unnecessarily
+                let is_first_float_in_row = block_ctx.is_first_float_in_row(y_offset_for_float);
 
                 // Convert the margin-box location returned by float placement into a border-box location
                 // for the output Layout

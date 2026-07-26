@@ -32,7 +32,8 @@ pub(super) fn align_tracks(
     let gap = 0.0;
     let layout_is_reversed = false;
     // ponytail: safe alignment not implemented; unsafe mode used (content may overflow with non-start alignment)
-    let is_safe = false;
+    // FIX: Enable safe alignment to prevent content overflow
+    let is_safe = true;
     let track_alignment = apply_alignment_fallback(free_space, num_tracks, track_alignment_style, is_safe);
     let track_alignment = if axis_is_reversed { track_alignment.reversed() } else { track_alignment };
 
