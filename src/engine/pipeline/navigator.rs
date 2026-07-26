@@ -1,10 +1,64 @@
 use crate::plog;
 use serde::{Serialize, Deserialize};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tab {
     pub title: String,
     pub url: String,
+    #[serde(skip)]
+    pub created_at: Instant,
+    #[serde(skip)]
+    pub last_accessed: Instant,
+    #[serde(skip)]
+    pub is_hovered: bool,
+    #[serde(skip)]
+    pub hover_started: Option<Instant>,
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        let now = Instant::now();
+        Self {
+            title: "New Tab".to_string(),
+            url: "about:blank".to_string(),
+            created_at: now,
+            last_accessed: now,
+            is_hovered: false,
+            hover_started: None,
+        }
+    }
+}
+
+impl Tab {
+    pub fn new(title: &str, url: &str) -> Self {
+        let now = Instant::now();
+        Self {
+            title: title.to_string(),
+            url: url.to_string(),
+            created_at: now,
+            last_accessed: now,
+            is_hovered: false,
+            hover_started: None,
+        }
+    }
+    
+    pub fn update_accessed(&mut self) {
+        self.last_accessed = Instant::now();
+    }
+    
+    pub fn set_hover(&mut self, hovered: bool) {
+        if hovered && !self.is_hovered {
+            self.hover_started = Some(Instant::now());
+        } else if !hovered {
+            self.hover_started = None;
+        }
+        self.is_hovered = hovered;
+    }
+    
+    pub fn should_switch_on_hover(&self) -> bool {
+        self.is_hovered && self.hover_started.map_or(false, |start| start.elapsed().as_millis() >= 300)
+    }
 }
 
 pub fn normalize_nav_url(url: &str) -> String {
@@ -34,4 +88,14 @@ pub fn load_tabs() -> Vec<Tab> {
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
+        .into_iter()
+        .map(|mut tab| {
+            let now = Instant::now();
+            tab.created_at = now;
+            tab.last_accessed = now;
+            tab.is_hovered = false;
+            tab.hover_started = None;
+            tab
+        })
+        .collect()
 }
