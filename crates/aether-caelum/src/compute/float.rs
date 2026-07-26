@@ -469,6 +469,21 @@ impl FloatContext {
         self.cleared_segment(clear).and_then(|idx| self.segments.get(idx.max(1) - 1)).map(|seg| seg.y.end)
     }
 
+    /// Check if this is the first float in a row at the given y-coordinate
+    /// This helps avoid unnecessarily pushing content down when placing floats
+    pub fn is_first_float_in_row(&self, y: f32) -> bool {
+        // Find all floats that exist at or near this y-coordinate
+        let float_at_y = |float: &PlacedFloatedBox| {
+            (float.y..float.y + float.height).contains(&y)
+        };
+        
+        let left_floats_at_y = self.left_floats.iter().filter(|f| float_at_y(f)).count();
+        let right_floats_at_y = self.right_floats.iter().filter(|f| float_at_y(f)).count();
+        
+        // If this is the first float at this y level on either side, return true
+        left_floats_at_y <= 1 && right_floats_at_y <= 1
+    }
+
     /// Search for a space suitable for laying out non-floated content into
     pub fn find_content_slot(
         &self,
