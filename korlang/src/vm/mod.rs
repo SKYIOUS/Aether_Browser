@@ -271,20 +271,42 @@ impl VirtualMachine {
                     self.stack.push(Value::String(parts.concat()));
                     ip += 1;
                 }
-                OpCode::ForEach(var, _) => {
-                    let list_val = self.stack.last().cloned().unwrap_or(Value::None);
-                    if let Value::List(l) = list_val {
-                        let key = format!("__fe_{}", var);
-                        let current = self.heap.get(&key).and_then(|v| if let Value::Number(n) = v { Some(*n as usize) } else { None }).unwrap_or(0);
-                        if current < l.len() {
-                            self.heap.insert(key, Value::Number((current + 1) as f64));
+                OpCode::ForEach(var, count) => {
+                    let is_list = matches!(self.stack.last(), Some(Value::List(_)));
+                    let total_count = if let Some(Value::List(l)) = self.stack.last() {
+                        l.len()
+                    } else {
+                        count
+                    };
+
+                    let key = format!("__fe_{}", var);
+                    let current = self.heap.get(&key).and_then(|v| if let Value::Number(n) = v { Some(*n as usize) } else { None }).unwrap_or(0);
+
+                    if current < total_count {
+                        self.heap.insert(key, Value::Number((current + 1) as f64));
+                        if let Some(Value::List(l)) = self.stack.last().cloned() {
                             self.heap.insert(var.clone(), l[current].clone());
-                            self.stack.push(Value::Bool(true));
                         } else {
-                            self.heap.remove(&key); self.stack.pop(); self.stack.push(Value::Bool(false));
+                            self.heap.insert(var.clone(), Value::Number(current as f64));
                         }
-                    } else { self.stack.push(Value::Bool(false)); }
-                    ip += 1;
+                        ip += 1;
+                    } else {
+                        self.heap.remove(&key);
+                        self.heap.remove(&var);
+                        if is_list {
+                            self.stack.pop();
+                        }
+                        let mut jump_target = None;
+                        for j in (ip + 1)..bytecode.len() {
+                            if let OpCode::Jump(target) = bytecode[j] {
+                                if target == ip {
+                                    jump_target = Some(j + 1);
+                                    break;
+                                }
+                            }
+                        }
+                        ip = jump_target.unwrap_or(ip + 1);
+                    }
                 }
             }
         }

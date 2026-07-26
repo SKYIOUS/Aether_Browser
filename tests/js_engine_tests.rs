@@ -432,6 +432,8 @@ fn test_fetch_returns_status_prefix() {
 #[test]
 fn test_local_storage_set_get() {
     let mut bridge = JsBridge::new();
+    bridge.current_url = "https://ls1.example.com".into();
+    bridge.local_storage_clear();
     bridge.local_storage_set_item("key1".into(), "value1".into());
     bridge.local_storage_set_item("key2".into(), "value2".into());
     assert_eq!(bridge.local_storage_get_item("key1"), Some("value1".into()));
@@ -442,6 +444,8 @@ fn test_local_storage_set_get() {
 #[test]
 fn test_local_storage_remove() {
     let mut bridge = JsBridge::new();
+    bridge.current_url = "https://ls2.example.com".into();
+    bridge.local_storage_clear();
     bridge.local_storage_set_item("temp".into(), "data".into());
     assert_eq!(bridge.local_storage_get_item("temp"), Some("data".into()));
     bridge.local_storage_remove_item("temp");
@@ -451,6 +455,8 @@ fn test_local_storage_remove() {
 #[test]
 fn test_local_storage_clear() {
     let mut bridge = JsBridge::new();
+    bridge.current_url = "https://ls3.example.com".into();
+    bridge.local_storage_clear();
     bridge.local_storage_set_item("a".into(), "1".into());
     bridge.local_storage_set_item("b".into(), "2".into());
     assert_eq!(bridge.local_storage_length(), 2);

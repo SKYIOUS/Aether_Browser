@@ -435,7 +435,7 @@ impl<T: GridCoordinate> Line<GenericGridPlacement<T>> {
             (GP::Span(span), GP::Auto) => span,
             (GP::Auto, GP::Span(span)) => span,
             (GP::Span(span), GP::Span(_)) => span,
-            (GP::Line(_), GP::Line(_)) => unreachable!("Internal invariant violated"),
+            (GP::Line(_), GP::Line(_)) => unreachable!(),
         }
     }
 }
