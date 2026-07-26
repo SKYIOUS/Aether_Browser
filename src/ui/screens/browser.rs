@@ -301,7 +301,7 @@ Component SidebarWS {
         let loaded_tabs = load_tabs();
         let url_history: Vec<String> = loaded_tabs.iter().map(|t| t.url.clone()).collect();
         let (tabs, tab_history, url_val, content_val) = if loaded_tabs.is_empty() {
-            (vec![Tab { title: "New Tab".to_string(), url: default_url.clone() }],
+            (vec![Tab::new("New Tab", &default_url)],
              vec![(vec![default_url.clone()], 0)],
              default_url.clone(),
              "Welcome to Aether Browser".to_string())
@@ -949,7 +949,7 @@ Component SidebarWS {
             let bg = if is_active { 
                 Background::Color(C::PAGE_BG) 
             } else if is_hovered { 
-                Background::Color(C::SURFACE.blend_a(0.15)) 
+                Background::Color(C::SURFACE_LIGHT) 
             } else { 
                 Background::Color(C::SURFACE) 
             };
@@ -973,8 +973,6 @@ Component SidebarWS {
                         ..Default::default() 
                     })
                     .on_press(BrowserMessage::TabSelected(i))
-                    .on_enter(BrowserMessage::TabHovered(i))
-                    .on_leave(BrowserMessage::TabUnhovered(i))
                     .into()
             } else {
                 button(title)
@@ -985,8 +983,6 @@ Component SidebarWS {
                         ..Default::default() 
                     })
                     .on_press(BrowserMessage::TabSelected(i))
-                    .on_enter(BrowserMessage::TabHovered(i))
-                    .on_leave(BrowserMessage::TabUnhovered(i))
                     .into()
             };
             tab_elem

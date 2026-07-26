@@ -1,8 +1,8 @@
 use crate::plog;
 use serde::{Serialize, Deserialize};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Tab {
     pub title: String,
     pub url: String,
@@ -14,6 +14,32 @@ pub struct Tab {
     pub is_hovered: bool,
     #[serde(skip)]
     pub hover_started: Option<Instant>,
+}
+
+// Custom deserialization to handle skipped Instant fields
+impl<'de> Deserialize<'de> for Tab {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            title: String,
+            url: String,
+        }
+        
+        let helper = Helper::deserialize(deserializer)?;
+        let now = Instant::now();
+        
+        Ok(Tab {
+            title: helper.title,
+            url: helper.url,
+            created_at: now,
+            last_accessed: now,
+            is_hovered: false,
+            hover_started: None,
+        })
+    }
 }
 
 impl Default for Tab {
