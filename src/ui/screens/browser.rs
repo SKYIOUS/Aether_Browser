@@ -42,6 +42,8 @@ pub enum BrowserMessage {
     TimerTick,
     ElementClicked(usize),
     TabSelected(usize),
+    TabHovered(usize),
+    TabUnhovered(usize),
     NewTab,
     CloseTab(usize),
     ToggleConsole,
@@ -54,6 +56,9 @@ pub enum BrowserMessage {
     AutocompleteDismiss,
     FormElementClicked(usize),
     FormInputKeyPressed(char),
+    RunKorScript(String),
+    RunKorOnPage,
+    KorScriptResult(String),
     None,
 }
 
@@ -588,12 +593,40 @@ Component SidebarWS {
             BrowserMessage::Bookmark => Task::none(),
             BrowserMessage::WorkspaceSelected(i) => { self.active_workspace = i; Task::none() }
             BrowserMessage::TabSelected(i) => {
-                if i < self.tabs.len() { self.active_tab = i; }
+                if i < self.tabs.len() {
+                    if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+                        tab.set_hover(false);
+                    }
+                    self.active_tab = i;
+                    if let Some(tab) = self.tabs.get_mut(i) {
+                        tab.update_accessed();
+                    }
+                }
+                Task::none()
+            }
+            BrowserMessage::TabHovered(i) => {
+                if i < self.tabs.len() && i != self.active_tab {
+                    if let Some(tab) = self.tabs.get_mut(i) {
+                        tab.set_hover(true);
+                        if tab.should_switch_on_hover() {
+                            self.active_tab = i;
+                            tab.update_accessed();
+                        }
+                    }
+                }
+                Task::none()
+            }
+            BrowserMessage::TabUnhovered(i) => {
+                if i < self.tabs.len() {
+                    if let Some(tab) = self.tabs.get_mut(i) {
+                        tab.set_hover(false);
+                    }
+                }
                 Task::none()
             }
             BrowserMessage::NewTab => {
                 let title = format!("Tab {}", self.tabs.len() + 1);
-                self.tabs.push(Tab { title, url: "about:blank".to_string() });
+                self.tabs.push(Tab::new(&title, "about:blank"));
                 self.active_tab = self.tabs.len() - 1;
                 self.url = "about:blank".to_string();
                 self.content = "New tab".to_string();
@@ -608,7 +641,12 @@ Component SidebarWS {
                 if self.tabs.len() > 1 && i < self.tabs.len() {
                     self.tabs.remove(i);
                     self.tab_history.remove(i);
-                    if self.active_tab >= self.tabs.len() { self.active_tab = self.tabs.len() - 1; }
+                    if self.active_tab >= self.tabs.len() { 
+                        self.active_tab = self.tabs.len() - 1; 
+                    }
+                    if let Some(active_tab) = self.tabs.get_mut(self.active_tab) {
+                        active_tab.update_accessed();
+                    }
                     save_tabs(&self.tabs);
                 }
                 Task::none()
@@ -644,6 +682,70 @@ Component SidebarWS {
                         val.push(ch);
                     }
                 }
+                Task::none()
+            }
+            BrowserMessage::RunKorScript(script) => {
+                plog!("KOR", "Executing Kor script: {}", script);
+                let mut vm = self.kor_vm.borrow_mut();
+                vm.stack.clear();
+                
+                // Set up page context
+                vm.set_builtin("page_url", korlang::vm::Value::String(self.url.clone()));
+                vm.set_builtin("element_count", korlang::vm::Value::Number(self.styled_elements.len() as f64));
+                
+                // Execute with timeout protection
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    vm.execute(korlang::compile(&script));
+                    vm.stack.last().cloned()
+                }));
+                
+                match result {
+                    Ok(Some(val)) => {
+                        let result_str = match val {
+                            korlang::vm::Value::String(s) => s,
+                            korlang::vm::Value::Number(n) => format!("{}", n),
+                            korlang::vm::Value::Bool(b) => format!("{}", b),
+                            _ => "Script executed".to_string(),
+                        };
+                        plog!("KOR", "Script result: {}", result_str);
+                        self.content = result_str;
+                    }
+                    Ok(None) => {
+                        plog!("KOR", "Script executed (no return value)");
+                    }
+                    Err(_) => {
+                        plog!("KOR", "Script execution panicked");
+                        self.content = "Error: Script execution failed".to_string();
+                    }
+                }
+                Task::none()
+            }
+            BrowserMessage::RunKorOnPage => {
+                plog!("KOR", "Running Kor script on current page");
+                // Create a default script that interacts with page content
+                let default_script = r#"
+                    Component PageSummary {
+                        Column(spacing: 8) {
+                            Text(text: "Page Analysis", size: 16)
+                            Text(text: str(page_url), size: 12)
+                            Text(text: str(element_count) + " elements found", size: 12)
+                            Button(text: "Refresh Data", on_click: "refresh")
+                        }
+                    }
+                "#;
+                
+                let mut vm = self.kor_vm.borrow_mut();
+                vm.stack.clear();
+                vm.set_builtin("page_url", korlang::vm::Value::String(self.url.clone()));
+                vm.set_builtin("element_count", korlang::vm::Value::Number(self.styled_elements.len() as f64));
+                vm.execute(korlang::compile(default_script));
+                
+                self.content = "Kor script executed on page".to_string();
+                Task::none()
+            }
+            BrowserMessage::KorScriptResult(result) => {
+                plog!("KOR", "Script result received: {}", result);
+                self.content = result;
                 Task::none()
             }
             _ => Task::none(),
@@ -849,25 +951,59 @@ Component SidebarWS {
     fn tab_bar(&self) -> Element<'_, BrowserMessage> {
         let tabs: Vec<Element<'_, BrowserMessage>> = self.tabs.iter().enumerate().map(|(i, tab)| {
             let is_active = i == self.active_tab;
-            let bg = if is_active { Background::Color(C::PAGE_BG) } else { Background::Color(C::SURFACE) };
-            let title = text(&tab.title).size(12).color(if is_active { C::ACCENT } else { C::MUTED });
+            let is_hovered = tab.is_hovered;
+            let bg = if is_active { 
+                Background::Color(C::PAGE_BG) 
+            } else if is_hovered { 
+                Background::Color(C::SURFACE.blend_a(0.15)) 
+            } else { 
+                Background::Color(C::SURFACE) 
+            };
+            let title_color = if is_active { C::ACCENT } else if is_hovered { C::FG } else { C::MUTED };
+            let title = text(&tab.title).size(12).color(title_color);
             let tab_elem: Element<'_, BrowserMessage> = if self.tabs.len() > 1 {
-                let close = button(text("×").size(12).color(C::DIM)).padding([2, 6]).on_press(BrowserMessage::CloseTab(i));
+                let close = button(text("×").size(12).color(if is_hovered { C::ACCENT } else { C::DIM }))
+                    .padding([2, 6])
+                    .style(move |_, _| button::Style {
+                        background: Some(Background::Color(if is_hovered { C::ACCENT } else { C::TRANSPARENT })),
+                        border: iced::Border { radius: 3.0.into(), ..Default::default() },
+                        ..Default::default()
+                    })
+                    .on_press(BrowserMessage::CloseTab(i));
                 let content = row![title, close].spacing(6).align_y(Alignment::Center);
-                button(content).padding([6, 12])
-                    .style(move |_, _| button::Style { background: Some(bg), border: iced::Border { radius: 4.0.into(), ..Default::default() }, ..Default::default() })
-                    .on_press(BrowserMessage::TabSelected(i)).into()
+                button(content)
+                    .padding([6, 12])
+                    .style(move |_, _| button::Style { 
+                        background: Some(bg), 
+                        border: iced::Border { radius: 4.0.into(), ..Default::default() }, 
+                        ..Default::default() 
+                    })
+                    .on_press(BrowserMessage::TabSelected(i))
+                    .on_enter(BrowserMessage::TabHovered(i))
+                    .on_leave(BrowserMessage::TabUnhovered(i))
+                    .into()
             } else {
-                button(title).padding([6, 12])
-                    .style(move |_, _| button::Style { background: Some(bg), border: iced::Border { radius: 4.0.into(), ..Default::default() }, ..Default::default() })
-                    .on_press(BrowserMessage::TabSelected(i)).into()
+                button(title)
+                    .padding([6, 12])
+                    .style(move |_, _| button::Style { 
+                        background: Some(bg), 
+                        border: iced::Border { radius: 4.0.into(), ..Default::default() }, 
+                        ..Default::default() 
+                    })
+                    .on_press(BrowserMessage::TabSelected(i))
+                    .on_enter(BrowserMessage::TabHovered(i))
+                    .on_leave(BrowserMessage::TabUnhovered(i))
+                    .into()
             };
             tab_elem
         }).collect();
 
         row![
             container(row(tabs).spacing(2)).width(Length::Fill),
-            button(text("+").size(14).color(C::ACCENT)).padding([6, 10]).style(ghost_button_style()).on_press(BrowserMessage::NewTab),
+            button(text("+").size(14).color(C::ACCENT))
+                .padding([6, 10])
+                .style(ghost_button_style())
+                .on_press(BrowserMessage::NewTab),
         ].align_y(Alignment::Center).into()
     }
 
@@ -915,6 +1051,9 @@ Component SidebarWS {
         let inspect_icon = if self.inspect_mode { "\u{25C9}" } else { "\u{25CB}" };
         let inspect_btn = button(text(inspect_icon).size(14).color(if self.inspect_mode { C::ACCENT } else { C::MUTED }))
             .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::ToggleInspect);
+        let kor_btn = button(text("\u{26A1}").size(14).color(C::ACCENT))
+            .padding([6, 8]).style(nav_icon_button_style())
+            .on_press(BrowserMessage::RunKorOnPage);
 
         // Autocomplete dropdown
         let matches: Vec<&String> = if self.show_autocomplete && !self.url_input.is_empty() {
@@ -954,7 +1093,7 @@ Component SidebarWS {
                 Space::with_width(8),
                 input_with_dropdown,
                 Space::with_width(8),
-                inspect_btn, bookmark_btn, palette_btn,
+                kor_btn, inspect_btn, bookmark_btn, palette_btn,
             ].spacing(4).align_y(Alignment::Center).padding([0, 16])
         ).height(Length::Fixed(56.0)).width(Length::Fill).center_y(Length::Fixed(56.0))
         .style(|_| container::Style { background: None, ..Default::default() });

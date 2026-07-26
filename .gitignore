@@ -1,28 +1,20 @@
-```rust
-# Compiled and build artifacts
-target/
-**/*.rs.bk
-**/*.rlib
-**/*.so
-**/*.dylib
-**/*.dll
-**/*.exe
-
+```
 # Dependencies
-Cargo.lock
+target/
 
 # Logs and temp files
 *.log
 *.tmp
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Build artifacts
+**/target/
 ```

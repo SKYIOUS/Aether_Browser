@@ -41,7 +41,6 @@ pub use self::flexbox::compute_flexbox_layout;
 pub use self::grid::compute_grid_layout;
 
 pub use self::float::{ContentSlot, FloatContext, FloatIntrinsicWidthCalculator};
-pub(crate) use self::float::PlacedFloatedBox;
 
 use crate::geometry::{Line, Point, Size};
 use crate::style::{AvailableSpace, CoreStyle, Overflow};

@@ -56,8 +56,15 @@ fn convert_object(obj_arc: Arc<std::sync::Mutex<KorObject>>, vm: &VirtualMachine
         }
         "Button" => {
             let label = if let Some(Value::String(s)) = obj.properties.get("text") { s.clone() } else { "Button".to_string() };
-            let mut b = button(text(label).size(14)).padding([10, 20]);
-            if let Some(Value::String(handler)) = obj.properties.get("on_click") {
+            let icon = get_string(&obj.properties, "icon").unwrap_or_default();
+            let display_text = if icon.is_empty() { label.clone() } else { format!("{} {}", icon, label) };
+            let mut b = button(text(display_text).size(14)).padding([10, 20]);
+            
+            // Check for Korlang script execution
+            if let Some(Value::String(script)) = obj.properties.get("run_script") {
+                let script_clone = script.clone();
+                b = b.on_press(BrowserMessage::RunKorScript(script_clone));
+            } else if let Some(Value::String(handler)) = obj.properties.get("on_click") {
                 match handler.as_str() {
                     "back" => b = b.on_press(BrowserMessage::NavBack),
                     "forward" => b = b.on_press(BrowserMessage::NavForward),
@@ -69,6 +76,13 @@ fn convert_object(obj_arc: Arc<std::sync::Mutex<KorObject>>, vm: &VirtualMachine
                     "ws0" => b = b.on_press(BrowserMessage::WorkspaceSelected(0)),
                     "ws1" => b = b.on_press(BrowserMessage::WorkspaceSelected(1)),
                     "ws2" => b = b.on_press(BrowserMessage::WorkspaceSelected(2)),
+                    "run_kor_on_page" => b = b.on_press(BrowserMessage::RunKorOnPage),
+                    "toggle_console" => b = b.on_press(BrowserMessage::ToggleConsole),
+                    "new_tab" => b = b.on_press(BrowserMessage::NewTab),
+                    "close_tab" => {
+                        let active = 0; // Will be overridden by context
+                        b = b.on_press(BrowserMessage::CloseTab(active));
+                    }
                     unknown => {
                         eprintln!("kor_renderer: unknown handler '{}'", unknown);
                         b = b.on_press(BrowserMessage::None);
