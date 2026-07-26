@@ -48,7 +48,7 @@ pub struct ContentSlot {
 
 /// A floated box
 #[derive(Debug, Clone, Default)]
-pub struct PlacedFloatedBox {
+pub(crate) struct PlacedFloatedBox {
     /// A user defined ID for the box
     // id: u64,
     /// The width of the box
@@ -193,12 +193,12 @@ impl FloatContext {
     }
 
     /// Returns a slice of placed left floats
-    pub fn left_floats(&self) -> &[PlacedFloatedBox] {
+    pub(crate) fn left_floats(&self) -> &[PlacedFloatedBox] {
         &self.left_floats
     }
 
     /// Returns a slice of placed right floats
-    pub fn right_floats(&self) -> &[PlacedFloatedBox] {
+    pub(crate) fn right_floats(&self) -> &[PlacedFloatedBox] {
         &self.right_floats
     }
 
