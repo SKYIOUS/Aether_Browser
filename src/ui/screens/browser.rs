@@ -241,6 +241,12 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
     }
 }
 
+impl Default for BrowserScreen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BrowserScreen {
     pub fn new() -> Self {
         let default_url = "aether://design/spatial-minimalism".to_string();
@@ -656,7 +662,7 @@ Component SidebarWS {
             match k {
                 key::Key::Named(key::Named::F12) => Some(BrowserMessage::ToggleConsole),
                 key::Key::Named(key::Named::Escape) => Some(BrowserMessage::AutocompleteDismiss),
-                key::Key::Character(ref c) if c.chars().next().map_or(false, |ch| !ch.is_control()) => {
+                key::Key::Character(ref c) if c.chars().next().is_some_and(|ch| !ch.is_control()) => {
                     c.chars().next().map(BrowserMessage::FormInputKeyPressed)
                 }
                 key::Key::Named(key::Named::Backspace) => Some(BrowserMessage::FormInputKeyPressed('\x08')),
@@ -833,8 +839,8 @@ Component SidebarWS {
             text("AETHER").size(16).color(C::FG)
                 .font(iced::Font { weight: iced::font::Weight::Semibold, ..Default::default() }),
         ].spacing(10).align_y(Alignment::Center);
-        let bottom = render_kor_vm(&*self.sidebar_kor_vm.borrow());
-        let ws_content = render_kor_vm(&*self.sidebar_ws_kor_vm.borrow());
+        let bottom = render_kor_vm(&self.sidebar_kor_vm.borrow());
+        let ws_content = render_kor_vm(&self.sidebar_ws_kor_vm.borrow());
         let content = column![logo, Space::with_height(16), ws_content, Space::with_height(Length::Fill), bottom]
             .padding([32, 24]).spacing(0).height(Length::Fill);
         container(content).width(Length::Fixed(260.0)).height(Length::Fill).style(sidebar_style()).into()
@@ -966,7 +972,7 @@ Component SidebarWS {
             vm.stack.clear();
             vm.execute(self.status_bytecode.clone());
         }
-        container(render_kor_vm(&*self.kor_vm.borrow()))
+        container(render_kor_vm(&self.kor_vm.borrow()))
             .height(Length::Fixed(40.0)).width(Length::Fill)
             .center_x(Length::Fill).center_y(Length::Fixed(40.0))
             .style(status_bar_style()).into()

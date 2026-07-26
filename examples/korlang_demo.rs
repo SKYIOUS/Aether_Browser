@@ -1,4 +1,3 @@
-use korlang;
 
 fn main() {
     let source = r#"

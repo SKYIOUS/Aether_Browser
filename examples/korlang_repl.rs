@@ -1,4 +1,3 @@
-use korlang;
 use std::io::{self, Write};
 
 fn main() {

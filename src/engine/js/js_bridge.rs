@@ -227,7 +227,7 @@ pub(crate) type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>
 pub(crate) type OriginStore = HashMap<String, HashMap<String, String>>;
 
 pub(crate) fn is_expired(entry: &CookieEntry) -> bool {
-    entry.expires.map_or(false, |exp| Instant::now() >= exp)
+    entry.expires.is_some_and(|exp| Instant::now() >= exp)
 }
 
 pub(crate) fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
@@ -381,6 +381,12 @@ pub struct JsBridge {
     pub(crate) timers: Vec<TimerEntry>,
     pub(crate) event_listeners: Vec<EventListenerEntry>,
     pub(crate) js_errors: Vec<String>,
+}
+
+impl Default for JsBridge {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JsBridge {
@@ -561,9 +567,8 @@ impl JsBridge {
         if let Some(node) = self.nodes.get_mut(node_id as usize) {
             if !node.is_text && !node.is_document {
                 if Self::is_event_handler(name) { return; }
-                if name.to_lowercase() == "href" || name.to_lowercase() == "src" {
-                    if Self::is_dangerous_url(value) { return; }
-                }
+                if (name.to_lowercase() == "href" || name.to_lowercase() == "src")
+                    && Self::is_dangerous_url(value) { return; }
                 if name.to_lowercase() == "srcdoc" { return; }
                 node.attrs.insert(name.to_string(), value.to_string());
             }

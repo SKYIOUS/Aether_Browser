@@ -85,6 +85,12 @@ pub struct VirtualMachine {
     instruction_pointer: usize,
 }
 
+impl Default for VirtualMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VirtualMachine {
     pub fn new() -> Self {
         Self {

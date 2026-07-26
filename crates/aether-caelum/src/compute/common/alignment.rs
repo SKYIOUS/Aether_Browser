@@ -1,5 +1,6 @@
 //! Generic CSS alignment code that is shared between both the Flexbox and CSS Grid algorithms.
 use crate::style::AlignContent;
+use crate::util::sys::f32_max;
 
 /// Implement fallback alignment.
 ///
@@ -47,6 +48,7 @@ pub(crate) fn compute_alignment_offset(
     layout_is_flex_reversed: bool,
     is_first: bool,
 ) -> f32 {
+    if num_items == 0 { return 0.0; }
     if is_first {
         match alignment_mode {
             AlignContent::Start => 0.0,
@@ -92,8 +94,8 @@ pub(crate) fn compute_alignment_offset(
             AlignContent::FlexEnd => 0.0,
             AlignContent::Center => 0.0,
             AlignContent::Stretch => 0.0,
-            AlignContent::SpaceBetween => free_space / (num_items - 1) as f32,
-            AlignContent::SpaceAround => free_space / num_items as f32,
+            AlignContent::SpaceBetween => free_space / f32_max(1.0, (num_items - 1) as f32),
+            AlignContent::SpaceAround => free_space / f32_max(1.0, num_items as f32),
             AlignContent::SpaceEvenly => free_space / (num_items + 1) as f32,
         }
     }

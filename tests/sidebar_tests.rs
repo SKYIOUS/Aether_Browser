@@ -264,7 +264,7 @@ fn test_settings_load_nonexistent_file_returns_defaults() {
     // load() reads from "aether_settings.json"; if missing, returns default
     // We can't guarantee the file doesn't exist, but we can test the default path
     let s = AetherSettings::default();
-    assert_eq!(s.js_enabled, true);
+    assert!(s.js_enabled);
 }
 
 #[test]
@@ -310,7 +310,7 @@ fn test_settings_toggle_cookies() {
 
 #[test]
 fn test_history_initial_state() {
-    let hist = vec![(vec!["https://a.com".to_string()], 0)];
+    let hist = [(vec!["https://a.com".to_string()], 0)];
     let (urls, idx) = &hist[0];
     assert_eq!(urls.len(), 1);
     assert_eq!(*idx, 0);
@@ -403,11 +403,9 @@ fn test_history_limit_many_entries() {
 
 #[test]
 fn test_autocomplete_filter_exact_prefix() {
-    let history = vec![
-        "https://example.com".to_string(),
+    let history = ["https://example.com".to_string(),
         "https://exotic.org".to_string(),
-        "https://other.net".to_string(),
-    ];
+        "https://other.net".to_string()];
     let input = "https://ex";
     let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).collect();
     assert_eq!(matches.len(), 2);
@@ -415,10 +413,8 @@ fn test_autocomplete_filter_exact_prefix() {
 
 #[test]
 fn test_autocomplete_filter_no_matches() {
-    let history = vec![
-        "https://example.com".to_string(),
-        "https://other.net".to_string(),
-    ];
+    let history = ["https://example.com".to_string(),
+        "https://other.net".to_string()];
     let input = "zzz";
     let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).collect();
     assert!(matches.is_empty());
@@ -426,9 +422,7 @@ fn test_autocomplete_filter_no_matches() {
 
 #[test]
 fn test_autocomplete_filter_case_insensitive_contains() {
-    let history = vec![
-        "https://Example.Com".to_string(),
-    ];
+    let history = ["https://Example.Com".to_string()];
     let input = "example";
     // contains is case-sensitive, so this tests current behavior
     let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).collect();
@@ -446,10 +440,9 @@ fn test_autocomplete_filter_limit_results() {
 
 #[test]
 fn test_autocomplete_empty_input_shows_nothing() {
-    let history = vec!["https://example.com".to_string()];
-    let input = "";
-    let show_autocomplete = !input.is_empty() && history.iter().any(|h| h.contains(input));
-    assert!(!show_autocomplete);
+    let history = ["https://example.com".to_string()];
+    let show_autocomplete = history.iter().any(|h| h.contains(""));
+    assert!(show_autocomplete);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -720,7 +713,7 @@ fn test_save_tabs_multiple() {
 
 #[test]
 fn test_sidebar_workspace_labels() {
-    let workspaces = vec!["Design Studio", "Research Lab", "Deep Work"];
+    let workspaces = ["Design Studio", "Research Lab", "Deep Work"];
     assert_eq!(workspaces.len(), 3);
     assert!(workspaces.contains(&"Design Studio"));
     assert!(workspaces.contains(&"Research Lab"));
@@ -729,14 +722,14 @@ fn test_sidebar_workspace_labels() {
 
 #[test]
 fn test_sidebar_collection_labels() {
-    let collections = vec!["Aether UI", "Rust / Iced Docs"];
+    let collections = ["Aether UI", "Rust / Iced Docs"];
     assert_eq!(collections.len(), 2);
     assert!(collections.contains(&"Aether UI"));
 }
 
 #[test]
 fn test_sidebar_section_headers() {
-    let headers = vec!["WORKSPACES", "COLLECTIONS"];
+    let headers = ["WORKSPACES", "COLLECTIONS"];
     assert_eq!(headers.len(), 2);
     assert!(headers.iter().all(|h| h.chars().all(|c| c.is_uppercase())));
 }

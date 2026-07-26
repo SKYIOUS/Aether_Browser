@@ -9,6 +9,8 @@ use crate::engine::stratus::Stylesheet;
 use crate::engine::stratus;
 use crate::ui::style::C;
 
+type SkipFn = Box<dyn Fn(&Node) -> bool>;
+
 #[derive(Debug, Clone)]
 pub struct FullStyle {
     pub color: Color,
@@ -244,7 +246,7 @@ fn compute_full_style_inner(
 
             let mut display = crate::bridge_gen::display_to_string(&cs.display).to_string();
     // ponytail: display:none elements still get a StyledElement but are skipped in layout
-    if display == "inline" && is_html_block_tag(&tag) {
+    if display == "inline" && is_html_block_tag(tag) {
         display = "block".to_string();
     }
 
@@ -328,6 +330,7 @@ fn make_element(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn extract_elements(
     node: &Node,
     elements: &mut Vec<StyledElement>,
@@ -451,7 +454,7 @@ pub fn extract_elements(
                     let input_type = elem.attributes.get("type").cloned().unwrap_or_else(|| "text".to_string());
                     let input_value = elem.attributes.get("value").cloned().unwrap_or_default();
                     let input_placeholder = elem.attributes.get("placeholder").cloned().unwrap_or_default();
-                    let checked = elem.attributes.get("checked").is_some();
+                    let checked = elem.attributes.contains_key("checked");
                     let text = match input_type.as_str() {
                         "submit" | "button" | "reset" => {
                             if !input_value.is_empty() { input_value.clone() } else { input_type.clone() }
@@ -557,7 +560,7 @@ pub fn extract_elements(
                 parent_idx
             };
 
-            let (new_parent, skip_fn): (Option<usize>, Box<dyn Fn(&Node) -> bool>) = match tag.as_str() {
+            let (new_parent, skip_fn): (Option<usize>, SkipFn) = match tag.as_str() {
                 "img" | "input" | "button" | "iframe" => (parent_idx, Box::new(|_| true)),
                 "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" | "option" => {
                     if text_consumed {
@@ -650,6 +653,7 @@ pub(crate) fn extract_elements_flat(
     viewport_w: f32,
     viewport_h: f32,
 ) {
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         nodes: &[FlatNode],
         node_id: u32,
@@ -735,7 +739,7 @@ pub(crate) fn extract_elements_flat(
             }
             "li" => {
                 let has_link = node.children.iter().any(|&c| {
-                    nodes.get(c as usize).map_or(false, |n| !n.is_text && n.tag == "a")
+                    nodes.get(c as usize).is_some_and(|n| !n.is_text && n.tag == "a")
                 });
                 if has_link { (String::new(), false, None, 0, "", true, false) }
                 else {

@@ -344,6 +344,7 @@ fn parse_transition(value: &PropertyValue) -> Option<Transition> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_sides_vp(
     top: &mut Option<f32>,
     right: &mut Option<f32>,

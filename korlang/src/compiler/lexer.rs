@@ -44,7 +44,7 @@ impl Lexer {
                             continue;
                         } else if next == '*' {
                             self.advance(); self.advance();
-                            while !self.is_eof() && !(self.peek() == '*' && self.pos + 1 < self.input.len() && self.input[self.pos + 1] == '/') {
+                            while !(self.is_eof() || self.peek() == '*' && self.pos + 1 < self.input.len() && self.input[self.pos + 1] == '/') {
                                 self.advance();
                             }
                             if !self.is_eof() { self.advance(); }
