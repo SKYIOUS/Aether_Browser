@@ -782,7 +782,7 @@ Component SidebarWS {
             .style(|_| container::Style { background: Some(Background::Color(C::PAGE_BG)), ..Default::default() })
             .into()
         } else if self.page_canvas.is_some() {
-            let pc = self.page_canvas.as_ref().unwrap();
+            let pc = self.page_canvas.as_ref().expect("Expected Some value, found None");
             let total_h = pc.elements.iter()
                 .map(|el| { let ey = if el.y.is_finite() { el.y } else { 0.0 }; ey + el.height.max(el.font_size.clamp(6.0, 200.0)) + 40.0 })
                 .fold(0.0, f32::max);

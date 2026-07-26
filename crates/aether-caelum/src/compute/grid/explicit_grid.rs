@@ -96,7 +96,7 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
                 RepetitionCount::AutoFit | RepetitionCount::AutoFill => Some(repeat),
             },
         })
-        .unwrap();
+        .expect("Unexpected None value");
     let repetition_definition_iter = repetition_definition.tracks();
     let repetition_track_count = repetition_definition_iter.len() as u16;
 
@@ -115,7 +115,7 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
             ) -> f32 {
                 let max_size = sizing_function.max.definite_value(parent_size, &calc_resolver);
                 let min_size = sizing_function.min.definite_value(parent_size, &calc_resolver);
-                max_size.map(|max| max.maybe_max(min_size)).or(min_size).unwrap()
+                max_size.map(|max| max.maybe_max(min_size)).or(min_size).expect("Unexpected None value")
             }
 
             let non_repeating_track_used_space: f32 = template
@@ -330,8 +330,8 @@ pub(super) fn initialize_grid_tracks(
     }
 
     // Mark first and last grid lines as collapsed
-    tracks.first_mut().unwrap().collapse();
-    tracks.last_mut().unwrap().collapse();
+    tracks.first_mut().expect("Unexpected None value").collapse();
+    tracks.last_mut().expect("Unexpected None value").collapse();
 }
 
 /// Utility function for repeating logic of creating implicit tracks
@@ -342,7 +342,7 @@ fn create_implicit_tracks(
     gap: LengthPercentage,
 ) {
     for _ in 0..count {
-        let track_def = auto_tracks_iter.next().unwrap();
+        let track_def = auto_tracks_iter.next().expect("Unexpected None value");
         tracks.push(GridTrack::new(track_def.min_sizing_function(), track_def.max_sizing_function()));
         tracks.push(GridTrack::gutter(gap));
     }

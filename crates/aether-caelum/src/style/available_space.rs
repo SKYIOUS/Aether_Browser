@@ -54,7 +54,7 @@ impl AvailableSpace {
     /// Return the definite value. Panic is the value is not definite.
     #[track_caller]
     pub fn unwrap(self) -> f32 {
-        self.into_option().unwrap()
+        self.into_option().expect("Expected Some value")
     }
 
     /// Return self if definite or a default value

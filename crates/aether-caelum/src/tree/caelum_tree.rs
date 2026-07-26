@@ -956,7 +956,7 @@ mod tests {
 
         let res = Caelum.new_leaf(Style::default());
         assert!(res.is_ok());
-        let node = res.unwrap();
+        let node = res.expect("Unexpected None");
 
         // node should be in the Caelum tree and have no children
         assert!(Caelum.child_count(node) == 0);
@@ -968,7 +968,7 @@ mod tests {
 
         let res = Caelum.new_leaf_with_context(Style::default(), Size::ZERO);
         assert!(res.is_ok());
-        let node = res.unwrap();
+        let node = res.expect("Unexpected None");
 
         // node should be in the Caelum tree and have no children
         assert!(Caelum.child_count(node) == 0);
@@ -978,23 +978,23 @@ mod tests {
     #[test]
     fn test_new_with_children() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         // node should have two children
         assert_eq!(Caelum.child_count(node), 2);
-        assert_eq!(Caelum.children(node).unwrap()[0], child0);
-        assert_eq!(Caelum.children(node).unwrap()[1], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[1], child1);
     }
 
     #[test]
     fn remove_node_should_remove() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let node = Caelum.new_leaf(Style::default()).unwrap();
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
 
-        let _ = Caelum.remove(node).unwrap();
+        let _ = Caelum.remove(node).expect("Operation failed");
     }
 
     #[test]
@@ -1002,71 +1002,71 @@ mod tests {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
         // Build a linear tree layout: <0> <- <1> <- <2>
-        let node2 = Caelum.new_leaf(Style::default()).unwrap();
-        let node1 = Caelum.new_with_children(Style::default(), &[node2]).unwrap();
-        let node0 = Caelum.new_with_children(Style::default(), &[node1]).unwrap();
+        let node2 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node1 = Caelum.new_with_children(Style::default(), &[node2]).expect("Operation failed");
+        let node0 = Caelum.new_with_children(Style::default(), &[node1]).expect("Operation failed");
 
         // Both node0 and node1 should have 1 child nodes
-        assert_eq!(Caelum.children(node0).unwrap().as_slice(), &[node1]);
-        assert_eq!(Caelum.children(node1).unwrap().as_slice(), &[node2]);
+        assert_eq!(Caelum.children(node0).expect("Operation failed").as_slice(), &[node1]);
+        assert_eq!(Caelum.children(node1).expect("Operation failed").as_slice(), &[node2]);
 
         // Disconnect the tree: <0> <2>
-        let _ = Caelum.remove(node1).unwrap();
+        let _ = Caelum.remove(node1).expect("Operation failed");
 
         // Both remaining nodes should have no child nodes
-        assert!(Caelum.children(node0).unwrap().is_empty());
-        assert!(Caelum.children(node2).unwrap().is_empty());
+        assert!(Caelum.children(node0).expect("Operation failed").is_empty());
+        assert!(Caelum.children(node2).expect("Operation failed").is_empty());
     }
 
     #[test]
     fn remove_last_node() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let parent = Caelum.new_leaf(Style::default()).unwrap();
-        let child = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.add_child(parent, child).unwrap();
+        let parent = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.add_child(parent, child).expect("Operation failed");
 
-        Caelum.remove(child).unwrap();
-        Caelum.remove(parent).unwrap();
+        Caelum.remove(child).expect("Unexpected None");
+        Caelum.remove(parent).expect("Operation failed");
     }
 
     #[test]
     fn set_measure() {
         let mut Caelum: CaelumTree<Size<f32>> = CaelumTree::new();
-        let node = Caelum.new_leaf_with_context(Style::default(), Size { width: 200.0, height: 200.0 }).unwrap();
-        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).unwrap();
-        assert_eq!(Caelum.layout(node).unwrap().size.width, 200.0);
+        let node = Caelum.new_leaf_with_context(Style::default(), Size { width: 200.0, height: 200.0 }).expect("Operation failed");
+        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).expect("Operation failed");
+        assert_eq!(Caelum.layout(node).expect("Operation failed").size.width, 200.0);
 
-        Caelum.set_node_context(node, Some(Size { width: 100.0, height: 100.0 })).unwrap();
-        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).unwrap();
-        assert_eq!(Caelum.layout(node).unwrap().size.width, 100.0);
+        Caelum.set_node_context(node, Some(Size { width: 100.0, height: 100.0 })).expect("Operation failed");
+        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).expect("Operation failed");
+        assert_eq!(Caelum.layout(node).expect("Operation failed").size.width, 100.0);
     }
 
     #[test]
     fn set_measure_of_previously_unmeasured_node() {
         let mut Caelum: CaelumTree<Size<f32>> = CaelumTree::new();
-        let node = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).unwrap();
-        assert_eq!(Caelum.layout(node).unwrap().size.width, 0.0);
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).expect("Operation failed");
+        assert_eq!(Caelum.layout(node).expect("Operation failed").size.width, 0.0);
 
-        Caelum.set_node_context(node, Some(Size { width: 100.0, height: 100.0 })).unwrap();
-        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).unwrap();
-        assert_eq!(Caelum.layout(node).unwrap().size.width, 100.0);
+        Caelum.set_node_context(node, Some(Size { width: 100.0, height: 100.0 })).expect("Operation failed");
+        Caelum.compute_layout_with_measure(node, Size::MAX_CONTENT, size_measure_function).expect("Operation failed");
+        assert_eq!(Caelum.layout(node).expect("Operation failed").size.width, 100.0);
     }
 
     /// Test that adding `add_child()` works
     #[test]
     fn add_child() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let node = Caelum.new_leaf(Style::default()).unwrap();
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 0);
 
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.add_child(node, child0).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.add_child(node, child0).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 1);
 
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.add_child(node, child1).unwrap();
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.add_child(node, child1).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 2);
     }
 
@@ -1074,99 +1074,99 @@ mod tests {
     fn insert_child_at_index() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let child2 = Caelum.new_leaf(Style::default()).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child2 = Caelum.new_leaf(Style::default()).expect("Operation failed");
 
-        let node = Caelum.new_leaf(Style::default()).unwrap();
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 0);
 
-        Caelum.insert_child_at_index(node, 0, child0).unwrap();
+        Caelum.insert_child_at_index(node, 0, child0).expect("Unexpected None");
         assert_eq!(Caelum.child_count(node), 1);
-        assert_eq!(Caelum.children(node).unwrap()[0], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child0);
 
-        Caelum.insert_child_at_index(node, 0, child1).unwrap();
+        Caelum.insert_child_at_index(node, 0, child1).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 2);
-        assert_eq!(Caelum.children(node).unwrap()[0], child1);
-        assert_eq!(Caelum.children(node).unwrap()[1], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[1], child0);
 
-        Caelum.insert_child_at_index(node, 1, child2).unwrap();
+        Caelum.insert_child_at_index(node, 1, child2).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 3);
-        assert_eq!(Caelum.children(node).unwrap()[0], child1);
-        assert_eq!(Caelum.children(node).unwrap()[1], child2);
-        assert_eq!(Caelum.children(node).unwrap()[2], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[1], child2);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[2], child0);
     }
 
     #[test]
     fn set_children() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         assert_eq!(Caelum.child_count(node), 2);
-        assert_eq!(Caelum.children(node).unwrap()[0], child0);
-        assert_eq!(Caelum.children(node).unwrap()[1], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[1], child1);
 
-        let child2 = Caelum.new_leaf(Style::default()).unwrap();
-        let child3 = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.set_children(node, &[child2, child3]).unwrap();
+        let child2 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child3 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.set_children(node, &[child2, child3]).expect("Operation failed");
 
         assert_eq!(Caelum.child_count(node), 2);
-        assert_eq!(Caelum.children(node).unwrap()[0], child2);
-        assert_eq!(Caelum.children(node).unwrap()[1], child3);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child2);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[1], child3);
     }
 
     /// Test that removing a child works
     #[test]
     fn remove_child() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         assert_eq!(Caelum.child_count(node), 2);
 
-        Caelum.remove_child(node, child0).unwrap();
+        Caelum.remove_child(node, child0).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 1);
-        assert_eq!(Caelum.children(node).unwrap()[0], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child1);
 
-        Caelum.remove_child(node, child1).unwrap();
+        Caelum.remove_child(node, child1).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 0);
     }
 
     #[test]
     fn remove_child_at_index() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         assert_eq!(Caelum.child_count(node), 2);
 
-        Caelum.remove_child_at_index(node, 0).unwrap();
+        Caelum.remove_child_at_index(node, 0).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 1);
-        assert_eq!(Caelum.children(node).unwrap()[0], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child1);
 
-        Caelum.remove_child_at_index(node, 0).unwrap();
+        Caelum.remove_child_at_index(node, 0).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 0);
     }
 
     #[test]
     fn remove_children_range() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let child2 = Caelum.new_leaf(Style::default()).unwrap();
-        let child3 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1, child2, child3]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child2 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child3 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1, child2, child3]).expect("Operation failed");
 
         assert_eq!(Caelum.child_count(node), 4);
 
-        Caelum.remove_children_range(node, 1..=2).unwrap();
+        Caelum.remove_children_range(node, 1..=2).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 2);
-        assert_eq!(Caelum.children(node).unwrap(), [child0, child3]);
+        assert_eq!(Caelum.children(node).expect("Operation failed"), [child0, child3]);
         for child in [child0, child3] {
             assert_eq!(Caelum.parent(child), Some(node));
         }
@@ -1180,12 +1180,12 @@ mod tests {
     fn remove_child_updates_parents() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let parent = Caelum.new_leaf(Style::default()).unwrap();
-        let child = Caelum.new_leaf(Style::default()).unwrap();
+        let parent = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child = Caelum.new_leaf(Style::default()).expect("Operation failed");
 
-        Caelum.add_child(parent, child).unwrap();
+        Caelum.add_child(parent, child).expect("Operation failed");
 
-        Caelum.remove(parent).unwrap();
+        Caelum.remove(parent).expect("Operation failed");
 
         // Once the parent is removed this shouldn't panic.
         assert!(Caelum.set_children(child, &[]).is_ok());
@@ -1195,24 +1195,24 @@ mod tests {
     fn replace_child_at_index() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
 
-        let node = Caelum.new_with_children(Style::default(), &[child0]).unwrap();
+        let node = Caelum.new_with_children(Style::default(), &[child0]).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 1);
-        assert_eq!(Caelum.children(node).unwrap()[0], child0);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child0);
 
-        Caelum.replace_child_at_index(node, 0, child1).unwrap();
+        Caelum.replace_child_at_index(node, 0, child1).expect("Operation failed");
         assert_eq!(Caelum.child_count(node), 1);
-        assert_eq!(Caelum.children(node).unwrap()[0], child1);
+        assert_eq!(Caelum.children(node).expect("Operation failed")[0], child1);
     }
     #[test]
     fn test_child_at_index() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let child2 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1, child2]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child2 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1, child2]).expect("Operation failed");
 
         assert!(if let Ok(result) = Caelum.child_at_index(node, 0) { result == child0 } else { false });
         assert!(if let Ok(result) = Caelum.child_at_index(node, 1) { result == child1 } else { false });
@@ -1221,9 +1221,9 @@ mod tests {
     #[test]
     fn test_child_count() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         assert!(Caelum.child_count(node) == 2);
         assert!(Caelum.child_count(child0) == 0);
@@ -1234,28 +1234,28 @@ mod tests {
     #[test]
     fn test_children() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
         let mut children = sys::Vec::new();
         children.push(child0);
         children.push(child1);
 
-        let children_result = Caelum.children(node).unwrap();
+        let children_result = Caelum.children(node).expect("Unexpected None");
         assert_eq!(children_result, children);
 
-        assert!(Caelum.children(child0).unwrap().is_empty());
+        assert!(Caelum.children(child0).expect("Operation failed").is_empty());
     }
     #[test]
     fn test_set_style() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
 
-        let node = Caelum.new_leaf(Style::default()).unwrap();
-        assert_eq!(Caelum.style(node).unwrap().display, Display::Flex);
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        assert_eq!(Caelum.style(node).expect("Operation failed").display, Display::Flex);
 
-        Caelum.set_style(node, Style { display: Display::None, ..Style::default() }).unwrap();
-        assert_eq!(Caelum.style(node).unwrap().display, Display::None);
+        Caelum.set_style(node, Style { display: Display::None, ..Style::default() }).expect("Operation failed");
+        assert_eq!(Caelum.style(node).expect("Operation failed").display, Display::None);
     }
     #[test]
     fn test_style() {
@@ -1263,16 +1263,16 @@ mod tests {
 
         let style = Style { display: Display::None, flex_direction: FlexDirection::RowReverse, ..Default::default() };
 
-        let node = Caelum.new_leaf(style.clone()).unwrap();
+        let node = Caelum.new_leaf(style.clone()).expect("Operation failed");
 
         let res = Caelum.style(node);
         assert!(res.is_ok());
-        assert!(res.unwrap() == &style);
+        assert!(res.expect("Operation failed") == &style);
     }
     #[test]
     fn test_layout() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let node = Caelum.new_leaf(Style::default()).unwrap();
+        let node = Caelum.new_leaf(Style::default()).expect("Operation failed");
 
         // ponytail: basic smoke test for layout retrieval
         let res = Caelum.layout(node);
@@ -1282,23 +1282,23 @@ mod tests {
     #[test]
     fn test_mark_dirty() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child0 = Caelum.new_leaf(Style::default()).unwrap();
-        let child1 = Caelum.new_leaf(Style::default()).unwrap();
-        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).unwrap();
+        let child0 = Caelum.new_leaf(Style::default()).expect("Layout failed");
+        let child1 = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let node = Caelum.new_with_children(Style::default(), &[child0, child1]).expect("Operation failed");
 
-        Caelum.compute_layout(node, Size::MAX_CONTENT).unwrap();
+        Caelum.compute_layout(node, Size::MAX_CONTENT).expect("Operation failed");
 
         assert_eq!(Caelum.dirty(child0), Ok(false));
         assert_eq!(Caelum.dirty(child1), Ok(false));
         assert_eq!(Caelum.dirty(node), Ok(false));
 
-        Caelum.mark_dirty(node).unwrap();
+        Caelum.mark_dirty(node).expect("Operation failed");
         assert_eq!(Caelum.dirty(child0), Ok(false));
         assert_eq!(Caelum.dirty(child1), Ok(false));
         assert_eq!(Caelum.dirty(node), Ok(true));
 
-        Caelum.compute_layout(node, Size::MAX_CONTENT).unwrap();
-        Caelum.mark_dirty(child0).unwrap();
+        Caelum.compute_layout(node, Size::MAX_CONTENT).expect("Operation failed");
+        Caelum.mark_dirty(child0).expect("Unexpected None");
         assert_eq!(Caelum.dirty(child0), Ok(true));
         assert_eq!(Caelum.dirty(child1), Ok(false));
         assert_eq!(Caelum.dirty(node), Ok(true));
@@ -1312,7 +1312,7 @@ mod tests {
             ..Default::default()
         });
         assert!(node_result.is_ok());
-        let node = node_result.unwrap();
+        let node = node_result.expect("Operation failed");
         let layout_result = Caelum.compute_layout(
             node,
             Size { width: AvailableSpace::Definite(100.), height: AvailableSpace::Definite(100.) },
@@ -1331,7 +1331,7 @@ mod tests {
                 size: Size { width: Dimension::from_percent(1f32), height: Dimension::from_percent(1f32) },
                 ..Default::default()
             })
-            .unwrap();
+            .expect("Operation failed");
 
         let root = Caelum
             .new_with_children(
@@ -1347,9 +1347,9 @@ mod tests {
                 },
                 &[node],
             )
-            .unwrap();
+            .expect("Operation failed");
 
-        Caelum.compute_layout(root, Size::MAX_CONTENT).unwrap();
+        Caelum.compute_layout(root, Size::MAX_CONTENT).expect("Operation failed");
 
         // If Layout::location represents top-left coord, 'node' location
         // must be (due applied 'root' padding): {x: 10, y: 30}.
@@ -1359,7 +1359,7 @@ mod tests {
         // - bottom-left:  {x: 10, y: 40}
         // - top-right:    {x: 20, y: 30}
         // - bottom-right: {x: 20, y: 40}
-        let layout = Caelum.layout(node).unwrap();
+        let layout = Caelum.layout(node).expect("Layout operation failed");
         assert_eq!(layout.location.x, 10f32);
         assert_eq!(layout.location.y, 30f32);
     }
@@ -1367,12 +1367,12 @@ mod tests {
     #[test]
     fn set_children_reparents() {
         let mut Caelum: CaelumTree<()> = CaelumTree::new();
-        let child = Caelum.new_leaf(Style::default()).unwrap();
-        let old_parent = Caelum.new_with_children(Style::default(), &[child]).unwrap();
+        let child = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        let old_parent = Caelum.new_with_children(Style::default(), &[child]).expect("Operation failed");
 
-        let new_parent = Caelum.new_leaf(Style::default()).unwrap();
-        Caelum.set_children(new_parent, &[child]).unwrap();
+        let new_parent = Caelum.new_leaf(Style::default()).expect("Operation failed");
+        Caelum.set_children(new_parent, &[child]).expect("Unexpected None");
 
-        assert!(Caelum.children(old_parent).unwrap().is_empty());
+        assert!(Caelum.children(old_parent).expect("Operation failed").is_empty());
     }
 }

@@ -23,7 +23,7 @@ where
     S: CheapCloneStr,
 {
     GridTemplateComponent::Repeat(GridTemplateRepetition {
-        count: repetition_kind.try_into().unwrap(),
+        count: repetition_kind.try_into().expect("Type conversion failed"),
         tracks,
         line_names: Vec::new(),
     })

@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn test_color_current_color() {
-        let c = Color::from_named("currentcolor").unwrap();
+        let c = Color::from_named("currentcolor").expect("Operation failed");
         assert!(c.is_current());
         assert_eq!(c, Color::CURRENT_COLOR);
     }
@@ -562,9 +562,9 @@ mod tests {
 
     #[test]
     fn test_display_from_str() {
-        assert_eq!("flex".parse::<Display>().unwrap(), Display::Flex);
-        assert_eq!("none".parse::<Display>().unwrap(), Display::None);
-        assert_eq!("block".parse::<Display>().unwrap(), Display::Block);
+        assert_eq!("flex".parse::<Display>().expect("Operation failed"), Display::Flex);
+        assert_eq!("none".parse::<Display>().expect("Operation failed"), Display::None);
+        assert_eq!("block".parse::<Display>().expect("Operation failed"), Display::Block);
     }
 
     #[test]

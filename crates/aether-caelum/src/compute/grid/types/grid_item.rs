@@ -203,7 +203,7 @@ impl GridItem {
             let limit: f32 = spanned_tracks
                 .iter()
                 .map(|track| {
-                    track.max_track_sizing_function.definite_limit(axis_parent_size, resolve_calc_value).unwrap()
+                    track.max_track_sizing_function.definite_limit(axis_parent_size, resolve_calc_value).expect("Unexpected None value")
                 })
                 .sum();
             Some(limit)
@@ -229,7 +229,7 @@ impl GridItem {
             let limit: f32 = spanned_tracks
                 .iter()
                 .map(|track| {
-                    track.max_track_sizing_function.definite_value(axis_parent_size, resolve_calc_value).unwrap()
+                    track.max_track_sizing_function.definite_value(axis_parent_size, resolve_calc_value).expect("Unexpected None value")
                 })
                 .sum();
             Some(limit)

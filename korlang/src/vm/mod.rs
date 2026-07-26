@@ -225,12 +225,12 @@ impl VirtualMachine {
                 }
                 OpCode::SetProperty(name) => {
                     let val = if let Some(v) = self.stack.pop() { v } else { ip += 1; continue; };
-                    if let Some(Value::Object(obj)) = self.stack.last() { obj.lock().unwrap().properties.insert(name, val); }
+                    if let Some(Value::Object(obj)) = self.stack.last() { obj.lock().expect("Mutex poisoned").properties.insert(name, val); }
                     ip += 1;
                 }
                 OpCode::AddChild => {
                     let child = if let Some(v) = self.stack.pop() { v } else { ip += 1; continue; };
-                    if let Some(Value::Object(parent)) = self.stack.last() { parent.lock().unwrap().children.push(child); }
+                    if let Some(Value::Object(parent)) = self.stack.last() { parent.lock().expect("Mutex poisoned").children.push(child); }
                     ip += 1;
                 }
                 OpCode::Dup => { if let Some(v) = self.stack.last().cloned() { self.stack.push(v); } ip += 1; }

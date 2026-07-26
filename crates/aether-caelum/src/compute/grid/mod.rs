@@ -668,13 +668,13 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         let first_row = items[0].row_indexes.start;
 
         // Create a slice of all of the items start in this row (taking advantage of the fact that we have just sorted the array)
-        let first_row_items = &items[0..].split(|item| item.row_indexes.start != first_row).next().unwrap();
+        let first_row_items = &items[0..].split(|item| item.row_indexes.start != first_row).next().expect("Unexpected None value");
 
         // Check if any items in *this row* are baseline aligned
         let row_has_baseline_item = first_row_items.iter().any(|item| item.align_self == AlignSelf::Baseline);
 
         let item = if row_has_baseline_item {
-            first_row_items.iter().find(|item| item.align_self == AlignSelf::Baseline).unwrap()
+            first_row_items.iter().find(|item| item.align_self == AlignSelf::Baseline).expect("Unexpected None value")
         } else {
             &first_row_items[0]
         };

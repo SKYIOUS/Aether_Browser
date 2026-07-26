@@ -247,10 +247,10 @@ mod tests {
             if let aether_dom::NodeType::Text(text) = &node.children[0].node_type {
                 assert_eq!(text, "Hello");
             } else {
-                panic!("Expected text node child");
+                panic!("Expected text node child - parser bug");
             }
         } else {
-            panic!("Expected element node");
+            panic!("Expected element node - parser bug");
         }
     }
 }
