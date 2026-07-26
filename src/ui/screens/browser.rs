@@ -949,7 +949,7 @@ Component SidebarWS {
             let bg = if is_active { 
                 Background::Color(C::PAGE_BG) 
             } else if is_hovered { 
-                Background::Color(C::SURFACE_LIGHT) 
+                Background::Color(C::SURFACE) 
             } else { 
                 Background::Color(C::SURFACE) 
             };

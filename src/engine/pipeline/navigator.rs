@@ -1,6 +1,6 @@
 use crate::plog;
 use serde::{Serialize, Deserialize};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Tab {
@@ -112,7 +112,7 @@ pub fn save_tabs(tabs: &[Tab]) {
 pub fn load_tabs() -> Vec<Tab> {
     std::fs::read_to_string("aether_tabs.json")
         .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<Vec<Tab>>(&s).ok())
         .unwrap_or_default()
         .into_iter()
         .map(|mut tab| {
