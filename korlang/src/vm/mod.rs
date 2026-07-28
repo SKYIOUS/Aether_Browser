@@ -465,6 +465,9 @@ impl VirtualMachine {
                         } else {
                             self.heap.insert(var.clone(), Value::Number(current as f64));
                         }
+                        if is_list {
+                            self.stack.push(Value::Bool(true));
+                        }
                         ip += 1;
                     } else {
                         self.heap.remove(&key);
