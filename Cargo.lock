@@ -70,7 +70,6 @@ name = "aether-html"
 version = "0.1.0"
 dependencies = [
  "aether-dom",
- "serde_json",
 ]
 
 [[package]]
