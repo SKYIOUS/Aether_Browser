@@ -70,21 +70,21 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
 
 #[test]
 fn test_tab_struct_construction() {
-    let tab = Tab { title: "Home".to_string(), url: "https://example.com".to_string() };
+    let tab = Tab { title: "Home".to_string(), url: "https://example.com".to_string(), ..Default::default() };
     assert_eq!(tab.title, "Home");
     assert_eq!(tab.url, "https://example.com");
 }
 
 #[test]
 fn test_tab_empty_title() {
-    let tab = Tab { title: String::new(), url: "about:blank".to_string() };
+    let tab = Tab { title: String::new(), url: "about:blank".to_string(), ..Default::default() };
     assert!(tab.title.is_empty());
     assert_eq!(tab.url, "about:blank");
 }
 
 #[test]
 fn test_tab_clone() {
-    let tab = Tab { title: "Test".to_string(), url: "https://rust-lang.org".to_string() };
+    let tab = Tab { title: "Test".to_string(), url: "https://rust-lang.org".to_string(), ..Default::default() };
     let cloned = tab.clone();
     assert_eq!(cloned.title, tab.title);
     assert_eq!(cloned.url, tab.url);
@@ -93,8 +93,8 @@ fn test_tab_clone() {
 #[test]
 fn test_tab_serialization_roundtrip() {
     let tabs = vec![
-        Tab { title: "Tab 1".to_string(), url: "https://a.com".to_string() },
-        Tab { title: "Tab 2".to_string(), url: "https://b.com".to_string() },
+        Tab { title: "Tab 1".to_string(), url: "https://a.com".to_string(), ..Default::default() },
+        Tab { title: "Tab 2".to_string(), url: "https://b.com".to_string(), ..Default::default() },
     ];
     let json = serde_json::to_string(&tabs).unwrap();
     let deserialized: Vec<Tab> = serde_json::from_str(&json).unwrap();
@@ -695,8 +695,8 @@ fn test_save_tabs_empty() {
 fn test_save_tabs_multiple() {
     let path = "aether_tabs_test2.json";
     let tabs = vec![
-        Tab { title: "Rust".to_string(), url: "https://rust-lang.org".to_string() },
-        Tab { title: "Iced".to_string(), url: "https://iced.rs".to_string() },
+        Tab { title: "Rust".to_string(), url: "https://rust-lang.org".to_string(), ..Default::default() },
+        Tab { title: "Iced".to_string(), url: "https://iced.rs".to_string(), ..Default::default() },
     ];
     let json = serde_json::to_string(&tabs).unwrap();
     std::fs::write(path, &json).unwrap();
@@ -797,7 +797,7 @@ fn test_settings_search_url_unicode_query() {
 
 #[test]
 fn test_tab_title_update() {
-    let mut tab = Tab { title: "Loading...".to_string(), url: "https://example.com".to_string() };
+    let mut tab = Tab { title: "Loading...".to_string(), url: "https://example.com".to_string(), ..Default::default() };
     tab.title = "Example Domain".to_string();
     assert_eq!(tab.title, "Example Domain");
 }
