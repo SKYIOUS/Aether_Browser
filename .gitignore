@@ -80,13 +80,15 @@ Cargo.lock
 **/target/wasm32-wasi/
 **/target/wasm32-unknown-emscripten/
 
-# Aether Browser - stale scratch and report dirs
+# Vayu Browser - stale scratch and report dirs
 docs/
 examples/
 screens/
 skyious-report/
 current/
 aether_tabs.json
+vayu_tabs.json
+vayu_cookies.json
 *.REFACTOR*.md
 GEMINI.md
 KORLANG.md
