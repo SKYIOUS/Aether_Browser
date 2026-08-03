@@ -165,3 +165,31 @@ fn test_set_attribute_rejects_srcdoc() {
     assert_eq!(bridge.get_attribute(root, "srcdoc"), None, "srcdoc should be rejected");
 }
 
+#[test]
+fn test_resolve_url_absolute() {
+    use vayu_browser::engine::net::resolve_url;
+    assert_eq!(resolve_url("https://example.com", "http://base.com"), "https://example.com");
+    assert_eq!(resolve_url("http://example.com", "http://base.com"), "http://example.com");
+}
+
+#[test]
+fn test_resolve_url_protocol_relative() {
+    use vayu_browser::engine::net::resolve_url;
+    assert_eq!(resolve_url("//example.com/path", "https://base.com/page"), "https://example.com/path");
+}
+
+#[test]
+fn test_resolve_url_root_relative() {
+    use vayu_browser::engine::net::resolve_url;
+    assert_eq!(resolve_url("/abs/path", "https://example.com/rel/page"), "https://example.com/abs/path");
+}
+
+#[test]
+fn test_resolve_url_relative() {
+    use vayu_browser::engine::net::resolve_url;
+    assert_eq!(resolve_url("page.html", "https://example.com/dir/"), "https://example.com/dir/page.html");
+    assert_eq!(resolve_url("sub/page.html", "https://example.com/dir/"), "https://example.com/dir/sub/page.html");
+    assert_eq!(resolve_url("../page.html", "https://example.com/dir/page.html"), "https://example.com/page.html");
+    assert_eq!(resolve_url("./page.html", "https://example.com/dir/"), "https://example.com/dir/page.html");
+}
+

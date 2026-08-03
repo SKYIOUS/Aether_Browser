@@ -1292,4 +1292,23 @@ mod tests {
             assert_eq!(&normalize_nav_url(input), expected, "input={}", input);
         }
     }
+
+    #[test]
+    fn test_close_tab_before_active_adjusts_index() {
+        let mut screen = BrowserScreen::default();
+        screen.tabs = vec![
+            Tab::new("A", "https://a.com"),
+            Tab::new("B", "https://b.com"),
+            Tab::new("C", "https://c.com"),
+        ];
+        screen.active_tab = 2;
+        screen.tab_history = vec![(vec!["https://a.com".into()], 0), (vec!["https://b.com".into()], 0), (vec!["https://c.com".into()], 0)];
+
+        let _ = screen.update(BrowserMessage::CloseTab(0));
+
+        assert_eq!(screen.tabs.len(), 2);
+        assert_eq!(screen.tabs[0].title, "B");
+        assert_eq!(screen.tabs[1].title, "C");
+        assert_eq!(screen.active_tab, 1, "active_tab should shift left after closing tab before it");
+    }
 }
