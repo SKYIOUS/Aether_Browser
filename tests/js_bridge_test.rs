@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use aether_browser::engine::js::js_bridge::JsBridge;
-use aether_browser::engine::dom::{Node, NodeType};
+use vayu_browser::engine::js::js_bridge::JsBridge;
+use vayu_browser::engine::dom::{Node, NodeType};
 
 fn make_dom() -> Node {
     let mut attrs = HashMap::new();

@@ -16,7 +16,7 @@ pub struct AetherSettings {
 impl Default for AetherSettings {
     fn default() -> Self {
         Self {
-            home_page_url: "aether://design/spatial-minimalism".to_string(),
+            home_page_url: "vayu://design/spatial-minimalism".to_string(),
             default_search_engine: "duckduckgo".to_string(),
             js_enabled: true,
             cookies_enabled: true,

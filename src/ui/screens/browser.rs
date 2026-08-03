@@ -254,10 +254,10 @@ impl Default for BrowserScreen {
 
 impl BrowserScreen {
     pub fn new() -> Self {
-        let default_url = "aether://design/spatial-minimalism".to_string();
+        let default_url = "vayu://design/spatial-minimalism".to_string();
         let mut kor_vm = VirtualMachine::new();
         register_default_callbacks(&mut kor_vm);
-        kor_vm.set_builtin("status_left", korlang::vm::Value::String("Aether Ready".to_string()));
+        kor_vm.set_builtin("status_left", korlang::vm::Value::String("Vayu Ready".to_string()));
         kor_vm.set_builtin("status_mid", korlang::vm::Value::String("Idle".to_string()));
         kor_vm.set_builtin("status_right", korlang::vm::Value::String("Local shell".to_string()));
         let status_src = r#"
@@ -297,7 +297,7 @@ Component SidebarWS {
         Button(text: "⬡ Research Lab", on_click: "ws1")
         Button(text: "⬡ Deep Work", on_click: "ws2")
         Text(text: "COLLECTIONS", size: 11)
-        Button(text: "▤ Aether UI", on_click: "ws0")
+        Button(text: "▤ Vayu UI", on_click: "ws0")
         Button(text: "▤ Rust / Iced Docs", on_click: "ws1")
     }
 }
@@ -310,7 +310,7 @@ Component SidebarWS {
             (vec![Tab::new("New Tab", &default_url)],
              vec![(vec![default_url.clone()], 0)],
              default_url.clone(),
-             "Welcome to Aether Browser".to_string())
+             "Welcome to Vayu Browser".to_string())
         } else {
             let count = loaded_tabs.len();
             let history: Vec<(Vec<String>, usize)> = loaded_tabs.iter().map(|t| (vec![t.url.clone()], 0)).collect();
@@ -466,7 +466,7 @@ Component SidebarWS {
                     hist.push(page_url.clone());
                     *idx = hist.len() - 1;
                 }
-                if !self.url_history.contains(&page_url) && !page_url.starts_with("aether://") {
+                if !self.url_history.contains(&page_url) && !page_url.starts_with("vayu://") {
                     self.url_history.push(page_url.clone());
                 }
                 self.is_history_nav = false;
@@ -1279,7 +1279,7 @@ mod tests {
             ("//example.com", "https://example.com"),
             ("example.com", "https://example.com"),
             ("http://example.com", "http://example.com"),
-            ("aether://home", "aether://home"),
+            ("vayu://home", "vayu://home"),
         ];
         for (input, expected) in &cases {
             assert_eq!(&normalize_nav_url(input), expected, "input={}", input);

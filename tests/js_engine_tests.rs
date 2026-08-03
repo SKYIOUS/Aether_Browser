@@ -1,5 +1,5 @@
-use aether_browser::engine::js::js_bridge::JsBridge;
-use aether_browser::engine::dom::Node;
+use vayu_browser::engine::js::js_bridge::JsBridge;
+use vayu_browser::engine::dom::Node;
 
 // ── Helper: build a DOM tree with div > (span.foo#bar + p) ──────────
 fn make_tree() -> (JsBridge, u32, u32, u32, u32) {

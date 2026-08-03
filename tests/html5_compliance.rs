@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use aether_browser::engine::pipeline::extractor::should_skip_tag;
+    use vayu_browser::engine::pipeline::extractor::should_skip_tag;
 
     #[test]
     fn test_should_skip_tag() {

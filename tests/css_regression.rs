@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use aether_browser::engine::stratus::{
+use vayu_browser::engine::stratus::{
     self, Color, ComputedStyle, Display, ElementData, FlexDirection, JustifyContent,
 };
 

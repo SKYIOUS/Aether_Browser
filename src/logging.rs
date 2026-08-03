@@ -30,7 +30,7 @@ impl PipelineLog {
         let path = log_dir().join(format!("pipeline_{}.log", ts));
         let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
         if let Some(ref mut f) = file {
-            if let Err(e) = writeln!(f, "═══ Aether Browser Pipeline Log ═══") {
+            if let Err(e) = writeln!(f, "═══ Vayu Browser Pipeline Log ═══") {
                 eprintln!("[logging] write failed: {}", e);
             }
             if let Err(e) = writeln!(f, "Started: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")) {

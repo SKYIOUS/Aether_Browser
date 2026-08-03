@@ -1,5 +1,5 @@
 Component BrowserApp {
-    state url: String = "aether://design/spatial-minimalism"
+    state url: String = "vayu://design/spatial-minimalism"
     state bg_hex: String = "#F0F0F3"
 
     Container(background: bg_hex) {
@@ -39,7 +39,7 @@ Component BrowserApp {
                             Button(text: "⟳") { on_click: "reload" }
                         }
 
-                        TextInput(placeholder: "Search the web with Aether...", value: bind url) { width: 850 }
+                        TextInput(placeholder: "Search the web with Vayu...", value: bind url) { width: 850 }
 
                         Button(text: "⠿")
                     }
@@ -49,7 +49,7 @@ Component BrowserApp {
 
                 // Spatial Viewport
                 Container(padding: 4, background: "#FFFFFF", radius: 8) {
-                    Text(text: "Aether Rendering Core Active") { size: 12 }
+                    Text(text: "Vayu Rendering Core Active") { size: 12 }
                 }
             }
         }

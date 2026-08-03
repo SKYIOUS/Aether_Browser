@@ -90,7 +90,7 @@ impl Tab {
 pub fn normalize_nav_url(url: &str) -> String {
     let s = url.trim();
     if s.is_empty() { return "about:blank".to_string(); }
-    if s.starts_with("aether://") || s.starts_with("about:") {
+    if s.starts_with("vayu://") || s.starts_with("about:") {
         return s.to_string();
     }
     crate::engine::net::normalize_url(s)
@@ -99,7 +99,7 @@ pub fn normalize_nav_url(url: &str) -> String {
 pub fn save_tabs(tabs: &[Tab]) {
     match serde_json::to_string(tabs) {
         Ok(json) => {
-            if let Err(e) = std::fs::write("aether_tabs.json", json) {
+            if let Err(e) = std::fs::write("vayu_tabs.json", json) {
                 plog!("tabs", "Failed to save tabs: {}", e);
             }
         }
@@ -110,7 +110,7 @@ pub fn save_tabs(tabs: &[Tab]) {
 }
 
 pub fn load_tabs() -> Vec<Tab> {
-    std::fs::read_to_string("aether_tabs.json")
+    std::fs::read_to_string("vayu_tabs.json")
         .ok()
         .and_then(|s| serde_json::from_str::<Vec<Tab>>(&s).ok())
         .unwrap_or_default()

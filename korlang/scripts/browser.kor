@@ -1,5 +1,5 @@
 Component BrowserHeader {
-    state url: String = "aether://design/spatial-minimalism"
+    state url: String = "vayu://design/spatial-minimalism"
 
     Column(width: 800) {
         Row(padding: 10, spacing: 12) {

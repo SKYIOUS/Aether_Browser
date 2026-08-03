@@ -1,8 +1,8 @@
-use aether_browser::engine::pipeline::{normalize_nav_url, Tab, apply_caelum_layout};
-use aether_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content};
-use aether_browser::engine::net::normalize_url;
-use aether_browser::engine::pipeline::StyledElement;
-use aether_browser::ui::screens::settings::AetherSettings;
+use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_caelum_layout};
+use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content};
+use vayu_browser::engine::net::normalize_url;
+use vayu_browser::engine::pipeline::StyledElement;
+use vayu_browser::ui::screens::settings::AetherSettings;
 use iced::Color;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -128,8 +128,8 @@ fn test_normalize_nav_url_double_slash() {
 }
 
 #[test]
-fn test_normalize_nav_url_aether_protocol() {
-    assert_eq!(normalize_nav_url("aether://home"), "aether://home");
+fn test_normalize_nav_url_vayu_protocol() {
+    assert_eq!(normalize_nav_url("vayu://home"), "vayu://home");
 }
 
 #[test]
@@ -191,8 +191,8 @@ fn test_is_url_with_dot() {
 }
 
 #[test]
-fn test_is_url_aether_protocol() {
-    assert!(AetherSettings::is_url("aether://design/spatial-minimalism"));
+fn test_is_url_vayu_protocol() {
+    assert!(AetherSettings::is_url("vayu://design/spatial-minimalism"));
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn test_search_url_special_chars() {
 #[test]
 fn test_settings_defaults() {
     let s = AetherSettings::default();
-    assert_eq!(s.home_page_url, "aether://design/spatial-minimalism");
+    assert_eq!(s.home_page_url, "vayu://design/spatial-minimalism");
     assert_eq!(s.default_search_engine, "duckduckgo");
     assert!(s.js_enabled);
     assert!(s.cookies_enabled);
@@ -261,7 +261,7 @@ fn test_settings_serialization_roundtrip() {
 
 #[test]
 fn test_settings_load_nonexistent_file_returns_defaults() {
-    // load() reads from "aether_settings.json"; if missing, returns default
+    // load() reads from "vayu_settings.json"; if missing, returns default
     // We can't guarantee the file doesn't exist, but we can test the default path
     let s = AetherSettings::default();
     assert!(s.js_enabled);
@@ -269,9 +269,9 @@ fn test_settings_load_nonexistent_file_returns_defaults() {
 
 #[test]
 fn test_settings_save_and_load() {
-    let path = "aether_settings_test.json";
+    let path = "vayu_settings_test.json";
     let s = AetherSettings {
-        home_page_url: "aether://test".to_string(),
+        home_page_url: "vayu://test".to_string(),
         default_search_engine: "google".to_string(),
         js_enabled: false,
         cookies_enabled: true,
@@ -279,7 +279,7 @@ fn test_settings_save_and_load() {
     let json = serde_json::to_string_pretty(&s).unwrap();
     std::fs::write(path, &json).unwrap();
     let loaded: AetherSettings = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(loaded.home_page_url, "aether://test");
+    assert_eq!(loaded.home_page_url, "vayu://test");
     assert_eq!(loaded.default_search_engine, "google");
     assert!(!loaded.js_enabled);
     assert!(loaded.cookies_enabled);
@@ -682,7 +682,7 @@ fn test_no_skip_content_p() {
 
 #[test]
 fn test_save_tabs_empty() {
-    let path = "aether_tabs_test.json";
+    let path = "vayu_tabs_test.json";
     let tabs: Vec<Tab> = vec![];
     let json = serde_json::to_string(&tabs).unwrap();
     std::fs::write(path, &json).unwrap();
@@ -722,9 +722,9 @@ fn test_sidebar_workspace_labels() {
 
 #[test]
 fn test_sidebar_collection_labels() {
-    let collections = ["Aether UI", "Rust / Iced Docs"];
+    let collections = ["Vayu UI", "Rust / Iced Docs"];
     assert_eq!(collections.len(), 2);
-    assert!(collections.contains(&"Aether UI"));
+    assert!(collections.contains(&"Vayu UI"));
 }
 
 #[test]
@@ -740,7 +740,7 @@ fn test_sidebar_section_headers() {
 
 #[test]
 fn test_devtools_tab_variants() {
-    use aether_browser::ui::screens::browser::DevToolsTab;
+    use vayu_browser::ui::screens::browser::DevToolsTab;
     let console = DevToolsTab::Console;
     let elements = DevToolsTab::Elements;
     let network = DevToolsTab::Network;
@@ -751,7 +751,7 @@ fn test_devtools_tab_variants() {
 
 #[test]
 fn test_devtools_tab_default_is_console() {
-    use aether_browser::ui::screens::browser::DevToolsTab;
+    use vayu_browser::ui::screens::browser::DevToolsTab;
     let current = DevToolsTab::Console;
     assert_eq!(current, DevToolsTab::Console);
 }

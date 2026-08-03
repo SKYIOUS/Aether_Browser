@@ -7,7 +7,7 @@ use ui::AetherApp;
 use iced::{window, Size};
 
 pub fn main() -> iced::Result {
-    iced::application("Aether Browser", AetherApp::update, AetherApp::view)
+    iced::application("Vayu Browser", AetherApp::update, AetherApp::view)
         .subscription(AetherApp::subscription)
         .window(window::Settings {
             size: Size::new(1440.0, 900.0),

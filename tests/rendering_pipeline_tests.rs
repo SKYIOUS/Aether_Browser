@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use aether_browser::engine::stratus::{
+use vayu_browser::engine::stratus::{
     self, Color, ComputedStyle, Display, ElementData, FlexDirection, JustifyContent,
 };
-use aether_browser::engine::pipeline::extractor::{
+use vayu_browser::engine::pipeline::extractor::{
     should_skip_tag, should_skip_content, extract_elements, StyledElement, decode_html_entities,
 };
-use aether_browser::engine::pipeline::layout::apply_caelum_layout;
-use aether_browser::engine::parser::Parser;
+use vayu_browser::engine::pipeline::layout::apply_caelum_layout;
+use vayu_browser::engine::parser::Parser;
 
 fn resolve(css: &str, tag: &str) -> ComputedStyle {
     let sheet = stratus::parse(css);
@@ -962,7 +962,7 @@ fn test_decode_in_extracted_text() {
     let html = r#"<p>hello &amp; goodbye</p>"#;
     let mut parser = Parser::new(html.to_string());
     let dom = parser.parse_node();
-    let sheet = aether_browser::engine::stratus::parse("");
+    let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
     let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
@@ -974,7 +974,7 @@ fn test_decode_href_attribute() {
     let html = r#"<a href="https://example.com?a=1&amp;b=2">link</a>"#;
     let mut parser = Parser::new(html.to_string());
     let dom = parser.parse_node();
-    let sheet = aether_browser::engine::stratus::parse("");
+    let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
     let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
@@ -986,7 +986,7 @@ fn test_decode_alt_attribute() {
     let html = r#"<img src="x.png" alt="photo &amp; picture">"#;
     let mut parser = Parser::new(html.to_string());
     let dom = parser.parse_node();
-    let sheet = aether_browser::engine::stratus::parse("");
+    let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
     let img = elements.iter().find(|e| e.tag == "img").expect("should find <img>");

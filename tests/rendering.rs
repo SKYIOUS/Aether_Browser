@@ -1,6 +1,6 @@
-use aether_browser::engine::parser::Parser;
-use aether_browser::engine::stratus;
-use aether_browser::engine::dom::NodeType;
+use vayu_browser::engine::parser::Parser;
+use vayu_browser::engine::stratus;
+use vayu_browser::engine::dom::NodeType;
 
 #[test]
 fn test_basic_rendering_pipeline() {
@@ -27,7 +27,7 @@ fn test_basic_rendering_pipeline() {
 
 #[test]
 fn test_caelum_spatial_init() {
-    use aether_browser::engine::caelum::style::Style;
+    use vayu_browser::engine::caelum::style::Style;
     let style: Style<String> = Style::DEFAULT;
     assert_eq!(style.opacity, 1.0);
     assert_eq!(style.z_index, 0);

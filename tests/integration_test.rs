@@ -1,5 +1,5 @@
-use aether_browser::engine::parser::Parser;
-use aether_browser::engine::dom::NodeType;
+use vayu_browser::engine::parser::Parser;
+use vayu_browser::engine::dom::NodeType;
 
 #[test]
 fn test_parsing_div_with_paragraph() {
@@ -39,7 +39,7 @@ fn test_parsing_multiple_elements() {
 
 #[test]
 fn test_should_skip_tag_filters() {
-    use aether_browser::engine::pipeline::extractor::should_skip_tag;
+    use vayu_browser::engine::pipeline::extractor::should_skip_tag;
     assert!(should_skip_tag("script"));
     assert!(should_skip_tag("style"));
     assert!(!should_skip_tag("div"));
@@ -49,10 +49,10 @@ fn test_should_skip_tag_filters() {
 
 #[test]
 fn test_extract_and_layout_pipeline() {
-    use aether_browser::engine::parser::Parser;
-    use aether_browser::engine::stratus;
-    use aether_browser::engine::pipeline::extractor::extract_elements;
-    use aether_browser::engine::pipeline::layout::apply_caelum_layout;
+    use vayu_browser::engine::parser::Parser;
+    use vayu_browser::engine::stratus;
+    use vayu_browser::engine::pipeline::extractor::extract_elements;
+    use vayu_browser::engine::pipeline::layout::apply_caelum_layout;
 
     let html = r#"
         <div class="container">
@@ -103,8 +103,8 @@ fn test_extract_and_layout_pipeline() {
 
 #[test]
 fn test_inner_html_strips_script_tags() {
-    use aether_browser::engine::js::js_bridge::JsBridge;
-    use aether_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
+    use vayu_browser::engine::dom::Node;
 
     let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");
@@ -131,8 +131,8 @@ fn test_inner_html_strips_script_tags() {
 
 #[test]
 fn test_set_attribute_rejects_event_handlers() {
-    use aether_browser::engine::js::js_bridge::JsBridge;
-    use aether_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
+    use vayu_browser::engine::dom::Node;
 
     let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");
@@ -154,8 +154,8 @@ fn test_set_attribute_rejects_event_handlers() {
 
 #[test]
 fn test_set_attribute_rejects_srcdoc() {
-    use aether_browser::engine::js::js_bridge::JsBridge;
-    use aether_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
+    use vayu_browser::engine::dom::Node;
 
     let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");

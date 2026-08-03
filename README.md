@@ -1,4 +1,4 @@
-# Aether Browser
+# Vayu Browser
 
 An experimental/prototype web browser engine written in Rust.
 

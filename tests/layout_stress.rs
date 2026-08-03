@@ -1,4 +1,4 @@
-use aether_browser::engine::pipeline::{apply_caelum_layout, StyledElement};
+use vayu_browser::engine::pipeline::{apply_caelum_layout, StyledElement};
 use iced::Color;
 
 fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {

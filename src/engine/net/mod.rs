@@ -54,7 +54,7 @@ fn client() -> Option<&'static reqwest::blocking::Client> {
     let entry = CLIENT.get_or_init(|| {
         reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(15))
-            .user_agent("Aether/0.2.0 (Rust; +https://aether-browser.dev)")
+            .user_agent("Vayu/0.2.0 (Rust; +https://vayu-browser.dev)")
             .danger_accept_invalid_certs(false)
             .build()
             .map_err(|e| format!("reqwest client: {}", e))
@@ -105,7 +105,7 @@ fn cookie_jar() -> &'static RwLock<CookieJar> {
 }
 
 fn cookie_file() -> Option<PathBuf> {
-    std::env::current_dir().ok().map(|p| p.join("aether_cookies.json"))
+        std::env::current_dir().ok().map(|p| p.join("vayu_cookies.json"))
 }
 
 fn load_cookies() -> Option<CookieJar> {

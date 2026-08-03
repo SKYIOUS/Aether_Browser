@@ -1067,8 +1067,8 @@ const SHIM_JS: &str = r#"
         reload: function() { __window_reload(); }
     };
     window.navigator = {
-        userAgent: "Aether/1.0 (Spatial; Proprietary)",
-        platform: "AetherOS"
+        userAgent: "Vayu/1.0 (Spatial; Proprietary)",
+        platform: "VayuOS"
     };
     window.fetch = function(url) {
         return Promise.resolve({
@@ -1494,7 +1494,7 @@ const SHIM_JS: &str = r#"
     // ── window.navigator ────────────────────────────────────────────
 
     window.navigator = {
-        userAgent: "AetherBrowser/0.1",
+        userAgent: "VayuBrowser/0.1",
         platform: "Rust",
         language: "en-US",
         cookieEnabled: true

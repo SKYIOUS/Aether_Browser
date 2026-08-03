@@ -1,4 +1,4 @@
-# AGENTS.md - Aether Browser
+# AGENTS.md - Vayu Browser
 
 ## Quick Commands
 - **Build:** `cargo build`
@@ -18,7 +18,7 @@
 - **JS engine:** `src/engine/js/` — rquickjs 0.11 wrapper. Wired into page loading via `JsBridge` (flat DOM tree behind `Arc<Mutex<>>`). `<script>` tags extracted, executed before `extract_elements()`. Bridge persists in `BrowserScreen` for post-load timer/event dispatch.
 - **Code generation:** `build.rs` reads `css-caelum-bridge.json`, generates `bridge_gen.rs` mapping stratus ↔ caelum enums
 - **Engine modules compiled:** `src/engine/mod.rs` exports: `dom, js, net, parser, style, stratus, caelum, pipeline`
-- **Default page:** `aether://design/spatial-minimalism` (static welcome text)
+- **Default page:** `vayu://design/spatial-minimalism` (static welcome text)
 
 ## Rendering Pipeline
 ```

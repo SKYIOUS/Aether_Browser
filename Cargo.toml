@@ -2,7 +2,7 @@
 members = ["korlang", "crates/aether-dom", "crates/aether-html", "crates/aether-css", "crates/aether-caelum"]
 resolver = "2"
 [package]
-name = "aether-browser"
+name = "vayu-browser"
 version = "0.1.0"
 edition = "2021"
 [lib]
