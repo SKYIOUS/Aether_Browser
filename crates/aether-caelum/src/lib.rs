@@ -1,8 +1,8 @@
-//! Aether Caelum — CSS layout engine.
+//! Vayu Caelum — CSS layout engine.
 //!
 //! Implements **Flexbox** (CSS Flexbox Level 1), **Grid** (CSS Grid Level 1),
 //! and **Block** layout algorithms. Used as the layout layer in the
-//! [Aether Browser](https://github.com/SKYIOUS/aether-browser).
+//! [Vayu Browser](https://github.com/SKYIOUS/aether-browser).
 //!
 //! # Quick Start
 //!

@@ -6,14 +6,14 @@ use crate::ui::style::*;
 use crate::plog;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AetherSettings {
+pub struct VayuSettings {
     pub home_page_url: String,
     pub default_search_engine: String,
     pub js_enabled: bool,
     pub cookies_enabled: bool,
 }
 
-impl Default for AetherSettings {
+impl Default for VayuSettings {
     fn default() -> Self {
         Self {
             home_page_url: "vayu://design/spatial-minimalism".to_string(),
@@ -24,9 +24,9 @@ impl Default for AetherSettings {
     }
 }
 
-impl AetherSettings {
+impl VayuSettings {
     pub fn load() -> Self {
-        std::fs::read_to_string("aether_settings.json")
+        std::fs::read_to_string("vayu_settings.json")
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default()
@@ -34,7 +34,7 @@ impl AetherSettings {
 
     pub fn save(&self) {
         if let Ok(json) = serde_json::to_string_pretty(self) {
-            if let Err(e) = std::fs::write("aether_settings.json", json) {
+            if let Err(e) = std::fs::write("vayu_settings.json", json) {
                 plog!("settings", "Failed to save: {}", e);
             }
         }
@@ -49,7 +49,7 @@ impl AetherSettings {
     }
 
     pub fn is_url(s: &str) -> bool {
-        s.contains("://") || s.contains('.') || s.starts_with("about:") || s.starts_with("aether://")
+        s.contains("://") || s.contains('.') || s.starts_with("about:") ||         s.starts_with("vayu://")
     }
 }
 
@@ -87,14 +87,14 @@ pub struct SettingsScreen {
     pub silent_flow: bool,
     pub logging_enabled: bool,
     pub accent_selected: usize,
-    pub settings: AetherSettings,
+    pub settings: VayuSettings,
     pub changed: bool,
 }
 
 impl SettingsScreen {
     pub fn new() -> Self {
         crate::logging::set_enabled(true);
-        Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0, settings: AetherSettings::load(), changed: false }
+        Self { active_nav: 0, silent_flow: true, logging_enabled: true, accent_selected: 0, settings: VayuSettings::load(), changed: false }
     }
 }
 
@@ -234,7 +234,7 @@ impl SettingsScreen {
         // Footer
         let footer = container(
             row![
-                text("Aether Browser v0.1.0-alpha").size(11).color(C::DIM),
+                text("Vayu Browser v0.1.0-alpha").size(11).color(C::DIM),
                 Space::with_width(Length::Fill),
                 text("Built with Rust & Iced").size(11).color(C::DIM),
             ]
@@ -553,7 +553,7 @@ impl SettingsScreen {
                 ]
                 .align_y(Alignment::Center),
                 Space::with_height(12),
-                text("Aether uses a multi-process architecture with strict memory isolation for every tab. Local data is encrypted using AES-256 by default.")
+                text("Vayu uses a multi-process architecture with strict memory isolation for every tab. Local data is encrypted using AES-256 by default.")
                     .size(13).color(C::MUTED),
                 Space::with_height(20),
                 text("Manage Security Keys →").size(12).color(C::ACCENT),

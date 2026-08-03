@@ -11,7 +11,7 @@
 - **Language:** Rust (edition 2021)
 - **UI:** Iced 0.13 (features: `canvas`, `image`, `tiny-skia`, `wgpu`, `tokio`) with `theme(|_| iced::Theme::Light)`
 - **Networking:** reqwest 0.12 with `blocking`, `http2`, `native-tls`
-- **Entry point:** `src/main.rs` → `src/ui/` (AetherApp)
+- **Entry point:** `src/main.rs` → `src/ui/` (VayuApp)
 - **Workspace:** members = `korlang`, `crates/aether-dom`, `crates/aether-html`, `crates/aether-css`, `crates/aether-caelum`
 - **CSS engine:** `aether-css` crate (re-exported from `src/engine/stratus.rs`)
 - **Layout engine:** `aether-caelum` crate (re-exported from `src/engine/caelum.rs`), integrated via `apply_caelum_layout()` in `pipeline/layout.rs`

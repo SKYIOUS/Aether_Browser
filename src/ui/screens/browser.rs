@@ -7,7 +7,7 @@ use iced::mouse;
 use iced::{Alignment, Background, Color, Element, Length, Point, Rectangle, Size, Task};
 
 use crate::ui::style::*;
-use crate::ui::screens::settings::AetherSettings;
+use crate::ui::screens::settings::VayuSettings;
 use crate::plog;
 
 use std::sync::{Arc, Mutex};
@@ -98,7 +98,7 @@ pub struct BrowserScreen {
     pub inspect_element: Option<usize>,
     pub form_inputs: HashMap<usize, String>,
     pub active_form_element: Option<usize>,
-    pub settings: AetherSettings,
+    pub settings: VayuSettings,
 }
 
 struct PageCanvas {
@@ -318,7 +318,7 @@ Component SidebarWS {
             let url = loaded_tabs[0].url.clone();
             (loaded_tabs, history, url, format!("Restored {} tabs", count))
         };
-        let settings = AetherSettings::load();
+        let settings = VayuSettings::load();
         crate::engine::pipeline::set_js_enabled(settings.js_enabled);
         Self {
             url: url_val.clone(),
@@ -1125,7 +1125,7 @@ Component SidebarWS {
         if input.is_empty() { return Task::none(); }
 
         // Check if it's a search query (not a URL)
-        let target = if AetherSettings::is_url(input) {
+        let target = if VayuSettings::is_url(input) {
             normalize_nav_url(input)
         } else {
             self.settings.search_url(input)

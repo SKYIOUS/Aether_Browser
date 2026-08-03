@@ -3,12 +3,12 @@ pub mod engine;
 mod logging;
 mod bridge_gen;
 
-use ui::AetherApp;
+use ui::VayuApp;
 use iced::{window, Size};
 
 pub fn main() -> iced::Result {
-    iced::application("Vayu Browser", AetherApp::update, AetherApp::view)
-        .subscription(AetherApp::subscription)
+    iced::application("Vayu Browser", VayuApp::update, VayuApp::view)
+        .subscription(VayuApp::subscription)
         .window(window::Settings {
             size: Size::new(1440.0, 900.0),
             min_size: Some(Size::new(900.0, 600.0)),

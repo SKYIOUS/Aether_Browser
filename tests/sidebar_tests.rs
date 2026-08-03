@@ -2,7 +2,7 @@ use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_caelum_layout
 use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content};
 use vayu_browser::engine::net::normalize_url;
 use vayu_browser::engine::pipeline::StyledElement;
-use vayu_browser::ui::screens::settings::AetherSettings;
+use vayu_browser::ui::screens::settings::VayuSettings;
 use iced::Color;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -180,35 +180,35 @@ fn test_normalize_url_double_slash_strips_extra_slash() {
 
 #[test]
 fn test_is_url_with_scheme() {
-    assert!(AetherSettings::is_url("https://example.com"));
-    assert!(AetherSettings::is_url("http://example.com"));
+    assert!(VayuSettings::is_url("https://example.com"));
+    assert!(VayuSettings::is_url("http://example.com"));
 }
 
 #[test]
 fn test_is_url_with_dot() {
-    assert!(AetherSettings::is_url("example.com"));
-    assert!(AetherSettings::is_url("sub.example.co.uk"));
+    assert!(VayuSettings::is_url("example.com"));
+    assert!(VayuSettings::is_url("sub.example.co.uk"));
 }
 
 #[test]
 fn test_is_url_vayu_protocol() {
-    assert!(AetherSettings::is_url("vayu://design/spatial-minimalism"));
+    assert!(VayuSettings::is_url("vayu://design/spatial-minimalism"));
 }
 
 #[test]
 fn test_is_url_about_protocol() {
-    assert!(AetherSettings::is_url("about:blank"));
+    assert!(VayuSettings::is_url("about:blank"));
 }
 
 #[test]
 fn test_is_url_plain_search_query() {
-    assert!(!AetherSettings::is_url("hello world"));
-    assert!(!AetherSettings::is_url("rust programming language"));
+    assert!(!VayuSettings::is_url("hello world"));
+    assert!(!VayuSettings::is_url("rust programming language"));
 }
 
 #[test]
 fn test_search_url_duckduckgo() {
-    let settings = AetherSettings { default_search_engine: "duckduckgo".to_string(), ..Default::default() };
+    let settings = VayuSettings { default_search_engine: "duckduckgo".to_string(), ..Default::default() };
     let url = settings.search_url("hello world");
     assert!(url.contains("duckduckgo.com"));
     assert!(url.contains("hello+world"));
@@ -216,7 +216,7 @@ fn test_search_url_duckduckgo() {
 
 #[test]
 fn test_search_url_google() {
-    let settings = AetherSettings { default_search_engine: "google".to_string(), ..Default::default() };
+    let settings = VayuSettings { default_search_engine: "google".to_string(), ..Default::default() };
     let url = settings.search_url("rust");
     assert!(url.contains("google.com/search"));
     assert!(url.contains("rust"));
@@ -224,7 +224,7 @@ fn test_search_url_google() {
 
 #[test]
 fn test_search_url_special_chars() {
-    let settings = AetherSettings::default();
+    let settings = VayuSettings::default();
     let url = settings.search_url("hello & goodbye = yes");
     assert!(url.contains("hello"));
     assert!(!url.contains(" ")); // spaces should be encoded
@@ -236,7 +236,7 @@ fn test_search_url_special_chars() {
 
 #[test]
 fn test_settings_defaults() {
-    let s = AetherSettings::default();
+    let s = VayuSettings::default();
     assert_eq!(s.home_page_url, "vayu://design/spatial-minimalism");
     assert_eq!(s.default_search_engine, "duckduckgo");
     assert!(s.js_enabled);
@@ -245,14 +245,14 @@ fn test_settings_defaults() {
 
 #[test]
 fn test_settings_serialization_roundtrip() {
-    let s = AetherSettings {
+    let s = VayuSettings {
         home_page_url: "https://custom.com".to_string(),
         default_search_engine: "google".to_string(),
         js_enabled: false,
         cookies_enabled: false,
     };
     let json = serde_json::to_string(&s).unwrap();
-    let deserialized: AetherSettings = serde_json::from_str(&json).unwrap();
+    let deserialized: VayuSettings = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.home_page_url, "https://custom.com");
     assert_eq!(deserialized.default_search_engine, "google");
     assert!(!deserialized.js_enabled);
@@ -263,14 +263,14 @@ fn test_settings_serialization_roundtrip() {
 fn test_settings_load_nonexistent_file_returns_defaults() {
     // load() reads from "vayu_settings.json"; if missing, returns default
     // We can't guarantee the file doesn't exist, but we can test the default path
-    let s = AetherSettings::default();
+    let s = VayuSettings::default();
     assert!(s.js_enabled);
 }
 
 #[test]
 fn test_settings_save_and_load() {
     let path = "vayu_settings_test.json";
-    let s = AetherSettings {
+    let s = VayuSettings {
         home_page_url: "vayu://test".to_string(),
         default_search_engine: "google".to_string(),
         js_enabled: false,
@@ -278,7 +278,7 @@ fn test_settings_save_and_load() {
     };
     let json = serde_json::to_string_pretty(&s).unwrap();
     std::fs::write(path, &json).unwrap();
-    let loaded: AetherSettings = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let loaded: VayuSettings = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(loaded.home_page_url, "vayu://test");
     assert_eq!(loaded.default_search_engine, "google");
     assert!(!loaded.js_enabled);
@@ -288,7 +288,7 @@ fn test_settings_save_and_load() {
 
 #[test]
 fn test_settings_toggle_js() {
-    let mut s = AetherSettings::default();
+    let mut s = VayuSettings::default();
     assert!(s.js_enabled);
     s.js_enabled = !s.js_enabled;
     assert!(!s.js_enabled);
@@ -298,7 +298,7 @@ fn test_settings_toggle_js() {
 
 #[test]
 fn test_settings_toggle_cookies() {
-    let mut s = AetherSettings::default();
+    let mut s = VayuSettings::default();
     assert!(s.cookies_enabled);
     s.cookies_enabled = !s.cookies_enabled;
     assert!(!s.cookies_enabled);
@@ -783,14 +783,14 @@ fn test_normalize_nav_url_with_fragment() {
 
 #[test]
 fn test_settings_search_url_empty_query() {
-    let settings = AetherSettings::default();
+    let settings = VayuSettings::default();
     let url = settings.search_url("");
     assert!(url.contains("q="));
 }
 
 #[test]
 fn test_settings_search_url_unicode_query() {
-    let settings = AetherSettings::default();
+    let settings = VayuSettings::default();
     let url = settings.search_url("日本語テスト");
     assert!(url.contains("q="));
 }

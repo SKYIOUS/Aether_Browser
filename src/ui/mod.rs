@@ -23,14 +23,14 @@ pub enum Screen {
     Palette,
 }
 
-pub struct AetherApp {
+pub struct VayuApp {
     current_screen: Screen,
     browser: BrowserScreen,
     settings: SettingsScreen,
     palette: PaletteScreen,
 }
 
-impl Default for AetherApp {
+impl Default for VayuApp {
     fn default() -> Self {
         Self {
             current_screen: Screen::Browser,
@@ -41,7 +41,7 @@ impl Default for AetherApp {
     }
 }
 
-impl AetherApp {
+impl VayuApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Browser(msg) => {

@@ -4,7 +4,7 @@ A between-the-lines layout engine for Rust.
 
 Caelum implements **Flexbox**, **Grid**, and **Block** layout algorithms
 for building UI frameworks, browsers, and renderers. It is the layout
-layer powering the [Aether Browser](https://github.com/SKYIOUS/aether-browser).
+layer powering the [Vayu Browser](https://github.com/SKYIOUS/aether-browser).
 
 ## Quick Start
 
