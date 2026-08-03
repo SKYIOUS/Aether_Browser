@@ -1,7 +1,8 @@
-```
-# Dependencies
+# Dependencies and build artifacts
 target/
-# Compiled and build artifacts
+**/target/
+
+# Compiled artifacts
 *.o
 *.obj
 *.exe
@@ -9,31 +10,24 @@ target/
 *.so
 *.a
 *.out
+*.rlib
+rustc-ice-*.txt
 
-# Dependencies
-**/target/
-**/node_modules/
-**/venv/
-**/env/
-**/.venv/
-**/__pycache__/
-
-# Logs and temp files
-*.log
+# Temporary files
 *.tmp
+*.log
+temp_*.rs
 
 # Environment
 .env
 .env.local
 .env.*
-*.swp
 
 # Editors
 .vscode/
 .idea/
+*.swp
 
-# Build artifacts
-**/target/
 # Coverage reports
 coverage/
 htmlcov/
@@ -67,15 +61,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Environment files
-.env
-.env.local
-.env.*
-
-# MyPy cache
+# Python cache
 .mypy_cache/
-# PyTest cache
 .pytest_cache/
+**/node_modules/
+**/venv/
+**/env/
+**/.venv/
+**/__pycache__/
 
 # Gradle
 .gradle/
@@ -86,3 +79,18 @@ Cargo.lock
 **/target/release/
 **/target/wasm32-wasi/
 **/target/wasm32-unknown-emscripten/
+
+# Aether Browser - stale scratch and report dirs
+docs/
+examples/
+screens/
+skyious-report/
+current/
+aether_tabs.json
+*.REFACTOR*.md
+GEMINI.md
+KORLANG.md
+BUILD.md
+CONTRIBUTING.md
+ROADMAP.md
+.ai-context.md
