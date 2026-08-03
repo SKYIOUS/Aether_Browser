@@ -220,13 +220,22 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             heights[i] = if lh.is_finite() && lh > 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
         }
     }
-    // Fix: Remove double-addition of parent positions - Caelum already returns absolute positions
-    // The previous code was adding parent positions again, causing elements to be offset incorrectly
+    // Caelum returns positions relative to each node's parent.
+    // Accumulate parent offsets to produce absolute positions for rendering.
+    let n = elements.len();
     for (i, el) in elements.iter_mut().enumerate() {
         el.x = abs_x[i];
         el.y = abs_y[i];
         el.width = widths[i];
         el.height = heights[i];
+    }
+    for i in 0..n {
+        if let Some(pidx) = elements[i].parent_index {
+            if pidx < n && pidx != i {
+                elements[i].x += elements[pidx].x;
+                elements[i].y += elements[pidx].y;
+            }
+        }
     }
     for el in elements.iter_mut() {
         if el.display == "inline" && !el.text.is_empty() {
@@ -249,7 +258,6 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
 
     // Fix: Parent height expansion should account for margins and padding properly
     // Also ensure we don't expand parents beyond viewport unnecessarily
-    let n = elements.len();
     for i in (0..n).rev() {
         if let Some(pidx) = elements[i].parent_index {
             if pidx < n && pidx != i {
