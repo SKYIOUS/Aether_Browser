@@ -193,3 +193,28 @@ fn test_resolve_url_relative() {
     assert_eq!(resolve_url("./page.html", "https://example.com/dir/"), "https://example.com/dir/page.html");
 }
 
+use vayu_browser::engine::net::{parse_csp, CspDirective, CspSource};
+
+#[test]
+fn test_csp_nonce_not_treated_as_self() {
+    let policy = parse_csp("script-src 'self' 'nonce-abc123'");
+    let script_src = policy.sources_for(&CspDirective::ScriptSrc).unwrap();
+    assert!(script_src.contains(&CspSource::Nonce("'nonce-abc123'".to_string())), "nonce should be parsed as Nonce variant");
+    assert!(script_src.contains(&CspSource::Self_), "'self' should still be parsed as Self_");
+}
+
+#[test]
+fn test_csp_blocks_all_scripts_with_none() {
+    use vayu_browser::engine::net::csp_blocks_scripts;
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("content-security-policy".to_string(), "script-src 'none'".to_string());
+    assert!(csp_blocks_scripts(&headers), "script-src 'none' should block all scripts");
+}
+
+#[test]
+fn test_normalize_url_preserves_scheme() {
+    use vayu_browser::engine::net::normalize_url;
+    assert_eq!(normalize_url("https://example.com"), "https://example.com");
+    assert_eq!(normalize_url("http://example.com"), "http://example.com");
+}
+

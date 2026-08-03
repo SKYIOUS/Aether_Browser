@@ -502,3 +502,39 @@ fn test_fetch_redirect() {
     let result = bridge.fetch_url("https://192.0.2.1:1/redirect");
     assert!(result.starts_with("__STATUS_"));
 }
+
+#[test]
+fn test_query_selector_child_combinator() {
+    let mut b = JsBridge::new();
+    let outer = b.create_element("div");
+    let inner = b.create_element("span");
+    b.set_attribute(inner, "class", "target");
+    b.append_child(outer, inner);
+    let unrelated = b.create_element("p");
+    b.append_child(outer, unrelated);
+    assert_eq!(b.query_selector(outer, "span.target"), Some(inner));
+    assert_eq!(b.query_selector(outer, "div > span"), Some(inner));
+    assert_eq!(b.query_selector(outer, "div > p"), Some(unrelated));
+}
+
+#[test]
+fn test_event_listener_remove() {
+    let mut b = JsBridge::new();
+    let el = b.create_element("button");
+    b.add_event_listener(el, "click".into(), "fn1".into());
+    b.add_event_listener(el, "click".into(), "fn2".into());
+    assert_eq!(b.get_event_listeners(el, "click").len(), 2);
+    b.remove_event_listener(el, "click".into(), "fn1".into());
+    assert_eq!(b.get_event_listeners(el, "click").len(), 1);
+}
+
+#[test]
+fn test_clear_multiple_timers() {
+    let mut b = JsBridge::new();
+    let id1 = b.set_timeout("fn1".into(), 1);
+    let id2 = b.set_timeout("fn2".into(), 2);
+    assert!(b.has_pending_timers());
+    b.clear_timer(id1);
+    b.clear_timer(id2);
+    assert!(!b.has_pending_timers());
+}

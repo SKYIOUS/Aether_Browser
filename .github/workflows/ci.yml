@@ -2,33 +2,61 @@ name: CI
 
 on:
   push:
-    branches: [ main, jules-* ]
+    branches: [master, main]
   pull_request:
-    branches: [ main ]
-
-env:
-  CARGO_TERM_COLOR: always
+    branches: [master, main]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libsdl2-dev cmake
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@v2
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Check
-      run: cargo check --workspace
+      - name: Check formatting
+        run: cargo fmt -- --check
 
-    - name: Build
-      run: cargo build --release
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
 
-    - name: Test
-      run: cargo test --workspace
+      - name: Run tests
+        run: cargo test --lib
+
+      - name: Run integration tests
+        run: cargo test --tests
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Build docs
+        run: cargo doc --no-deps

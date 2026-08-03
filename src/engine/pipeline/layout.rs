@@ -77,7 +77,7 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     };
     
     // Fix 3: Ensure inline elements without text get proper dimensions
-    let has_content = !el.text.is_empty() || !el.wrapped_lines.is_empty() || el.css_width.is_some() || el.css_height.is_some();
+    let has_content = !el.text.is_empty() || !el.wrapped_lines.is_empty() || el.image_handle.is_some() || el.css_width.is_some() || el.css_height.is_some();
     
     let mut s = Style {
         display: cd,
@@ -100,11 +100,6 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     let (min_h, max_h) = mm(el.min_height, el.max_height);
     s.min_size = Size { width: min_w, height: min_h };
     s.max_size = Size { width: max_w, height: max_h };
-    
-    // Fix 5: Default flex properties for all elements to prevent layout issues
-    if s.flex_grow == 0.0 && s.flex_shrink == 0.0 {
-        s.flex_shrink = 1.0; // Allow shrinking by default
-    }
     
     if cd == Display::Flex {
         s.flex_direction = crate::bridge_gen::str_flex_direction_to_caelum(&el.flex_direction);
@@ -221,21 +216,25 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         }
     }
     // Caelum returns positions relative to each node's parent.
-    // Accumulate parent offsets to produce absolute positions for rendering.
+    // Accumulate full parent chain to produce absolute positions for rendering.
     let n = elements.len();
-    for (i, el) in elements.iter_mut().enumerate() {
-        el.x = abs_x[i];
-        el.y = abs_y[i];
-        el.width = widths[i];
-        el.height = heights[i];
-    }
     for i in 0..n {
-        if let Some(pidx) = elements[i].parent_index {
+        let mut x = abs_x[i];
+        let mut y = abs_y[i];
+        let mut current = elements[i].parent_index;
+        while let Some(pidx) = current {
             if pidx < n && pidx != i {
-                elements[i].x += elements[pidx].x;
-                elements[i].y += elements[pidx].y;
+                x += abs_x[pidx];
+                y += abs_y[pidx];
+                current = elements[pidx].parent_index;
+            } else {
+                break;
             }
         }
+        elements[i].x = x;
+        elements[i].y = y;
+        elements[i].width = widths[i];
+        elements[i].height = heights[i];
     }
     for el in elements.iter_mut() {
         if el.display == "inline" && !el.text.is_empty() {
@@ -256,23 +255,13 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
 
     apply_text_wrapping(elements, container_width);
 
-    // Fix: Parent height expansion should account for margins and padding properly
-    // Also ensure we don't expand parents beyond viewport unnecessarily
     for i in (0..n).rev() {
         if let Some(pidx) = elements[i].parent_index {
             if pidx < n && pidx != i {
-                // Calculate child's full box including margins
-                let child_top = elements[i].y - elements[i].margin_top;
-                let child_bottom = elements[i].y + elements[i].height + elements[i].margin_bottom;
-                
-                // Calculate parent's content box (excluding margins)
-                let parent_content_top = elements[pidx].y + elements[pidx].padding[0] + elements[pidx].border_widths[0];
-                let parent_content_bottom = elements[pidx].y + elements[pidx].height - elements[pidx].padding[2] - elements[pidx].border_widths[2];
-                
-                // Only expand if child extends beyond parent's content area
-                if child_bottom > parent_content_bottom || child_top < parent_content_top {
-                    let needed_height = (child_bottom - elements[pidx].y).max(elements[pidx].height);
-                    elements[pidx].height = needed_height.min(viewport_h); // Cap at viewport
+                let child_bottom = elements[i].y + elements[i].height;
+                let parent_bottom = elements[pidx].y + elements[pidx].height;
+                if child_bottom > parent_bottom {
+                    elements[pidx].height = child_bottom - elements[pidx].y;
                 }
             }
         }

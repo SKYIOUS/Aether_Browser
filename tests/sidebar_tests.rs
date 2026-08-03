@@ -801,3 +801,63 @@ fn test_tab_title_update() {
     tab.title = "Example Domain".to_string();
     assert_eq!(tab.title, "Example Domain");
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 14. Network & CSP Tests
+// ═════════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_normalize_url_strips_leading_slashes() {
+    use vayu_browser::engine::net::normalize_url;
+    assert_eq!(normalize_url("//example.com/path"), "https://example.com/path");
+    assert_eq!(normalize_url("/path"), "https://path");
+}
+
+#[test]
+fn test_csp_blocks_all_styles_with_none() {
+    use vayu_browser::engine::net::{parse_csp, csp_blocks_styles, CspDirective};
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("content-security-policy".to_string(), "style-src 'none'".to_string());
+    assert!(csp_blocks_styles(&headers), "style-src 'none' should block all styles");
+}
+
+#[test]
+fn test_csp_allows_self() {
+    use vayu_browser::engine::net::{parse_csp, csp_allows_script_url, CspDirective};
+    let policy = parse_csp("script-src 'self'");
+    assert!(csp_allows_script_url("https://example.com/app.js", "https://example.com", &policy));
+    assert!(!csp_allows_script_url("https://evil.com/app.js", "https://example.com", &policy));
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 15. Layout Edge Case Tests
+// ═════════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_deep_nested_layout_positions() {
+    use vayu_browser::engine::pipeline::apply_caelum_layout;
+    let mut elements = vec![
+        StyledElement { tag: "grandparent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "parent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(0), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "child".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(1), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    let child = &elements[2];
+    let parent = &elements[1];
+    let grandparent = &elements[0];
+    assert!(child.x >= parent.x, "child.x {} >= parent.x {}", child.x, parent.x);
+    assert!(child.y >= parent.y, "child.y {} >= parent.y {}", child.y, parent.y);
+    assert!(parent.x >= grandparent.x, "parent.x {} >= grandparent.x {}", parent.x, grandparent.x);
+    assert!(parent.y >= grandparent.y, "parent.y {} >= grandparent.y {}", parent.y, grandparent.y);
+}
+
+#[test]
+fn test_inline_text_width_respected() {
+    use vayu_browser::engine::pipeline::apply_caelum_layout;
+    let mut elements = vec![
+        StyledElement { tag: "span".into(), text: "hello world".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "inline".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    assert!(elements[0].width > 0.0, "inline element should have positive width");
+    assert!(elements[0].width < 800.0, "inline text width should be less than container");
+}

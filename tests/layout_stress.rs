@@ -1,5 +1,6 @@
 use vayu_browser::engine::pipeline::{apply_caelum_layout, StyledElement};
 use iced::Color;
+use iced::widget::image::Handle;
 
 fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
     StyledElement {
@@ -266,4 +267,50 @@ fn wide_container() {
     for el in &elements {
         assert!(el.width <= 2000.0, "width {} exceeds container {}", el.width, 2000.0);
     }
+}
+
+#[test]
+fn nested_position_accumulation_child_before_parent() {
+    let mut elements = vec![
+        make_el("child", Some(1)),
+        make_el("parent", None),
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    check_positions(&elements);
+    let child = &elements[0];
+    let parent = &elements[1];
+    assert!(child.x >= parent.x, "child.x {} < parent.x {}", child.x, parent.x);
+    assert!(child.y >= parent.y, "child.y {} < parent.y {}", child.y, parent.y);
+}
+
+#[test]
+fn image_element_has_content() {
+    let mut elements = vec![
+        StyledElement {
+            image_handle: Some(Handle::from_rgba(10, 10, vec![0; 400])),
+            css_width: Some(200.0),
+            css_height: Some(150.0),
+            ..make_el("img", None)
+        },
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    check_positions(&elements);
+    assert!(elements[0].height > 1.0, "image should not have minimum 1px height, got {}", elements[0].height);
+}
+
+#[test]
+fn parent_expands_to_contain_children() {
+    let mut elements = vec![
+        make_el("parent", None),
+        StyledElement {
+            css_height: Some(200.0),
+            ..make_el("child", Some(0))
+        },
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    check_positions(&elements);
+    let parent = &elements[0];
+    let child = &elements[1];
+    let child_bottom = child.y + child.height;
+    assert!(parent.height >= child_bottom, "parent height {} < child bottom {}", parent.height, child_bottom);
 }

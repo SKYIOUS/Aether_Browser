@@ -247,6 +247,7 @@ pub enum CspSource {
     Host { host: String, port: Option<u16>, scheme: Option<String> },
     Wildcard,
     StrictDynamic,
+    Nonce(String),
 }
 
 #[derive(Debug, Clone)]
@@ -263,7 +264,7 @@ pub struct CspPolicy {
 impl CspPolicy {
     pub fn is_empty(&self) -> bool { self.directives.is_empty() }
 
-    fn sources_for(&self, directive: &CspDirective) -> Option<&[CspSource]> {
+    pub fn sources_for(&self, directive: &CspDirective) -> Option<&[CspSource]> {
         self.directives.iter().find(|e| e.directive == *directive).map(|e| e.sources.as_slice())
     }
 
@@ -344,7 +345,7 @@ fn parse_csp_source(token: &str) -> Option<CspSource> {
         "'unsafe-eval'" | "unsafe-eval" => Some(CspSource::UnsafeEval),
         "'strict-dynamic'" | "strict-dynamic" => Some(CspSource::StrictDynamic),
         "*" => Some(CspSource::Wildcard),
-        t if t.starts_with("'nonce-") && t.ends_with('\'') => Some(CspSource::Self_),
+        t if t.starts_with("'nonce-") && t.ends_with('\'') => Some(CspSource::Nonce(t.to_string())),
         t if t.ends_with(':') => Some(CspSource::Scheme(t.to_string())),
         t => {
             let (scheme, rest) = if let Some(pos) = t.find("://") {
