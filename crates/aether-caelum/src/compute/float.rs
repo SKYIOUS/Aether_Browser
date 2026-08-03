@@ -49,10 +49,6 @@ pub struct ContentSlot {
 /// A floated box
 #[derive(Debug, Clone, Default)]
 pub(crate) struct PlacedFloatedBox {
-    /// A user defined ID for the box
-    // id: u64,
-    /// The width of the box
-    pub width: f32,
     /// The height of the box
     pub height: f32,
     /// Horizontal distance from the edge of the container that the box is floated towards
@@ -190,16 +186,6 @@ impl FloatContext {
     /// Set the width of the `FloatContext`
     pub fn set_width(&mut self, available_width: f32) {
         self.available_width = available_width;
-    }
-
-    /// Returns a slice of placed left floats
-    pub(crate) fn left_floats(&self) -> &[PlacedFloatedBox] {
-        &self.left_floats
-    }
-
-    /// Returns a slice of placed right floats
-    pub(crate) fn right_floats(&self) -> &[PlacedFloatedBox] {
-        &self.right_floats
     }
 
     /// Divide a segment into two segments so that a new float can be placed and have it's
@@ -373,7 +359,6 @@ impl FloatContext {
             // ponytail: last_placed_float not updated for zero-sized boxes; may affect subsequent placements
 
             return PlacedFloatedBox {
-                width: floated_box.width,
                 height: floated_box.height,
                 y: start_y,
                 x_inset: placed_inset,
@@ -399,7 +384,6 @@ impl FloatContext {
             self.update_last_placed_float(direction, start_idx..end_idx);
 
             return PlacedFloatedBox {
-                width: floated_box.width,
                 height: floated_box.height,
                 y: start_y,
                 x_inset: containing_block_insets[slot],
@@ -447,7 +431,7 @@ impl FloatContext {
         // Update last_placed_float
         self.update_last_placed_float(direction, start_idx..(end_idx + 1));
 
-        PlacedFloatedBox { width: floated_box.width, height: floated_box.height, y: start_y, x_inset: placed_inset }
+            PlacedFloatedBox { height: floated_box.height, y: start_y, x_inset: placed_inset }
     }
 
     /// Get the end segment of the last float on side(s) specified by the clear parameter (if any)

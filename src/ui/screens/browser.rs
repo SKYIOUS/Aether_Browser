@@ -27,6 +27,7 @@ use crate::engine::pipeline::{fetch_page_content, StyledElement, normalize_nav_u
 pub enum DevToolsTab { Console, Elements, Network }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum BrowserMessage {
     UrlChanged(String),
     UrlSubmit,
@@ -424,6 +425,7 @@ Component SidebarWS {
                     self.loading = true;
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
+                    save_tabs(&self.tabs);
                     return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
@@ -444,6 +446,7 @@ Component SidebarWS {
                     self.loading = true;
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
+                    save_tabs(&self.tabs);
                     return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
@@ -451,6 +454,7 @@ Component SidebarWS {
             BrowserMessage::Refresh => {
                 let url = self.url.clone();
                 plog!("NAV", "Refresh: {}", url);
+                save_tabs(&self.tabs);
                 self.navigate_to(&url)
             }
             BrowserMessage::PageLoaded(page_url, elements, bridge_opt) => {
@@ -639,10 +643,13 @@ Component SidebarWS {
             }
             BrowserMessage::CloseTab(i) => {
                 if self.tabs.len() > 1 && i < self.tabs.len() {
+                    let was_active = i == self.active_tab;
                     self.tabs.remove(i);
                     self.tab_history.remove(i);
-                    if self.active_tab >= self.tabs.len() { 
-                        self.active_tab = self.tabs.len() - 1; 
+                    if was_active {
+                        self.active_tab = self.tabs.len() - 1;
+                    } else if i < self.active_tab {
+                        self.active_tab -= 1;
                     }
                     if let Some(active_tab) = self.tabs.get_mut(self.active_tab) {
                         active_tab.update_accessed();
