@@ -256,6 +256,33 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         elements[i].width = widths[i];
         elements[i].height = heights[i];
     }
+
+    for i in 0..elements.len() {
+        if elements[i].display == "none" || elements[i].display == "inline" { continue; }
+        let inline_children: Vec<usize> = (0..elements.len())
+            .filter(|j| *j != i && elements[*j].parent_index == Some(i) && elements[*j].display == "inline")
+            .collect();
+        if inline_children.is_empty() { continue; }
+        let fs = if elements[i].font_size.is_finite() { elements[i].font_size.clamp(6.0, 200.0) } else { 16.0 };
+        let char_w = fs * CHAR_W_SCALE;
+        let mut cumulative = text_visual_width(&elements[i].text) as f32 * char_w;
+        for &child_idx in &inline_children {
+            elements[child_idx].x = elements[i].x + cumulative;
+            if elements[child_idx].css_width.is_none() {
+                let child_text_w = text_visual_width(&elements[child_idx].text) as f32 * char_w;
+                elements[child_idx].width = child_text_w.max(fs);
+            }
+            if elements[child_idx].css_height.is_none() {
+                elements[child_idx].height = fs * elements[i].line_height.max(1.0);
+            }
+            cumulative += if elements[child_idx].css_width.is_some() {
+                elements[child_idx].width
+            } else {
+                text_visual_width(&elements[child_idx].text) as f32 * char_w
+            };
+        }
+    }
+
     apply_text_wrapping(elements, container_width);
 
     for (i, el) in elements.iter().enumerate().take(20) {

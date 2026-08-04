@@ -1016,3 +1016,17 @@ fn test_decode_alt_attribute() {
     let img = elements.iter().find(|e| e.tag == "img").expect("should find <img>");
     assert_eq!(img.text, "photo & picture", "alt &amp; should decode");
 }
+
+#[test]
+fn test_inline_child_offset_prevents_overlap() {
+    let mut elements = vec![
+        make_test("p", "Hello", "block", None),
+        make_test("a", "world", "inline", Some(0)),
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    let parent = &elements[0];
+    let child = &elements[1];
+    assert!(child.x > parent.x + 1.0,
+        "inline child x={} should be offset from parent x={}", child.x, parent.x);
+    assert!(child.y >= parent.y - 1.0, "inline child y={} should align with parent y={}", child.y, parent.y);
+}
