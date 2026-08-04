@@ -70,7 +70,7 @@ pub struct BrowserScreen {
     pub url: String,
     pub active_workspace: usize,
     pub content: String,
-    pub styled_elements: Vec<StyledElement>,
+    pub styled_elements: Arc<Vec<StyledElement>>,
     pub loading: bool,
     pub bridge: Option<Arc<Mutex<JsBridge>>>,
     pub js_engine: Option<JSEngine>,
@@ -103,12 +103,12 @@ pub struct BrowserScreen {
 }
 
 struct PageCanvas {
-    elements: Vec<StyledElement>,
+    elements: Arc<Vec<StyledElement>>,
     cache: Cache,
 }
 
 impl PageCanvas {
-    fn new(elements: Vec<StyledElement>) -> Self {
+    fn new(elements: Arc<Vec<StyledElement>>) -> Self {
         Self { elements, cache: Cache::new() }
     }
 }
@@ -128,7 +128,7 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         vec![self.cache.draw(renderer, size, |frame| {
             plog!("DRAW", "Rendering {} elements into {:?}", self.elements.len(), size);
             frame.fill_rectangle(Point::new(0.0, 0.0), size, iced::Color::WHITE);
-            for el in &self.elements {
+            for el in self.elements.iter() {
                 if el.display == "none" { continue; }
                 if let Some(ref handle) = el.image_handle {
                     let iw = if el.width.is_finite() && el.width > 0.0 { el.width } else { 50.0 };
@@ -199,6 +199,18 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                                 shaping: iced::widget::text::Shaping::Advanced,
                                 ..Default::default()
                             });
+                            let deco_y = py;
+                            let deco_h = (fs * 0.06).max(1.0);
+                            let deco_w = line.len() as f32 * fs * 0.58;
+                            if el.text_decoration.contains("underline") {
+                                frame.fill_rectangle(Point::new(px0, deco_y + fs * 0.1), Size::new(deco_w, deco_h), el.color);
+                            }
+                            if el.text_decoration.contains("line-through") {
+                                frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.35), Size::new(deco_w, deco_h), el.color);
+                            }
+                            if el.text_decoration.contains("overline") {
+                                frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.75), Size::new(deco_w, deco_h), el.color);
+                            }
                         }
                     }
                 }
@@ -220,8 +232,10 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                 for (i, el) in self.elements.iter().enumerate().rev() {
                     if el.display == "none" { continue; }
                     if el.is_link {
-                        let text_w = el.text.len() as f32 * el.font_size * 0.55;
-                        let hit = Rectangle::new(Point::new(el.x, el.y), Size::new(text_w, el.font_size + 4.0));
+                        let text_w = el.width.max(el.font_size);
+                        let ex = el.x.max(0.0);
+                        let ey = el.y.max(0.0);
+                        let hit = Rectangle::new(Point::new(ex, ey), Size::new(text_w, el.font_size + 4.0));
                         if hit.contains(pos) {
                             plog!("CLICK", "Link hit at element {} href={:?}", i, el.href);
                             if let Some(ref href) = el.href {
@@ -232,7 +246,7 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     let ex = el.x.max(0.0);
                     let ey = el.y.max(0.0);
                     let ew = if el.width.is_finite() { el.width.max(1.0) } else { 200.0 };
-                    let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { 30.0 };
+                    let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0) };
                     let hit = Rectangle::new(Point::new(ex, ey), Size::new(ew, eh));
                     if hit.contains(pos) {
                         plog!("CLICK", "Element {} hit at [{:.0},{:.0} {:.0}x{:.0}] tag={}", i, ex, ey, ew, eh, el.tag);
@@ -327,7 +341,7 @@ Component SidebarWS {
             url: url_val.clone(),
             active_workspace: 0,
             content: content_val,
-            styled_elements: vec![],
+            styled_elements: Arc::new(vec![]),
             loading: false,
             bridge: None,
             js_engine: None,
@@ -477,9 +491,9 @@ Component SidebarWS {
                     self.url_history.push(page_url.clone());
                 }
                 self.is_history_nav = false;
-                self.styled_elements = elements;
+                self.styled_elements = Arc::new(elements);
                 self.layout_gen += 1;
-                self.page_canvas = Some(PageCanvas::new(self.styled_elements.clone()));
+                self.page_canvas = Some(PageCanvas::new(Arc::clone(&self.styled_elements)));
                 let page_title = bridge_opt.as_ref().and_then(|b| {
                     b.lock()
                         .ok()
@@ -512,8 +526,8 @@ Component SidebarWS {
                 if !self.styled_elements.is_empty() {
                     let content_w = (w - 260.0).max(200.0);
                     let viewport_h = h;
-                    apply_caelum_layout(&mut self.styled_elements, content_w, viewport_h);
-                    self.page_canvas = Some(PageCanvas::new(self.styled_elements.clone()));
+                    apply_caelum_layout(&mut *Arc::make_mut(&mut self.styled_elements), content_w, viewport_h);
+                    self.page_canvas = Some(PageCanvas::new(Arc::clone(&self.styled_elements)));
                 }
                 Task::none()
             }
@@ -647,7 +661,7 @@ Component SidebarWS {
                 self.active_tab = self.tabs.len() - 1;
                 self.url = "about:blank".to_string();
                 self.content = "New tab".to_string();
-                self.styled_elements = vec![];
+                self.styled_elements = Arc::new(vec![]);
                 self.loading = false;
                 self.bridge = None;
                 self.tab_history.push((vec!["about:blank".to_string()], 0));
@@ -912,7 +926,12 @@ Component SidebarWS {
         } else if self.page_canvas.is_some() {
             let pc = self.page_canvas.as_ref().expect("Expected Some value, found None");
             let total_h = pc.elements.iter()
-                .map(|el| { let ey = if el.y.is_finite() { el.y } else { 0.0 }; ey + el.height.max(el.font_size.clamp(6.0, 200.0)) + 40.0 })
+                .filter(|el| el.display != "none")
+                .map(|el| {
+                    let ey = if el.y.is_finite() { el.y } else { 0.0 };
+                    let h = if el.height.is_finite() { el.height.max(el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0)) } else { el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0) };
+                    ey + h + el.margin_bottom
+                })
                 .fold(0.0, f32::max);
             let total_h = if total_h.is_finite() { total_h.max(100.0) } else { 800.0 };
             let content_w = (self.bounds.0 - 260.0).max(200.0);
@@ -1182,6 +1201,7 @@ mod tests {
             padding: [0.0; 4], display: display.to_string(),
             flex_direction: "row".to_string(), flex_wrap: "nowrap".to_string(),
             justify_content: "flex-start".to_string(), align_items: "stretch".to_string(),
+            align_self: "auto".to_string(), box_sizing: "content-box".to_string(),
             flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
             css_width: None, css_height: None, parent_index: parent,
             min_width: None, max_width: None, min_height: None, max_height: None,

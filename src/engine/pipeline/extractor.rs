@@ -29,6 +29,8 @@ pub struct FullStyle {
     pub flex_wrap: String,
     pub justify_content: String,
     pub align_items: String,
+    pub align_self: String,
+    pub box_sizing: String,
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Option<f32>,
@@ -76,6 +78,8 @@ pub struct StyledElement {
     pub flex_wrap: String,
     pub justify_content: String,
     pub align_items: String,
+    pub align_self: String,
+    pub box_sizing: String,
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Option<f32>,
@@ -122,7 +126,7 @@ pub fn should_skip_tag(tag: &str) -> bool {
 }
 
 pub fn should_skip_content(tag: &str) -> bool {
-    matches!(tag, "script" | "style" | "noscript" | "template" | "svg" | "title")
+    matches!(tag, "script" | "style" | "noscript" | "template" | "svg" | "title" | "iframe")
 }
 
 // ponytail: single-pass entity decode, no recursion for &amp;lt; etc.
@@ -204,7 +208,11 @@ fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullSty
 }
 
 fn compute_full_style_flat(node: &FlatNode, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
-    compute_full_style_inner(&node.tag, &node.attrs, None::<&Node>, ss, vw, vh)
+    let mut merged = node.attrs.clone();
+    for (k, v) in &node.inline_styles {
+        merged.insert(k.clone(), v.clone());
+    }
+    compute_full_style_inner(&node.tag, &merged, None::<&Node>, ss, vw, vh)
 }
 
 fn compute_full_style_inner(
@@ -254,6 +262,8 @@ fn compute_full_style_inner(
     let flex_wrap = crate::bridge_gen::flex_wrap_to_string(&cs.flex.flex_wrap).to_string();
     let justify_content = crate::bridge_gen::justify_content_to_string(&cs.flex.justify_content).to_string();
     let align_items = crate::bridge_gen::align_items_to_string(&cs.flex.align_items).to_string();
+    let align_self = crate::bridge_gen::align_self_to_string(&cs.flex.align_self).to_string();
+    let box_sizing = cs.box_sizing.unwrap_or_else(|| "content-box".to_string());
 
     FullStyle {
         color, font_size, font_weight, background_color,
@@ -262,7 +272,7 @@ fn compute_full_style_inner(
         border_widths: [bt, br, bb, bl],
         border_color,
         display, flex_direction, flex_wrap,
-        justify_content, align_items,
+        justify_content, align_items, align_self, box_sizing,
         flex_grow: cs.flex.flex_grow,
         flex_shrink: cs.flex.flex_shrink,
         flex_basis: cs.flex.flex_basis,
@@ -308,6 +318,8 @@ fn make_element(
         display: fs.display.clone(), flex_direction: fs.flex_direction.clone(),
         flex_wrap: fs.flex_wrap.clone(), justify_content: fs.justify_content.clone(),
         align_items: fs.align_items.clone(),
+        align_self: fs.align_self.clone(),
+        box_sizing: fs.box_sizing.clone(),
         flex_grow: fs.flex_grow, flex_shrink: fs.flex_shrink, flex_basis: fs.flex_basis,
         css_width: fs.css_width, css_height: fs.css_height,
         min_width: fs.min_width, max_width: fs.max_width,
@@ -509,7 +521,12 @@ pub fn extract_elements(
                 }
                 _ => {
                     if fs.display == "inline" && tag != "span" {
-                        (String::new(), false, None, 0, "", true, true)
+                        let text = get_all_text(node);
+                        if text.is_empty() {
+                        (String::new(), false, None, 0, "", false, true)
+                        } else {
+                            (text, false, None, 0, tag.as_str(), false, true)
+                        }
                     } else {
                         (String::new(), false, None, 0, tag.as_str(), false, false)
                     }
@@ -786,7 +803,12 @@ pub(crate) fn extract_elements_flat(
             "iframe" => (String::new(), false, None, 0, "iframe", false, false),
             _ => {
                 if fs.display == "inline" && tag != "span" {
-                    (String::new(), false, None, 0, "", true, true)
+                    let text = get_all_text_flat(nodes, node_id);
+                    if text.is_empty() {
+                        (String::new(), false, None, 0, "", false, true)
+                    } else {
+                        (text, false, None, 0, tag, false, true)
+                    }
                 } else {
                     (String::new(), false, None, 0, tag, false, false)
                 }

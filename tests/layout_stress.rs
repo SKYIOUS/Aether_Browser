@@ -29,6 +29,8 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         flex_wrap: "nowrap".to_string(),
         justify_content: "flex-start".to_string(),
         align_items: "stretch".to_string(),
+        align_self: "auto".to_string(),
+        box_sizing: "content-box".to_string(),
         flex_grow: 0.0,
         flex_shrink: 1.0,
         flex_basis: None,

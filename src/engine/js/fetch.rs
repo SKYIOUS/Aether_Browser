@@ -2,11 +2,15 @@ use super::js_bridge::JsBridge;
 use crate::plog;
 
 impl JsBridge {
-    // ponytail: returns body prefixed with __STATUS_NNN__ for JS parsing
     fn fetch_url_inner(&self, url: &str, _use_xhr: bool) -> String {
         let resolved = crate::engine::net::resolve_url(url, &self.current_url);
         let origin = &self.current_url;
         plog!("net", "Fetching: {} (origin: {})", resolved, origin);
+        let policy = crate::engine::net::get_csp_for(origin);
+        if !crate::engine::net::csp_allows_connect_url(&resolved, origin, &policy) {
+            plog!("CSP", "Blocked fetch/XHR: {}", resolved);
+            return format!("__STATUS_0__Error: CSP blocked connect to {}", resolved);
+        }
         if crate::engine::net::is_same_origin(&resolved, origin) {
             match crate::engine::net::fetch(&resolved) {
                 Ok((body, status)) => format!("__STATUS_{}__{}", status, body),

@@ -60,7 +60,8 @@ fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
     let page_w = container_width;
     for el in elements.iter_mut() {
         let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
-        let available = if el.width.is_finite() && el.width > 0.0 { el.width } else { page_w };
+        let content_w = el.width - el.padding[1] - el.padding[3] - el.border_widths[1] - el.border_widths[3];
+        let available = if content_w.is_finite() && content_w > 0.0 { content_w } else { page_w };
         let lines = wrap_text(&el.text, available, fs);
         el.wrapped_lines = lines;
     }
@@ -84,9 +85,12 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
         margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: LengthPercentageAuto::length(margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: LengthPercentageAuto::length(margin_left) },
         padding: Rect { top: LengthPercentage::length(el.padding[0]), right: LengthPercentage::length(el.padding[1]), bottom: LengthPercentage::length(el.padding[2]), left: LengthPercentage::length(el.padding[3]) },
         border: Rect { top: LengthPercentage::length(el.border_widths[0]), right: LengthPercentage::length(el.border_widths[1]), bottom: LengthPercentage::length(el.border_widths[2]), left: LengthPercentage::length(el.border_widths[3]) },
-        size: Size { width: dim(el.css_width), height: dim(el.css_height) },
-        ..Default::default()
-    };
+         size: Size { width: dim(el.css_width), height: dim(el.css_height) },
+         ..Default::default()
+     };
+     
+     s.position = crate::bridge_gen::str_position_to_caelum(&el.position);
+     s.inset = Rect { top: LengthPercentageAuto::length(el.inset_top), right: LengthPercentageAuto::length(el.inset_right), bottom: LengthPercentageAuto::length(el.inset_bottom), left: LengthPercentageAuto::length(el.inset_left) };
     
     if cd == Display::Block && !has_content {
         s.min_size = Size { 
@@ -114,6 +118,13 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     s.flex_grow = el.flex_grow;
     s.flex_shrink = el.flex_shrink;
     if let Some(basis) = el.flex_basis { s.flex_basis = Dimension::from_length(basis); }
+    s.box_sizing = match el.box_sizing.as_str() {
+        "border-box" => BoxSizing::BorderBox,
+        _ => BoxSizing::ContentBox,
+    };
+    if el.align_self != "auto" {
+        s.align_self = Some(crate::bridge_gen::str_align_self_to_caelum(&el.align_self));
+    }
     plog!("ELSTYLE", "tag={:15} cd={:?} size={:?} min_size={:?} max_size={:?} align_self={:?} align_items={:?} box_sizing={:?}", el.tag, cd, s.size, s.min_size, s.max_size, s.align_self, s.align_items, s.box_sizing);
     Some(s)
 }
@@ -129,12 +140,11 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
     for el in elements.iter_mut() {
         if el.css_height.is_none() && el.display != "none" && !el.text.is_empty() {
             let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
-            let text_w = text_visual_width(&el.text) as f32 * fs * CHAR_W_SCALE;
-            let available_width = el.css_width.unwrap_or(container_width);
-            let line_count = if available_width > 0.0 && text_w > available_width {
-                (text_w / available_width).ceil().max(1.0)
-            } else { 1.0 };
-            el.css_height = Some(fs * el.line_height.max(1.0) * line_count);
+            let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
+            let available_width = el.css_width.unwrap_or(container_width) - pb;
+            let available = if available_width.is_finite() && available_width > 0.0 { available_width } else { container_width };
+            let lines = wrap_text(&el.text, available, fs);
+            el.css_height = Some(fs * el.line_height.max(1.0) * lines.len() as f32);
         }
         if el.display == "inline" && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
             let fs = el.font_size.clamp(6.0, 200.0);

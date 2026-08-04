@@ -1,5 +1,4 @@
 use std::sync::{Arc, Mutex, OnceLock};
-use std::collections::HashMap;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
@@ -118,7 +117,7 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> V
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
         margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
         flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
         x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
@@ -296,8 +295,8 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     plog!("EXTRACT", "Extracted {} elements", elements.len());
     elements.truncate(2000);
 
-    // ponytail: per-page decoded image LRU, max 50 entries, evicted by clearing
-    let mut img_cache: HashMap<String, (f32, f32, Handle)> = HashMap::new();
+    // ponytail: per-page decoded image LRU, max 50 entries
+    let mut img_cache: LruCache<String, (f32, f32, Handle)> = LruCache::new(NonZeroUsize::new(50).expect("Invalid NonZeroUsize value"));
     let mut img_count = 0;
     for el in elements.iter_mut() {
         if let Some(ref img_src) = el.image_url.clone() {
@@ -320,33 +319,32 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
                     continue;
                 }
             };
-            if bytes.len() < 5_000_000 {
-                if let Ok(img) = image::load_from_memory(&bytes) {
-                    let rgba = img.to_rgba8();
-                    let (w, h) = rgba.dimensions();
-                    let max_dim = 800.0;
-                    let scale = if (w as f32).max(h as f32) > max_dim {
-                        max_dim / (w as f32).max(h as f32)
-                    } else {
-                        1.0
-                    };
-                    let (fw, fh, handle) = if scale < 1.0 {
-                        let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
-                        let (rw, rh) = resized.dimensions();
-                        (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
-                    } else {
-                        (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
-                    };
-                    el.width = fw;
-                    el.height = fh;
-                    el.image_handle = Some(handle.clone());
-                    if img_cache.len() >= 50 {
-                        img_cache.clear();
-                    }
-                    img_cache.insert(resolved, (fw, fh, handle));
+            if bytes.len() >= 5_000_000 {
+                plog!("IMAGES", "Image too large ({} bytes), skipping decode", bytes.len());
+                continue;
+            }
+            if let Ok(img) = image::load_from_memory(&bytes) {
+                let rgba = img.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                let max_dim = 800.0;
+                let scale = if (w as f32).max(h as f32) > max_dim {
+                    max_dim / (w as f32).max(h as f32)
                 } else {
-                    plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
-                }
+                    1.0
+                };
+                let (fw, fh, handle) = if scale < 1.0 {
+                    let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
+                    let (rw, rh) = resized.dimensions();
+                    (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
+                } else {
+                    (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
+                };
+                el.width = fw;
+                el.height = fh;
+                el.image_handle = Some(handle.clone());
+                img_cache.put(resolved, (fw, fh, handle));
+            } else {
+                plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
             }
         }
     }

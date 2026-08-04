@@ -695,9 +695,14 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
 pub fn is_same_origin(a: &str, b: &str) -> bool {
     let pa = parse_simple_url(a);
     let pb = parse_simple_url(b);
-    pa.protocol == pb.protocol
-        && pa.hostname.to_lowercase() == pb.hostname.to_lowercase()
-        && pa.port == pb.port
+    if pa.protocol != pb.protocol { return false; }
+    if pa.hostname.to_lowercase() != pb.hostname.to_lowercase() { return false; }
+    let default_port = |proto: &str| -> &str {
+        if proto == "http:" { "80" } else { "443" }
+    };
+    let port_a = if pa.port.is_empty() { default_port(pa.protocol) } else { pa.port };
+    let port_b = if pb.port.is_empty() { default_port(pb.protocol) } else { pb.port };
+    port_a == port_b
 }
 
 type ImageCache = HashMap<String, (Vec<u8>, Instant)>;
@@ -773,7 +778,8 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
     }
 
     if url.starts_with("//") {
-        return format!("https:{}", url);
+        let base_scheme = base_url.find("://").map(|i| &base_url[..i + 1]).unwrap_or("https:");
+        return format!("{}{}", base_scheme, url);
     }
 
     let base = normalize_url(base_url);
@@ -788,6 +794,10 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
         after_scheme.find('/').map(|i| scheme_end + i).unwrap_or(base.len())
     };
     let origin = &base[..host_end];
+
+    if url.starts_with('#') {
+        return format!("{}{}", base_url, url);
+    }
 
     if url.starts_with('/') {
         return format!("{}{}", origin, url);

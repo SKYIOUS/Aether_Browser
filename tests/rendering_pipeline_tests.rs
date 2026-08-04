@@ -36,6 +36,7 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
         padding: [0.0; 4], display: display.to_string(),
         flex_direction: "row".to_string(), flex_wrap: "nowrap".to_string(),
         justify_content: "flex-start".to_string(), align_items: "stretch".to_string(),
+        align_self: "auto".to_string(), box_sizing: "content-box".to_string(),
         flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: parent,
         min_width: None, max_width: None, min_height: None, max_height: None,
