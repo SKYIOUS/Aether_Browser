@@ -83,6 +83,7 @@ impl VayuApp {
             Message::Event(event) => {
                 if let Event::Window(iced::window::Event::Resized(size)) = event {
                     self.browser.bounds = (size.width, size.height);
+                    return self.browser.update(crate::ui::screens::browser::BrowserMessage::WindowResized(size.width, size.height)).map(Message::Browser);
                 }
                 Task::none()
             }

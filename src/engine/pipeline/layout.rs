@@ -69,35 +69,39 @@ fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
 fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     if el.display == "none" { return None; }
     let cd = crate::bridge_gen::str_display_to_caelum(&el.display);
-    let auto = |v: Option<f32>| v.map(LengthPercentageAuto::length).unwrap_or(LengthPercentageAuto::auto());
     let dim = |v: Option<f32>| v.map(Dimension::from_length).unwrap_or(Dimension::auto());
     let mm = |min: Option<f32>, max: Option<f32>| {
         (min.map(Dimension::from_length).unwrap_or(Dimension::auto()),
          max.map(Dimension::from_length).unwrap_or(Dimension::auto()))
     };
     
-    // Fix 3: Ensure inline elements without text get proper dimensions
     let has_content = !el.text.is_empty() || !el.wrapped_lines.is_empty() || el.image_handle.is_some() || el.css_width.is_some() || el.css_height.is_some();
     
+    let margin_left = el.margin_left.unwrap_or(0.0);
+    let margin_right = el.margin_right.unwrap_or(0.0);
     let mut s = Style {
         display: cd,
-        margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: auto(el.margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: auto(el.margin_left) },
+        margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: LengthPercentageAuto::length(margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: LengthPercentageAuto::length(margin_left) },
         padding: Rect { top: LengthPercentage::length(el.padding[0]), right: LengthPercentage::length(el.padding[1]), bottom: LengthPercentage::length(el.padding[2]), left: LengthPercentage::length(el.padding[3]) },
         border: Rect { top: LengthPercentage::length(el.border_widths[0]), right: LengthPercentage::length(el.border_widths[1]), bottom: LengthPercentage::length(el.border_widths[2]), left: LengthPercentage::length(el.border_widths[3]) },
         size: Size { width: dim(el.css_width), height: dim(el.css_height) },
         ..Default::default()
     };
     
-    // Fix 4: For block elements without explicit size, ensure they have minimum dimensions
     if cd == Display::Block && !has_content {
         s.min_size = Size { 
             width: Dimension::auto(), 
-            height: Dimension::length(1.0) // Minimum 1px height for empty blocks
+            height: Dimension::length(1.0)
         };
     }
     
     let (min_w, max_w) = mm(el.min_width, el.max_width);
-    let (min_h, max_h) = mm(el.min_height, el.max_height);
+    let (mut min_h, max_h) = mm(el.min_height, el.max_height);
+    
+    if cd == Display::Block && !has_content {
+        if min_h.is_auto() { min_h = Dimension::length(1.0); }
+    }
+    
     s.min_size = Size { width: min_w, height: min_h };
     s.max_size = Size { width: max_w, height: max_h };
     
@@ -110,6 +114,7 @@ fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
     s.flex_grow = el.flex_grow;
     s.flex_shrink = el.flex_shrink;
     if let Some(basis) = el.flex_basis { s.flex_basis = Dimension::from_length(basis); }
+    plog!("ELSTYLE", "tag={:15} cd={:?} size={:?} min_size={:?} max_size={:?} align_self={:?} align_items={:?} box_sizing={:?}", el.tag, cd, s.size, s.min_size, s.max_size, s.align_self, s.align_items, s.box_sizing);
     Some(s)
 }
 
@@ -131,6 +136,13 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             } else { 1.0 };
             el.css_height = Some(fs * el.line_height.max(1.0) * line_count);
         }
+        if el.display == "inline" && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
+            let fs = el.font_size.clamp(6.0, 200.0);
+            let cw = fs * CHAR_W_SCALE;
+            let text_w = text_visual_width(&el.text) as f32 * cw;
+            let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
+            el.min_width = Some(text_w + pb);
+        }
     }
 
     let mut tree: CaelumTree = CaelumTree::new();
@@ -140,6 +152,7 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         display: Display::Flex,
         flex_direction: FlexDirection::Column,
         size: Size { width: Dimension::from_length(container_width), height: Dimension::auto() },
+        align_items: Some(crate::bridge_gen::str_align_items_to_caelum("stretch")),
         ..Default::default()
     };
     let root_node = match tree.new_leaf(root_style) {
@@ -157,38 +170,35 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         }
     }
 
-    for (i, el) in elements.iter().enumerate() {
-        if el.display == "none" { continue; }
+    for i in 0..elements.len() {
+        if elements[i].display == "none" { continue; }
         let child_id = match node_ids[i] { Some(id) => id, None => continue };
 
-        // Fix: Ensure parent exists in node_ids before using it
-        let parent_nid = match el.parent_index {
+        let (parent_nid, parent_idx): (NodeId, Option<usize>) = match elements[i].parent_index {
             Some(pidx) => {
                 if pidx < elements.len() && pidx != i {
-                    // Parent must also have a valid node_id
                     match node_ids[pidx] { 
-                        Some(id) => id, 
-                        None => {
-                            // Parent was skipped (display:none or error), attach to root
-                            root_node 
-                        }
+                        Some(id) => (id, Some(pidx)), 
+                        None => (root_node, None),
                     }
                 } else { 
-                    root_node 
+                    (root_node, None)
                 }
             }
-            None => root_node,
+            None => (root_node, None),
         };
 
-        // Prevent adding root as its own child
         if parent_nid != child_id {
             if let Err(e) = tree.add_child(parent_nid, child_id) {
                 plog!("CAELUM", "add_child failed for element {}: {:?}", i, e);
             }
         }
+        if elements[i].parent_index != parent_idx {
+            elements[i].parent_index = parent_idx;
+        }
     }
 
-    if elements.len() > 1 {
+    if elements.len() > 0 {
         if let Err(e) = tree.compute_layout(root_node, Size {
             width: AvailableSpace::Definite(container_width),
             height: AvailableSpace::Definite(viewport_h),
@@ -209,10 +219,10 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             let ly = layout.location.y;
             let lw = layout.size.width;
             let lh = layout.size.height;
-            abs_x[i] = if lx.is_finite() { lx.max(0.0) } else { 0.0 };
-            abs_y[i] = if ly.is_finite() { ly.max(0.0) } else { 0.0 };
-            widths[i] = if lw.is_finite() && lw > 0.0 { lw } else { el.css_width.unwrap_or(container_width) };
-            heights[i] = if lh.is_finite() && lh > 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
+            abs_x[i] = if lx.is_finite() { lx } else { 0.0 };
+            abs_y[i] = if ly.is_finite() { ly } else { 0.0 };
+            widths[i] = if lw.is_finite() && lw >= 0.0 { lw } else { el.css_width.unwrap_or(container_width) };
+            heights[i] = if lh.is_finite() && lh >= 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
         }
     }
     // Caelum returns positions relative to each node's parent.
@@ -236,36 +246,7 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         elements[i].width = widths[i];
         elements[i].height = heights[i];
     }
-    for el in elements.iter_mut() {
-        if el.display == "inline" && !el.text.is_empty() {
-            let fs = el.font_size.clamp(6.0, 200.0);
-            let cw = fs * CHAR_W_SCALE;
-            let max_line_w = if el.wrapped_lines.is_empty() {
-                text_visual_width(&el.text) as f32 * cw
-            } else {
-                el.wrapped_lines.iter()
-                    .map(|l| text_visual_width(l) as f32 * cw)
-                    .fold(0.0f32, f32::max)
-            };
-            if max_line_w > 0.0 {
-                el.width = max_line_w.min(container_width);
-            }
-        }
-    }
-
     apply_text_wrapping(elements, container_width);
-
-    for i in (0..n).rev() {
-        if let Some(pidx) = elements[i].parent_index {
-            if pidx < n && pidx != i {
-                let child_bottom = elements[i].y + elements[i].height;
-                let parent_bottom = elements[pidx].y + elements[pidx].height;
-                if child_bottom > parent_bottom {
-                    elements[pidx].height = child_bottom - elements[pidx].y;
-                }
-            }
-        }
-    }
 
     for (i, el) in elements.iter().enumerate().take(20) {
         let tag = if el.tag.len() > 15 { &el.tag[..15] } else { &el.tag };

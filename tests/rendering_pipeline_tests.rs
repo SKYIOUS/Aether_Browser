@@ -524,6 +524,29 @@ fn test_flex_grow() {
     assert!(elements[2].width > 0.0);
 }
 
+#[test]
+fn test_flex_column_stretch_empty_block_child() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    println!("Empty block child: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
+    assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
+}
+
+#[test]
+fn test_flex_column_stretch_empty_block_child_with_sibling() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        make_test("p", "Hello", "block", Some(0)),
+    ];
+    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    println!("Empty block: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
+    println!("P element: x={:.1} y={:.1} w={:.1} h={:.1}", elements[1].x, elements[1].y, elements[1].width, elements[1].height);
+    assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
+    assert!(elements[1].width > 0.0, "P element should have width");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 7. GRID LAYOUT (tests 41-45)
 // ═══════════════════════════════════════════════════════════════════════════════

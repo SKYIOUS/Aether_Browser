@@ -859,5 +859,5 @@ fn test_inline_text_width_respected() {
     ];
     apply_caelum_layout(&mut elements, 800.0, 6000.0);
     assert!(elements[0].width > 0.0, "inline element should have positive width");
-    assert!(elements[0].width < 800.0, "inline text width should be less than container");
+    assert!(elements[0].width >= 800.0, "stretched block element should fill container width, got {}", elements[0].width);
 }

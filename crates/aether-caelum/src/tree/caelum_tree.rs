@@ -1375,4 +1375,135 @@ mod tests {
 
         assert!(Caelum.children(old_parent).expect("Operation failed").is_empty());
     }
+
+    #[test]
+    fn test_flex_column_stretch_empty_block_child() {
+        use crate::style::{Dimension, Display, FlexDirection, AlignItems};
+
+        let mut caelum: CaelumTree<()> = CaelumTree::new();
+
+        let child = caelum.new_leaf(Style {
+            display: Display::Block,
+            size: Size { width: Dimension::auto(), height: Dimension::auto() },
+            min_size: Size { width: Dimension::auto(), height: Dimension::length(1.0) },
+            ..Default::default()
+        }).expect("Operation failed");
+
+        let root = caelum.new_with_children(
+            Style {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                size: Size { width: Dimension::from_length(800.0), height: Dimension::auto() },
+                align_items: Some(AlignItems::Stretch),
+                ..Default::default()
+            },
+            &[child],
+        ).expect("Operation failed");
+
+        caelum.compute_layout(root, Size {
+            width: AvailableSpace::Definite(800.0),
+            height: AvailableSpace::Definite(1000.0),
+        }).expect("Operation failed");
+
+        let child_layout = caelum.layout(child).expect("Layout operation failed");
+        let root_layout = caelum.layout(root).expect("Layout operation failed");
+
+        println!("ROOT: location={:?} size={:?}", root_layout.location, root_layout.size);
+        println!("CHILD: location={:?} size={:?}", child_layout.location, child_layout.size);
+
+        // With align_items: stretch on a column flex container,
+        // the cross axis is X (width), so the child should stretch to 800px wide
+        assert_eq!(child_layout.size.width, 800.0, "Child width should be stretched to 800.0");
+        assert_eq!(child_layout.location.x, 0.0, "Child should not be offset (stretch, not center)");
+    }
+
+    #[test]
+    fn test_flex_column_stretch_block_with_child() {
+        use crate::style::{Dimension, Display, FlexDirection, AlignItems};
+
+        let mut caelum: CaelumTree<()> = CaelumTree::new();
+
+        // Grandchild: an empty leaf
+        let grandchild = caelum.new_leaf(Style {
+            display: Display::Block,
+            size: Size { width: Dimension::auto(), height: Dimension::auto() },
+            min_size: Size { width: Dimension::auto(), height: Dimension::length(1.0) },
+            ..Default::default()
+        }).expect("Operation failed");
+
+        // Child: Display::Block with a child → goes through compute_block_layout
+        let child = caelum.new_with_children(
+            Style {
+                display: Display::Block,
+                size: Size { width: Dimension::auto(), height: Dimension::auto() },
+                min_size: Size { width: Dimension::auto(), height: Dimension::length(1.0) },
+                ..Default::default()
+            },
+            &[grandchild],
+        ).expect("Operation failed");
+
+        let root = caelum.new_with_children(
+            Style {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                size: Size { width: Dimension::from_length(800.0), height: Dimension::auto() },
+                align_items: Some(AlignItems::Stretch),
+                ..Default::default()
+            },
+            &[child],
+        ).expect("Operation failed");
+
+        caelum.compute_layout(root, Size {
+            width: AvailableSpace::Definite(800.0),
+            height: AvailableSpace::Definite(1000.0),
+        }).expect("Operation failed");
+
+        let child_layout = caelum.layout(child).expect("Layout operation failed");
+        let grandchild_layout = caelum.layout(grandchild).expect("Layout operation failed");
+        let root_layout = caelum.layout(root).expect("Layout operation failed");
+
+        println!("ROOT: location={:?} size={:?}", root_layout.location, root_layout.size);
+        println!("CHILD: location={:?} size={:?}", child_layout.location, child_layout.size);
+        println!("GRANDCHILD: location={:?} size={:?}", grandchild_layout.location, grandchild_layout.size);
+
+        assert_eq!(child_layout.size.width, 800.0, "Child width should be stretched to 800.0");
+    }
+
+    #[test]
+    fn test_flex_column_stretch_empty_block_child_new_leaf_add_child() {
+        use crate::style::{Dimension, Display, FlexDirection, AlignItems};
+
+        let mut caelum: CaelumTree<()> = CaelumTree::new();
+
+        let child = caelum.new_leaf(Style {
+            display: Display::Block,
+            size: Size { width: Dimension::auto(), height: Dimension::auto() },
+            min_size: Size { width: Dimension::auto(), height: Dimension::length(1.0) },
+            ..Default::default()
+        }).expect("Operation failed");
+
+        let root = caelum.new_leaf(Style {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
+            size: Size { width: Dimension::from_length(800.0), height: Dimension::auto() },
+            align_items: Some(AlignItems::Stretch),
+            ..Default::default()
+        }).expect("Operation failed");
+
+        caelum.add_child(root, child).expect("Operation failed");
+
+        caelum.compute_layout(root, Size {
+            width: AvailableSpace::Definite(800.0),
+            height: AvailableSpace::Definite(1000.0),
+        }).expect("Operation failed");
+
+        let child_layout = caelum.layout(child).expect("Layout operation failed");
+        let root_layout = caelum.layout(root).expect("Layout operation failed");
+
+        println!("ROOT: location={:?} size={:?}", root_layout.location, root_layout.size);
+        println!("CHILD: location={:?} size={:?}", child_layout.location, child_layout.size);
+
+        assert_eq!(child_layout.size.width, 800.0, "Child width should be stretched to 800.0");
+        assert_eq!(child_layout.size.height, 1.0, "Child height should be 1.0 (min_size floor)");
+    }
 }

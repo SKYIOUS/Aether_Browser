@@ -19,7 +19,7 @@ use korlang::compile;
 use crate::engine::korlang::register_default_callbacks;
 use crate::ui::kor_renderer::render_kor_vm;
 use crate::engine::js::{JsBridge, JSEngine};
-use crate::engine::pipeline::{fetch_page_content, StyledElement, normalize_nav_url, save_tabs, load_tabs, Tab};
+use crate::engine::pipeline::{fetch_page_content, apply_caelum_layout, StyledElement, normalize_nav_url, save_tabs, load_tabs, Tab};
 
 // -- Messages
 
@@ -60,6 +60,7 @@ pub enum BrowserMessage {
     RunKorScript(String),
     RunKorOnPage,
     KorScriptResult(String),
+    WindowResized(f32, f32),
     None,
 }
 
@@ -128,9 +129,10 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
             plog!("DRAW", "Rendering {} elements into {:?}", self.elements.len(), size);
             frame.fill_rectangle(Point::new(0.0, 0.0), size, iced::Color::WHITE);
             for el in &self.elements {
+                if el.display == "none" { continue; }
                 if let Some(ref handle) = el.image_handle {
-                    let iw = if el.width.is_finite() { el.width.max(50.0) } else { 50.0 };
-                    let ih = if el.height.is_finite() { el.height.max(50.0) } else { 50.0 };
+                    let iw = if el.width.is_finite() && el.width > 0.0 { el.width } else { 50.0 };
+                    let ih = if el.height.is_finite() && el.height > 0.0 { el.height } else { 50.0 };
                     let ix = el.x.max(0.0);
                     let iy = el.y.max(0.0);
                     if ix.is_finite() && iy.is_finite() && iw.is_finite() && ih.is_finite() {
@@ -215,7 +217,8 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         if let iced::widget::canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
             if let Some(pos) = cursor.position_in(bounds) {
                 plog!("CLICK", "Click at pos=({:.0},{:.0})", pos.x, pos.y);
-                for (i, el) in self.elements.iter().enumerate() {
+                for (i, el) in self.elements.iter().enumerate().rev() {
+                    if el.display == "none" { continue; }
                     if el.is_link {
                         let text_w = el.text.len() as f32 * el.font_size * 0.55;
                         let hit = Rectangle::new(Point::new(el.x, el.y), Size::new(text_w, el.font_size + 4.0));
@@ -502,6 +505,16 @@ Component SidebarWS {
                 self.kor_vm.borrow_mut().update_state("status_mid", korlang::vm::Value::String("Loaded".to_string()));
                 self.kor_vm.borrow_mut().update_state("status_right", korlang::vm::Value::String(format!("{} elements", count)));
                 self.content = format!("Loaded ({} elements)", count);
+                Task::none()
+            }
+            BrowserMessage::WindowResized(w, h) => {
+                self.bounds = (w, h);
+                if !self.styled_elements.is_empty() {
+                    let content_w = (w - 260.0).max(200.0);
+                    let viewport_h = h;
+                    apply_caelum_layout(&mut self.styled_elements, content_w, viewport_h);
+                    self.page_canvas = Some(PageCanvas::new(self.styled_elements.clone()));
+                }
                 Task::none()
             }
             BrowserMessage::TimerTick => {
@@ -902,8 +915,9 @@ Component SidebarWS {
                 .map(|el| { let ey = if el.y.is_finite() { el.y } else { 0.0 }; ey + el.height.max(el.font_size.clamp(6.0, 200.0)) + 40.0 })
                 .fold(0.0, f32::max);
             let total_h = if total_h.is_finite() { total_h.max(100.0) } else { 800.0 };
+            let content_w = (self.bounds.0 - 260.0).max(200.0);
             container(
-                scrollable(canvas(pc).width(Length::Fixed(self.bounds.0)).height(Length::Fixed(total_h)))
+                scrollable(canvas(pc).width(Length::Fixed(content_w)).height(Length::Fixed(total_h)))
                     .width(Length::Fill).height(Length::Fill)
             )
             .width(Length::Fill).height(Length::Fill)
