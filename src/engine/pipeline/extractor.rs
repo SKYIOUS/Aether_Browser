@@ -129,6 +129,35 @@ pub fn should_skip_content(tag: &str) -> bool {
     matches!(tag, "script" | "style" | "noscript" | "template" | "svg" | "title" | "iframe")
 }
 
+fn should_recurse_skipped(tag: &str) -> bool {
+    !should_skip_content(tag) && !matches!(tag, "head" | "meta" | "link")
+}
+
+fn uses_default_margins(tag: &str) -> bool {
+    matches!(tag, "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select")
+}
+
+fn default_top_margin(tag: &str) -> f32 {
+    match tag {
+        "h1" => 24.0, "h2" => 20.0, "h3" | "h4" | "h5" | "h6" => 16.0,
+        "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0,
+        "form" => 12.0, "button" | "input" | "textarea" | "select" => 4.0,
+        _ => 0.0,
+    }
+}
+
+fn apply_media_defaults(tag: &str, el: &mut StyledElement) {
+    if tag == "img" {
+        if el.css_width.is_none() { el.css_width = Some(200.0); }
+        if el.css_height.is_none() { el.css_height = Some(150.0); }
+    }
+    if matches!(tag, "input" | "button" | "textarea" | "select") {
+        if el.css_width.is_none() { el.css_width = Some(200.0); }
+        if el.css_height.is_none() { el.css_height = Some(32.0); }
+        if tag == "textarea" { el.css_height = Some(64.0); }
+    }
+}
+
 // ponytail: single-pass entity decode, no recursion for &amp;lt; etc.
 pub fn decode_html_entities(text: &str) -> String {
     if !text.contains('&') {
@@ -136,12 +165,18 @@ pub fn decode_html_entities(text: &str) -> String {
     }
     let mut result = String::with_capacity(text.len());
     let mut chars = text.chars();
-    while let Some(c) = chars.next() {
+    'outer: while let Some(c) = chars.next() {
         if c == '&' {
             let mut entity = String::new();
+            let mut found_semicolon = false;
             for ch in &mut chars {
-                if ch == ';' { break; }
+                if ch == ';' { found_semicolon = true; break; }
                 entity.push(ch);
+            }
+            if !found_semicolon {
+                result.push('&');
+                result.push_str(&entity);
+                continue 'outer;
             }
             let decoded = match entity.as_str() {
                 "amp" => Some('&'),
@@ -357,7 +392,12 @@ pub fn extract_elements(
     if depth > 50 || elements.len() >= 2000 { return; }
 
     match &node.node_type {
-        NodeType::Document | NodeType::Comment(_) => {}
+        NodeType::Document => {
+            for child in &node.children {
+                extract_elements(child, elements, depth, ss, parent_style.clone(), parent_idx, dom_path.clone(), viewport_w, viewport_h);
+            }
+        }
+        NodeType::Comment(_) => {}
         NodeType::Text(text) => {
             let txt = decode_html_entities(text.trim());
             if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
@@ -376,7 +416,7 @@ pub fn extract_elements(
         NodeType::Element(elem) => {
             let tag = elem.tag_name.to_lowercase();
             if should_skip_tag(&tag) {
-                if !should_skip_content(&tag) && tag != "head" && tag != "meta" && tag != "link" {
+                if should_recurse_skipped(&tag) {
                     let mut visible_idx = 0usize;
                     for child in &node.children {
                         if matches!(&child.node_type, NodeType::Comment(_)) {
@@ -393,7 +433,7 @@ pub fn extract_elements(
 
             let fs = compute_full_style(node, ss, viewport_w, viewport_h);
 
-            let uses_default_margins = matches!(tag.as_str(), "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select");
+            let uses_default_margins = uses_default_margins(tag.as_str());
 
             let mut text_consumed = false;
             let mut extra_input_type = String::new();
@@ -516,9 +556,6 @@ pub fn extract_elements(
                         (text, false, None, 1, "option", false, false)
                     }
                 }
-                "iframe" => {
-                    (String::new(), false, None, 0, "iframe", false, false)
-                }
                 _ => {
                     if fs.display == "inline" && tag != "span" {
                         let text = get_all_text(node);
@@ -537,6 +574,8 @@ pub fn extract_elements(
                 return;
             }
 
+            let needs_skip_children = !text_content.is_empty() && recurse_into_children && !skip_element;
+
             let this_idx = if !skip_element {
                 let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
                 el.is_link = is_link;
@@ -544,22 +583,10 @@ pub fn extract_elements(
                 el.indent_level = indent;
                 if tag == "img" {
                     el.image_url = elem.attributes.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
-                    if el.css_width.is_none() { el.css_width = Some(200.0); }
-                    if el.css_height.is_none() { el.css_height = Some(150.0); }
                 }
-                if matches!(tag.as_str(), "input" | "button" | "textarea" | "select" | "iframe") {
-                    if el.css_width.is_none() { el.css_width = Some(200.0); }
-                    if el.css_height.is_none() { el.css_height = Some(32.0); }
-                    if tag == "textarea" { el.css_height = Some(64.0); }
-                    if tag == "iframe" { el.css_height = Some(150.0); }
-                }
+                apply_media_defaults(tag.as_str(), &mut el);
                 if uses_default_margins {
-                    let def_mt: f32 = match tag.as_str() {
-                        "h1" => 24.0, "h2" => 20.0, "h3" | "h4" | "h5" | "h6" => 16.0,
-                        "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0,
-                        "form" => 12.0, "button" => 4.0, "input" => 4.0, "textarea" => 4.0, "select" => 4.0, _ => 0.0,
-                    };
-                    if el.margin_top == 0.0 { el.margin_top = def_mt; }
+                    if el.margin_top == 0.0 { el.margin_top = default_top_margin(tag.as_str()); }
                 }
                 if !extra_input_type.is_empty() {
                     el.input_type = extra_input_type;
@@ -578,10 +605,10 @@ pub fn extract_elements(
             };
 
             let (new_parent, skip_fn): (Option<usize>, SkipFn) = match tag.as_str() {
-                "img" | "input" | "button" | "iframe" => (parent_idx, Box::new(|_| true)),
-                "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" | "option" => {
+                "img" | "input" | "button" => (parent_idx, Box::new(|_| true)),
+                "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" => {
                     if text_consumed {
-                        (parent_idx, Box::new(|_| true))
+                        (parent_idx, Box::new(|c| matches!(c.node_type, NodeType::Text(_))))
                     } else {
                         (parent_idx, Box::new(|_| false))
                     }
@@ -600,7 +627,9 @@ pub fn extract_elements(
                 "select" => (parent_idx, Box::new(|_| true)),
                 "form" => (this_idx.or(parent_idx), Box::new(|_| false)),
                 _ => {
-                    if skip_element {
+                    if needs_skip_children {
+                        (this_idx.or(parent_idx), Box::new(|c| matches!(c.node_type, NodeType::Text(_))))
+                    } else if skip_element {
                         (parent_idx, Box::new(|_| false))
                     } else {
                         (this_idx.or(parent_idx), Box::new(|_| false))
@@ -714,7 +743,7 @@ pub(crate) fn extract_elements_flat(
 
         let tag = node.tag.as_str();
         if should_skip_tag(tag) {
-            if !should_skip_content(tag) && tag != "head" && tag != "meta" && tag != "link" {
+            if should_recurse_skipped(tag) {
                 for (ci, &child_id) in node.children.iter().enumerate() {
                     dom_path.push(ci);
                     walk(nodes, child_id, elements, depth + 1, ss, parent_style.clone(), parent_idx, dom_path, vw, vh);
@@ -725,7 +754,7 @@ pub(crate) fn extract_elements_flat(
         }
 
         let fs = compute_full_style_flat(node, ss, vw, vh);
-        let uses_default_margins = matches!(tag, "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li" | "img" | "form" | "button" | "input" | "textarea" | "select");
+        let uses_default_margins = uses_default_margins(tag);
 
         let (text_content, is_link, href, indent, tag_override, skip_element, recurse_into_children) = match tag {
             "a" => {
@@ -795,13 +824,7 @@ pub(crate) fn extract_elements_flat(
                 }
             }
             "select" => (String::new(), false, None, 0, "select", false, true),
-            "option" => {
-                let text = get_all_text_flat(nodes, node_id);
-                if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
-                else { (text, false, None, 1, "option", false, false) }
-            }
-            "iframe" => (String::new(), false, None, 0, "iframe", false, false),
-            _ => {
+                _ => {
                 if fs.display == "inline" && tag != "span" {
                     let text = get_all_text_flat(nodes, node_id);
                     if text.is_empty() {
@@ -817,6 +840,8 @@ pub(crate) fn extract_elements_flat(
 
         if !recurse_into_children && skip_element { return; }
 
+        let needs_skip_children = !text_content.is_empty() && recurse_into_children && !skip_element;
+
         let this_idx = if !skip_element {
             let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
             el.is_link = is_link;
@@ -824,22 +849,10 @@ pub(crate) fn extract_elements_flat(
             el.indent_level = indent;
             if tag == "img" {
                 el.image_url = node.attrs.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
-                if el.css_width.is_none() { el.css_width = Some(200.0); }
-                if el.css_height.is_none() { el.css_height = Some(150.0); }
             }
-            if matches!(tag, "input" | "button" | "textarea" | "select" | "iframe") {
-                if el.css_width.is_none() { el.css_width = Some(200.0); }
-                if el.css_height.is_none() { el.css_height = Some(32.0); }
-                if tag == "textarea" { el.css_height = Some(64.0); }
-                if tag == "iframe" { el.css_height = Some(150.0); }
-            }
+            apply_media_defaults(tag, &mut el);
             if uses_default_margins {
-                let def_mt: f32 = match tag {
-                    "h1" => 24.0, "h2" => 20.0, "h3" | "h4" | "h5" | "h6" => 16.0,
-                    "p" => 12.0, "li" => 8.0, "a" => 4.0, "img" => 4.0,
-                    "form" => 12.0, "button" => 4.0, "input" => 4.0, "textarea" => 4.0, "select" => 4.0, _ => 0.0,
-                };
-                if el.margin_top == 0.0 { el.margin_top = def_mt; }
+                if el.margin_top == 0.0 { el.margin_top = default_top_margin(tag); }
             }
             let idx = elements.len();
             elements.push(el);
@@ -847,13 +860,14 @@ pub(crate) fn extract_elements_flat(
         } else { parent_idx };
 
         let (new_parent, skip_text_children): (Option<usize>, bool) = match tag {
-            "img" | "input" | "button" | "iframe" => (parent_idx, false),
-            "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" | "option" => (parent_idx, false),
-            "li" => (parent_idx, false),
+            "img" | "input" | "button" => (parent_idx, false),
+            "a" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "textarea" => (parent_idx, true),
+            "li" => (parent_idx, true),
             "p" => (this_idx.or(parent_idx), true),
             "select" | "form" => (this_idx.or(parent_idx), false),
             _ => {
                 if skip_element { (parent_idx, false) }
+                else if needs_skip_children { (this_idx.or(parent_idx), true) }
                 else { (this_idx.or(parent_idx), false) }
             }
         };
@@ -876,7 +890,7 @@ pub(crate) fn extract_elements_flat(
 mod tests {
     use super::decode_html_entities;
     use crate::engine::stratus::Stylesheet;
-    use crate::engine::parser::Parser;
+    use crate::engine::parser::parse_html;
 
     #[test]
     fn test_decode_amp() { assert_eq!(decode_html_entities("&amp;"), "&"); }
@@ -910,8 +924,7 @@ mod tests {
     #[test]
     fn test_extract_decodes_text() {
         let html = r#"<p>hello &amp; goodbye</p>"#;
-        let mut parser = Parser::new(html.to_string());
-        let dom = parser.parse_node();
+        let dom = parse_html(html);
         let sheet = Stylesheet { rules: vec![] };
         let mut elements = Vec::new();
         crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -922,8 +935,7 @@ mod tests {
     #[test]
     fn test_extract_decodes_anchor_href() {
         let html = r#"<a href="https://x.com?a=1&amp;b=2">link</a>"#;
-        let mut parser = Parser::new(html.to_string());
-        let dom = parser.parse_node();
+        let dom = parse_html(html);
         let sheet = Stylesheet { rules: vec![] };
         let mut elements = Vec::new();
         crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -934,8 +946,7 @@ mod tests {
     #[test]
     fn test_extract_decodes_img_alt() {
         let html = r#"<img src="x.png" alt="photo &amp; picture">"#;
-        let mut parser = Parser::new(html.to_string());
-        let dom = parser.parse_node();
+        let dom = parse_html(html);
         let sheet = Stylesheet { rules: vec![] };
         let mut elements = Vec::new();
         crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);

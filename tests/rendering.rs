@@ -1,4 +1,4 @@
-use vayu_browser::engine::parser::Parser;
+use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::stratus;
 use vayu_browser::engine::dom::NodeType;
 
@@ -10,15 +10,19 @@ fn test_basic_rendering_pipeline() {
         </div>
     "#.to_string();
 
-    let mut parser = Parser::new(html);
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
 
-    if let NodeType::Element(ref data) = dom.node_type {
+    let html_elem = dom.children.iter().find(|c| c.tag_name() == Some("html")).expect("should find html");
+    let body = html_elem.children.iter().find(|c| c.tag_name() == Some("body")).expect("should find body");
+    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
+    
+    if let NodeType::Element(ref data) = div.node_type {
         assert_eq!(data.tag_name, "div");
     } else {
         panic!("Root should be an element");
     }
-    assert_eq!(dom.children.len(), 1);
+    assert_eq!(body.children.len(), 3);
+    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
 
     let css_text = "div { display: block; } p { color: blue; }".to_string();
     let stylesheet = stratus::parse(&css_text);
@@ -26,9 +30,9 @@ fn test_basic_rendering_pipeline() {
 }
 
 #[test]
-fn test_caelum_spatial_init() {
-    use vayu_browser::engine::caelum::style::Style;
-    let style: Style<String> = Style::DEFAULT;
-    assert_eq!(style.opacity, 1.0);
-    assert_eq!(style.z_index, 0);
+fn test_taffy_spatial_init() {
+    use taffy::Style;
+    let style: Style = Style::DEFAULT;
+    assert_eq!(style.display, taffy::Display::Flex);
+    assert_eq!(style.position, taffy::Position::Relative);
 }

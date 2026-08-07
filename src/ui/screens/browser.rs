@@ -19,7 +19,9 @@ use korlang::compile;
 use crate::engine::korlang::register_default_callbacks;
 use crate::ui::kor_renderer::render_kor_vm;
 use crate::engine::js::{JsBridge, JSEngine};
-use crate::engine::pipeline::{fetch_page_content, apply_caelum_layout, StyledElement, normalize_nav_url, save_tabs, load_tabs, Tab};
+use crate::engine::text::measure_text_width;
+use crate::engine::pipeline::{fetch_page_content, apply_taffy_layout, StyledElement, normalize_nav_url, 
+save_tabs, load_tabs, Tab};
 
 // -- Messages
 
@@ -201,7 +203,7 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                             });
                             let deco_y = py;
                             let deco_h = (fs * 0.06).max(1.0);
-                            let deco_w = line.len() as f32 * fs * 0.58;
+                            let deco_w = measure_text_width(line, fs);
                             if el.text_decoration.contains("underline") {
                                 frame.fill_rectangle(Point::new(px0, deco_y + fs * 0.1), Size::new(deco_w, deco_h), el.color);
                             }
@@ -526,7 +528,7 @@ Component SidebarWS {
                 if !self.styled_elements.is_empty() {
                     let content_w = (w - 260.0).max(200.0);
                     let viewport_h = h;
-                    apply_caelum_layout(&mut *Arc::make_mut(&mut self.styled_elements), content_w, viewport_h);
+                    apply_taffy_layout(&mut *Arc::make_mut(&mut self.styled_elements), content_w, viewport_h);
                     self.page_canvas = Some(PageCanvas::new(Arc::clone(&self.styled_elements)));
                 }
                 Task::none()
@@ -1187,7 +1189,7 @@ fn secure_indicator(url: &str) -> String {
 mod tests {
     use super::*;
     use iced::Color;
-    use crate::engine::pipeline::{apply_caelum_layout, normalize_nav_url};
+    use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url};
 
     fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> StyledElement {
         StyledElement {
@@ -1222,7 +1224,7 @@ mod tests {
             make_test("span", "Hello", "inline", Some(0)),
             make_test("span", "World", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         for el in &elements { assert!(el.x.is_finite() && el.x >= 0.0, "x={}", el.x); }
         assert!(elements[2].x >= elements[1].x, "span1 x={} < span0 x={}", elements[2].x, elements[1].x);
     }
@@ -1233,7 +1235,7 @@ mod tests {
             make_test("div", "", "block", None),
             make_test("span", "Hi", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         assert!(elements[1].x.is_finite() && elements[1].x >= 0.0);
         assert!(elements[1].width.is_finite() && elements[1].width > 0.0);
     }
@@ -1245,7 +1247,7 @@ mod tests {
             make_test("span", "ABCDEFGH", "inline", Some(0)),
             make_test("span", "IJKLMNOP", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
     }
 
@@ -1257,7 +1259,7 @@ mod tests {
             make_test("p", "Block", "block", Some(0)),
             make_test("span", "World", "inline", Some(0)),
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
     }
 
@@ -1268,7 +1270,7 @@ mod tests {
             make_test("span", "Outer ", "inline", Some(0)),
             make_test("span", "Inner", "inline", Some(1)),
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
     }
 
@@ -1283,7 +1285,7 @@ mod tests {
                 ..make_test("div", "", "inline-block", Some(0))
             },
         ];
-        apply_caelum_layout(&mut elements, 800.0, 6000.0);
+        apply_taffy_layout(&mut elements, 800.0, 6000.0);
         for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
     }
 

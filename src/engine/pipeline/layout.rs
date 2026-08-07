@@ -1,50 +1,56 @@
-use unicode_width::UnicodeWidthStr;
-
 use super::extractor::StyledElement;
-use crate::engine::caelum::prelude::*;
+use crate::engine::text::measure_text_width;
 use crate::plog;
-
-const CHAR_W_SCALE: f32 = 0.58;
-
-fn text_visual_width(s: &str) -> usize {
-    UnicodeWidthStr::width(s)
-}
+use taffy::{
+    TaffyTree, Style, NodeId, AvailableSpace, Size as TaffySize,
+    Dimension, LengthPercentage, LengthPercentageAuto,
+    Display, Position, FlexDirection, FlexWrap, AlignItems, AlignSelf, JustifyContent, BoxSizing,
+};
 
 fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
     if max_width <= 0.0 || font_size <= 0.0 || text.is_empty() {
         return vec![text.to_string()];
     }
-    let char_w = font_size * CHAR_W_SCALE;
+    let char_w = measure_text_width("M", font_size);
     let max_chars = (max_width / char_w).floor() as usize;
     if max_chars < 1 { return vec![text.to_string()]; }
 
+    let space_w = measure_text_width(" ", font_size);
     let mut lines: Vec<String> = vec![];
     let mut current = String::new();
+    let mut current_w = 0.0f32;
     for paragraph in text.split('\n') {
         if paragraph.is_empty() {
             if !current.is_empty() {
                 lines.push(current.clone());
                 current.clear();
+                current_w = 0.0;
             }
             lines.push(String::new());
             continue;
         }
         for word in paragraph.split_whitespace() {
+            let word_w = measure_text_width(word, font_size);
             if current.is_empty() {
                 current = word.to_string();
+                current_w = word_w;
             } else {
-                let candidate = format!("{} {}", current, word);
-                if text_visual_width(&candidate) <= max_chars {
-                    current = candidate;
+                let candidate_w = current_w + space_w + word_w;
+                if candidate_w <= max_width {
+                    current.push(' ');
+                    current.push_str(word);
+                    current_w = candidate_w;
                 } else {
                     lines.push(current.clone());
                     current = word.to_string();
+                    current_w = word_w;
                 }
             }
         }
         if !current.is_empty() {
             lines.push(current.clone());
             current.clear();
+            current_w = 0.0;
         }
     }
     if !current.is_empty() {
@@ -67,76 +73,132 @@ fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
     }
 }
 
-fn el_to_caelum_style(el: &StyledElement) -> Option<Style> {
+fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
     if el.display == "none" { return None; }
-    let cd = crate::bridge_gen::str_display_to_caelum(&el.display);
-    let dim = |v: Option<f32>| v.map(Dimension::from_length).unwrap_or(Dimension::auto());
+    
+    let display = match el.display.as_str() {
+        "flex" | "inline-flex" => Display::Flex,
+        "grid" => Display::Grid,
+        "none" => Display::None,
+        _ => Display::Block,
+    };
+    
+    let position = match el.position.as_str() {
+        "absolute" | "fixed" => Position::Absolute,
+        _ => Position::Relative,
+    };
+    
+    let dim = |v: Option<f32>| v.map(Dimension::length).unwrap_or(Dimension::auto());
     let mm = |min: Option<f32>, max: Option<f32>| {
-        (min.map(Dimension::from_length).unwrap_or(Dimension::auto()),
-         max.map(Dimension::from_length).unwrap_or(Dimension::auto()))
+        (min.map(Dimension::length).unwrap_or(Dimension::auto()),
+         max.map(Dimension::length).unwrap_or(Dimension::auto()))
     };
     
     let has_content = !el.text.is_empty() || !el.wrapped_lines.is_empty() || el.image_handle.is_some() || el.css_width.is_some() || el.css_height.is_some();
     
     let margin_left = el.margin_left.unwrap_or(0.0);
     let margin_right = el.margin_right.unwrap_or(0.0);
-    let mut s = Style {
-        display: cd,
-        margin: Rect { top: LengthPercentageAuto::length(el.margin_top), right: LengthPercentageAuto::length(margin_right), bottom: LengthPercentageAuto::length(el.margin_bottom), left: LengthPercentageAuto::length(margin_left) },
-        padding: Rect { top: LengthPercentage::length(el.padding[0]), right: LengthPercentage::length(el.padding[1]), bottom: LengthPercentage::length(el.padding[2]), left: LengthPercentage::length(el.padding[3]) },
-        border: Rect { top: LengthPercentage::length(el.border_widths[0]), right: LengthPercentage::length(el.border_widths[1]), bottom: LengthPercentage::length(el.border_widths[2]), left: LengthPercentage::length(el.border_widths[3]) },
-         size: Size { width: dim(el.css_width), height: dim(el.css_height) },
-         ..Default::default()
-     };
-     
-     s.position = crate::bridge_gen::str_position_to_caelum(&el.position);
-     s.inset = Rect { top: LengthPercentageAuto::length(el.inset_top), right: LengthPercentageAuto::length(el.inset_right), bottom: LengthPercentageAuto::length(el.inset_bottom), left: LengthPercentageAuto::length(el.inset_left) };
     
-    if cd == Display::Block && !has_content {
-        s.min_size = Size { 
-            width: Dimension::auto(), 
-            height: Dimension::length(1.0)
-        };
+    let mut s = Style {
+        display,
+        position,
+        margin: taffy::Rect {
+            top: LengthPercentageAuto::length(el.margin_top),
+            right: LengthPercentageAuto::length(margin_right),
+            bottom: LengthPercentageAuto::length(el.margin_bottom),
+            left: LengthPercentageAuto::length(margin_left),
+        },
+        padding: taffy::Rect {
+            top: LengthPercentage::length(el.padding[0]),
+            right: LengthPercentage::length(el.padding[1]),
+            bottom: LengthPercentage::length(el.padding[2]),
+            left: LengthPercentage::length(el.padding[3]),
+        },
+        border: taffy::Rect {
+            top: LengthPercentage::length(el.border_widths[0]),
+            right: LengthPercentage::length(el.border_widths[1]),
+            bottom: LengthPercentage::length(el.border_widths[2]),
+            left: LengthPercentage::length(el.border_widths[3]),
+        },
+        size: TaffySize { width: dim(el.css_width), height: dim(el.css_height) },
+        ..Default::default()
+    };
+    
+    s.inset = taffy::Rect {
+        top: LengthPercentageAuto::length(el.inset_top),
+        right: LengthPercentageAuto::length(el.inset_right),
+        bottom: LengthPercentageAuto::length(el.inset_bottom),
+        left: LengthPercentageAuto::length(el.inset_left),
+    };
+    
+    if display == Display::Block && !has_content {
+        s.min_size = TaffySize { width: Dimension::auto(), height: Dimension::length(1.0) };
     }
     
     let (min_w, max_w) = mm(el.min_width, el.max_width);
     let (mut min_h, max_h) = mm(el.min_height, el.max_height);
     
-    if cd == Display::Block && !has_content {
-        if min_h.is_auto() { min_h = Dimension::length(1.0); }
+    if display == Display::Block && !has_content {
+        if min_h == Dimension::auto() { min_h = Dimension::length(1.0); }
     }
     
-    s.min_size = Size { width: min_w, height: min_h };
-    s.max_size = Size { width: max_w, height: max_h };
+    s.min_size = TaffySize { width: min_w, height: min_h };
+    s.max_size = TaffySize { width: max_w, height: max_h };
     
-    if cd == Display::Flex {
-        s.flex_direction = crate::bridge_gen::str_flex_direction_to_caelum(&el.flex_direction);
-        s.flex_wrap = crate::bridge_gen::str_flex_wrap_to_caelum(&el.flex_wrap);
-        s.justify_content = Some(crate::bridge_gen::str_justify_content_to_caelum(&el.justify_content));
-        s.align_items = Some(crate::bridge_gen::str_align_items_to_caelum(&el.align_items));
+    if display == Display::Flex {
+        s.flex_direction = match el.flex_direction.as_str() {
+            "row-reverse" => FlexDirection::RowReverse,
+            "column" => FlexDirection::Column,
+            "column-reverse" => FlexDirection::ColumnReverse,
+            _ => FlexDirection::Row,
+        };
+        s.flex_wrap = match el.flex_wrap.as_str() {
+            "wrap-reverse" => FlexWrap::WrapReverse,
+            "wrap" => FlexWrap::Wrap,
+            _ => FlexWrap::NoWrap,
+        };
+        s.justify_content = match el.justify_content.as_str() {
+            "center" => Some(JustifyContent::CENTER),
+            "flex-end" => Some(JustifyContent::FLEX_END),
+            "space-between" => Some(JustifyContent::SPACE_BETWEEN),
+            "space-around" => Some(JustifyContent::SPACE_AROUND),
+            "space-evenly" => Some(JustifyContent::SPACE_EVENLY),
+            _ => Some(JustifyContent::FLEX_START),
+        };
+        s.align_items = match el.align_items.as_str() {
+            "center" => Some(AlignItems::CENTER),
+            "flex-end" => Some(AlignItems::FLEX_END),
+            "baseline" => Some(AlignItems::BASELINE),
+            "stretch" => Some(AlignItems::STRETCH),
+            _ => Some(AlignItems::STRETCH),
+        };
     }
     s.flex_grow = el.flex_grow;
     s.flex_shrink = el.flex_shrink;
-    if let Some(basis) = el.flex_basis { s.flex_basis = Dimension::from_length(basis); }
+    if let Some(basis) = el.flex_basis { s.flex_basis = Dimension::length(basis); }
     s.box_sizing = match el.box_sizing.as_str() {
         "border-box" => BoxSizing::BorderBox,
         _ => BoxSizing::ContentBox,
     };
     if el.align_self != "auto" {
-        s.align_self = Some(crate::bridge_gen::str_align_self_to_caelum(&el.align_self));
+        s.align_self = match el.align_self.as_str() {
+            "center" => Some(AlignSelf::CENTER),
+            "flex-end" => Some(AlignSelf::FLEX_END),
+            "baseline" => Some(AlignSelf::BASELINE),
+            "stretch" => Some(AlignSelf::STRETCH),
+            _ => Some(AlignSelf::FLEX_START),
+        };
     }
-    plog!("ELSTYLE", "tag={:15} cd={:?} size={:?} min_size={:?} max_size={:?} align_self={:?} align_items={:?} box_sizing={:?}", el.tag, cd, s.size, s.min_size, s.max_size, s.align_self, s.align_items, s.box_sizing);
+    plog!("ELSTYLE", "tag={:15} cd={:?} size={:?} min_size={:?} max_size={:?} align_self={:?} align_items={:?} box_sizing={:?}", el.tag, display, s.size, s.min_size, s.max_size, s.align_self, s.align_items, s.box_sizing);
     Some(s)
 }
 
-pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
+pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
     if elements.is_empty() { return; }
 
-    // Fix 1: Pre-process to ensure proper parent-child relationships and filter invalid elements
     let valid_count = elements.iter().filter(|el| el.display != "none").count();
     if valid_count == 0 { return; }
 
-    // ponytail: estimate heights for text elements so Caelum can stack block elements correctly
     for el in elements.iter_mut() {
         if el.css_height.is_none() && el.display != "none" && !el.text.is_empty() {
             let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
@@ -148,32 +210,30 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         }
         if el.display == "inline" && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
             let fs = el.font_size.clamp(6.0, 200.0);
-            let cw = fs * CHAR_W_SCALE;
-            let text_w = text_visual_width(&el.text) as f32 * cw;
+            let text_w = measure_text_width(&el.text, fs);
             let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
             el.min_width = Some(text_w + pb);
         }
     }
 
-    let mut tree: CaelumTree = CaelumTree::new();
+    let mut tree: TaffyTree<()> = TaffyTree::new();
 
-    // Fix 2: Root container should use flex column for proper stacking of block elements
     let root_style = Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Column,
-        size: Size { width: Dimension::from_length(container_width), height: Dimension::auto() },
-        align_items: Some(crate::bridge_gen::str_align_items_to_caelum("stretch")),
+        size: TaffySize { width: Dimension::length(container_width), height: Dimension::auto() },
+        align_items: Some(AlignItems::STRETCH),
         ..Default::default()
     };
     let root_node = match tree.new_leaf(root_style) {
         Ok(n) => n,
-        Err(_) => { plog!("CAELUM", "Failed to create root leaf"); return; }
+        Err(_) => { plog!("TAFFY", "Failed to create root leaf"); return; }
     };
 
     let mut node_ids: Vec<Option<NodeId>> = vec![None; elements.len()];
 
     for (i, el) in elements.iter().enumerate() {
-        if let Some(style) = el_to_caelum_style(el) {
+        if let Some(style) = el_to_taffy_style(el) {
             if let Ok(nid) = tree.new_leaf(style) {
                 node_ids[i] = Some(nid);
             }
@@ -184,38 +244,43 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
         if elements[i].display == "none" { continue; }
         let child_id = match node_ids[i] { Some(id) => id, None => continue };
 
-        let (parent_nid, parent_idx): (NodeId, Option<usize>) = match elements[i].parent_index {
+        let parent_id = match elements[i].parent_index {
             Some(pidx) => {
                 if pidx < elements.len() && pidx != i {
-                    match node_ids[pidx] { 
-                        Some(id) => (id, Some(pidx)), 
-                        None => (root_node, None),
-                    }
-                } else { 
-                    (root_node, None)
-                }
+                    match node_ids[pidx] { Some(id) => id, None => root_node }
+                } else { root_node }
             }
-            None => (root_node, None),
+            None => root_node,
         };
 
-        if parent_nid != child_id {
-            if let Err(e) = tree.add_child(parent_nid, child_id) {
-                plog!("CAELUM", "add_child failed for element {}: {:?}", i, e);
+        if parent_id != child_id {
+            if let Err(e) = tree.add_child(parent_id, child_id) {
+                plog!("TAFFY", "add_child failed for element {}: {:?}", i, e);
             }
         }
-        if elements[i].parent_index != parent_idx {
-            elements[i].parent_index = parent_idx;
+    }
+
+    // Correct parent_index for elements whose original parent was invalid
+    // (display=none, out of bounds, or has no Taffy node) to prevent
+    // stale parent pointers from accumulating incorrect offsets.
+    for i in 0..elements.len() {
+        if elements[i].display == "none" { continue; }
+        if let Some(pidx) = elements[i].parent_index {
+            if pidx >= elements.len() || pidx == i
+                || elements[pidx].display == "none" || node_ids[pidx].is_none() {
+                elements[i].parent_index = None;
+            }
         }
     }
 
     if elements.len() > 0 {
-        if let Err(e) = tree.compute_layout(root_node, Size {
+        if let Err(e) = tree.compute_layout(root_node, TaffySize {
             width: AvailableSpace::Definite(container_width),
             height: AvailableSpace::Definite(viewport_h),
         }) {
-            plog!("CAELUM", "compute_layout failed: {:?}", e);
+            plog!("TAFFY", "compute_layout failed: {:?}", e);
         }
-        plog!("CAELUM", "Tree layout computed ({} nodes, viewport_h={})", node_ids.len(), viewport_h);
+        plog!("TAFFY", "Tree layout computed ({} nodes, viewport_h={})", node_ids.len(), viewport_h);
     }
 
     let mut abs_x: Vec<f32> = vec![0.0; elements.len()];
@@ -235,8 +300,6 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             heights[i] = if lh.is_finite() && lh >= 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
         }
     }
-    // Caelum returns positions relative to each node's parent.
-    // Accumulate full parent chain to produce absolute positions for rendering.
     let n = elements.len();
     for i in 0..n {
         let mut x = abs_x[i];
@@ -264,22 +327,20 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             .collect();
         if inline_children.is_empty() { continue; }
         let fs = if elements[i].font_size.is_finite() { elements[i].font_size.clamp(6.0, 200.0) } else { 16.0 };
-        let char_w = fs * CHAR_W_SCALE;
-        let mut cumulative = text_visual_width(&elements[i].text) as f32 * char_w;
+        let mut cumulative = measure_text_width(&elements[i].text, fs);
         for &child_idx in &inline_children {
             elements[child_idx].x = elements[i].x + cumulative;
-            if elements[child_idx].css_width.is_none() {
-                let child_text_w = text_visual_width(&elements[child_idx].text) as f32 * char_w;
+            let child_w = if elements[child_idx].css_width.is_some() {
+                elements[child_idx].width
+            } else {
+                let child_text_w = measure_text_width(&elements[child_idx].text, fs);
                 elements[child_idx].width = child_text_w.max(fs);
-            }
+                elements[child_idx].width
+            };
             if elements[child_idx].css_height.is_none() {
                 elements[child_idx].height = fs * elements[i].line_height.max(1.0);
             }
-            cumulative += if elements[child_idx].css_width.is_some() {
-                elements[child_idx].width
-            } else {
-                text_visual_width(&elements[child_idx].text) as f32 * char_w
-            };
+            cumulative += child_w;
         }
     }
 

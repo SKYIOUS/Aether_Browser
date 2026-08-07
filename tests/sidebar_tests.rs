@@ -1,4 +1,4 @@
-use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_caelum_layout};
+use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_taffy_layout};
 use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content};
 use vayu_browser::engine::net::normalize_url;
 use vayu_browser::engine::pipeline::StyledElement;
@@ -529,7 +529,7 @@ fn test_styled_element_clone() {
 #[test]
 fn test_layout_single_block_element() {
     let mut elements = vec![make_element("div", "Hello", "block")];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].x.is_finite());
     assert!(elements[0].y.is_finite());
     assert!(elements[0].width > 0.0);
@@ -542,7 +542,7 @@ fn test_layout_two_block_elements_stacked() {
         make_element("div", "Second", "block"),
     ];
     elements[1].parent_index = Some(0);
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= elements[0].y);
 }
 
@@ -555,7 +555,7 @@ fn test_layout_inline_elements_side_by_side() {
     ];
     elements[1].parent_index = Some(0);
     elements[2].parent_index = Some(0);
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].x >= elements[1].x);
 }
 
@@ -564,7 +564,7 @@ fn test_layout_hidden_element() {
     let mut el = make_element("div", "Hidden", "block");
     el.display = "none".to_string();
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     // hidden elements should have zero dimensions
     assert_eq!(elements[0].width, 0.0);
 }
@@ -577,7 +577,7 @@ fn test_layout_with_margin() {
     ];
     elements[1].parent_index = Some(0);
     elements[1].margin_top = 20.0;
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 20.0, "child y={} should be >= 20", elements[1].y);
 }
 
@@ -585,7 +585,7 @@ fn test_layout_with_margin() {
 fn test_layout_with_border() {
     let mut elements = vec![make_element("div", "Bordered", "block")];
     elements[0].border_widths = [5.0, 5.0, 5.0, 5.0];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].width >= 10.0); // at least left+right border
 }
 
@@ -837,13 +837,13 @@ fn test_csp_allows_self() {
 
 #[test]
 fn test_deep_nested_layout_positions() {
-    use vayu_browser::engine::pipeline::apply_caelum_layout;
+    use vayu_browser::engine::pipeline::apply_taffy_layout;
     let mut elements = vec![
         StyledElement { tag: "grandparent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
         StyledElement { tag: "parent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(0), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
         StyledElement { tag: "child".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(1), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     let child = &elements[2];
     let parent = &elements[1];
     let grandparent = &elements[0];
@@ -855,11 +855,11 @@ fn test_deep_nested_layout_positions() {
 
 #[test]
 fn test_inline_text_width_respected() {
-    use vayu_browser::engine::pipeline::apply_caelum_layout;
+    use vayu_browser::engine::pipeline::apply_taffy_layout;
     let mut elements = vec![
         StyledElement { tag: "span".into(), text: "hello world".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "inline".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     assert!(elements[0].width > 0.0, "inline element should have positive width");
     assert!(elements[0].width >= 800.0, "stretched block element should fill container width, got {}", elements[0].width);
 }

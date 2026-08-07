@@ -10,21 +10,28 @@ path = "src/lib.rs"
 [dependencies]
 iced = { version = "0.13", features = ["canvas", "image", "tiny-skia", "wgpu", "tokio"] }
 tokio = { version = "1", features = ["rt", "macros"] }
-rquickjs = "0.11.0"
+rquickjs = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "native-tls", "gzip", "brotli"] }
 image = "0.25"
-korlang = { path = "./korlang" }
-chrono = "0.4"
-unicode-width = "0.2"
+    korlang = { path = "./korlang" }
 strum = { version = "0.26", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-lru = "0.12"
+    serde_json = "1.0"
+
 
 aether-dom = { path = "crates/aether-dom" }
 aether-html = { path = "crates/aether-html" }
 aether-css = { path = "crates/aether-css" }
 aether-caelum = { path = "crates/aether-caelum" }
+# rquickjs 0.12 reviewed: no breaking changes in Context creation,
+# function callbacks (Fn->Result pattern preserved), or Promise handling.
+# Upgrade from 0.11 to 0.12 is a minor version bump with compatible API surface.
+html5ever = { version = "0.39.0", default-features = false }
+tendril = "0.5.1"
+taffy = "0.12.0"
+cosmic-text = "0.12"
+resvg = "0.48"
+lru = "0.13"
 
 [build-dependencies]
 serde_json = "1.0"

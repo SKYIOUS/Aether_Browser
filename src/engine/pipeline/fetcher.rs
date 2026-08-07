@@ -1,23 +1,24 @@
 use std::sync::{Arc, Mutex, OnceLock};
-use lru::LruCache;
 use std::num::NonZeroUsize;
-
 use iced::Color;
 use iced::widget::image::Handle;
 
 use crate::engine::dom::{Node, NodeType};
 use crate::engine::stratus::Stylesheet;
 use crate::engine::net;
-use crate::engine::parser::Parser;
 use crate::engine::js::{JsBridge, JSEngine};
 use crate::plog;
 
+use lru::LruCache;
+use resvg::usvg;
+use resvg::tiny_skia;
+
 use super::extractor::{extract_elements_flat, StyledElement};
-use super::layout::apply_caelum_layout;
+use super::layout::apply_taffy_layout;
 
 static CSS_CACHE: OnceLock<Mutex<LruCache<String, Stylesheet>>> = OnceLock::new();
 fn css_cache() -> &'static Mutex<LruCache<String, Stylesheet>> {
-    CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).expect("Invalid NonZeroUsize value"))))
+    CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
 }
 
 fn extract_styles(node: &Node, styles: &mut Vec<String>) {
@@ -164,8 +165,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
         html
     };
 
-    let mut parser = Parser::new(html);
-    let dom_node = parser.parse_node();
+    let dom_node = crate::engine::parser::parse_html(&html);
     plog!("PARSE", "DOM root has {} children", dom_node.children.len());
 
     let mut styles = Vec::new();
@@ -296,7 +296,9 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     elements.truncate(2000);
 
     // ponytail: per-page decoded image LRU, max 50 entries
-    let mut img_cache: LruCache<String, (f32, f32, Handle)> = LruCache::new(NonZeroUsize::new(50).expect("Invalid NonZeroUsize value"));
+    let mut img_cache: LruCache<String, (f32, f32, Handle)> = LruCache::new(NonZeroUsize::new(50).unwrap());
+    let mut decoded_img_bytes: u64 = 0;
+    let max_page_img_bytes: u64 = 256 * 1024 * 1024; // 256MB page-level budget
     let mut img_count = 0;
     for el in elements.iter_mut() {
         if let Some(ref img_src) = el.image_url.clone() {
@@ -306,10 +308,10 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
                 continue;
             }
             img_count += 1;
-            if let Some((w, h, handle)) = img_cache.get(&resolved) {
-                el.width = *w;
-                el.height = *h;
-                el.image_handle = Some(handle.clone());
+            if let Some((w, hh, hnd)) = img_cache.get(&resolved).map(|(w, h, h2)| (*w, *h, h2.clone())) {
+                el.width = w;
+                el.height = hh;
+                el.image_handle = Some(hnd);
                 continue;
             }
             let bytes = match net::fetch_bytes(&resolved) {
@@ -323,9 +325,81 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
                 plog!("IMAGES", "Image too large ({} bytes), skipping decode", bytes.len());
                 continue;
             }
-            if let Ok(img) = image::load_from_memory(&bytes) {
+            if is_svg_bytes(&bytes) {
+                if let Some(rgba) = decode_svg(&bytes) {
+                    let (w, h) = rgba.dimensions();
+                    let decoded_bytes = w as u64 * h as u64 * 4;
+                    if decoded_bytes > SVG_MAX_BYTES {
+                        plog!("IMAGES", "SVG decoded size too large ({} bytes), skipping", decoded_bytes);
+                        continue;
+                    }
+                    decoded_img_bytes += decoded_bytes;
+                    if decoded_img_bytes > max_page_img_bytes {
+                        plog!("IMAGES", "Page image budget exceeded ({} bytes), skipping remaining", decoded_img_bytes);
+                        break;
+                    }
+                    let max_dim = 800.0;
+                    let scale = if (w as f32).max(h as f32) > max_dim {
+                        max_dim / (w as f32).max(h as f32)
+                    } else {
+                        1.0
+                    };
+                    let (fw, fh, handle) = if scale < 1.0 {
+                        let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
+                        let (rw, rh) = resized.dimensions();
+                        (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
+                    } else {
+                        (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
+                    };
+                    el.width = fw;
+                    el.height = fh;
+                    el.image_handle = Some(handle.clone());
+                    img_cache.put(resolved, (fw, fh, handle));
+                } else {
+                    plog!("IMAGES", "Failed to decode SVG ({} bytes), trying raster fallback", bytes.len());
+                    if let Ok(img) = image::load_from_memory(&bytes) {
+                        let rgba = img.to_rgba8();
+                        let (w, h) = rgba.dimensions();
+                        let decoded_bytes = w as u64 * h as u64 * 4;
+                        if decoded_bytes <= SVG_MAX_BYTES && decoded_img_bytes + decoded_bytes <= max_page_img_bytes {
+                            decoded_img_bytes += decoded_bytes;
+                            let max_dim = 800.0;
+                            let scale = if (w as f32).max(h as f32) > max_dim {
+                                max_dim / (w as f32).max(h as f32)
+                            } else {
+                                1.0
+                            };
+                            let (fw, fh, handle) = if scale < 1.0 {
+                                let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
+                                let (rw, rh) = resized.dimensions();
+                                (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
+                            } else {
+                                (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
+                            };
+                            el.width = fw;
+                            el.height = fh;
+                            el.image_handle = Some(handle.clone());
+                            img_cache.put(resolved, (fw, fh, handle));
+                        } else {
+                            plog!("IMAGES", "Raster fallback size too large, skipping");
+                        }
+                    } else {
+                        plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
+                    }
+                }
+            } else if let Ok(img) = image::load_from_memory(&bytes) {
                 let rgba = img.to_rgba8();
                 let (w, h) = rgba.dimensions();
+                let decoded_bytes = w as u64 * h as u64 * 4;
+                if decoded_bytes > SVG_MAX_BYTES {
+                    plog!("IMAGES", "Raster decoded size too large ({} bytes), skipping", decoded_bytes);
+                    continue;
+                }
+                decoded_img_bytes += decoded_bytes;
+                if decoded_img_bytes > max_page_img_bytes {
+                    plog!("IMAGES", "Page image budget exceeded ({} bytes), skipping remaining", decoded_img_bytes);
+                    break;
+                }
                 let max_dim = 800.0;
                 let scale = if (w as f32).max(h as f32) > max_dim {
                     max_dim / (w as f32).max(h as f32)
@@ -350,12 +424,72 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     }
     plog!("IMAGES", "Loaded {} images", img_count);
 
-    apply_caelum_layout(&mut elements, content_width, viewport_h);
+    apply_taffy_layout(&mut elements, content_width, viewport_h);
     plog!("CAELUM", "Layout computed for {} elements", elements.len());
 
     plog!("FINAL", "Done. URL={} elements={}", url, elements.len());
 
-    // ponytail: one engine per page-load script batch; dropped here, timer/event engine created on main thread in PageLoaded
     (url, elements, Some(bridge))
+}
+
+fn is_svg_bytes(bytes: &[u8]) -> bool {
+    let mut pos = 0;
+    if bytes.starts_with(b"\xef\xbb\xbf") {
+        pos += 3;
+    }
+    if bytes[pos..].starts_with(b"<?xml") {
+        if let Some(xml_end) = bytes[pos..].iter().position(|&b| b == b'>') {
+            pos += xml_end + 1;
+        }
+    }
+    while pos < bytes.len() && matches!(bytes[pos], b' ' | b'\t' | b'\n' | b'\r') {
+        pos += 1;
+    }
+     bytes[pos..].starts_with(b"<svg") || bytes[pos..].starts_with(b"<SVG")
+}
+
+const SVG_MAX_DIM: u32 = 4096;
+const SVG_MAX_BYTES: u64 = 67_108_864; // 64MB = 4096*4096*4
+const SVG_RENDER_TIMEOUT_MS: u64 = 5_000;
+
+fn decode_svg(bytes: &[u8]) -> Option<image::RgbaImage> {
+    let (tx, rx) = std::sync::mpsc::channel::<Option<image::RgbaImage>>();
+    let bytes_owned: Vec<u8> = bytes.to_vec();
+    std::thread::spawn(move || {
+        tx.send(decode_svg_inner(&bytes_owned)).ok();
+    });
+    match rx.recv_timeout(std::time::Duration::from_millis(SVG_RENDER_TIMEOUT_MS)) {
+        Ok(result) => result,
+        Err(_) => {
+            plog!("SVG", "SVG render timed out (>{})ms, skipping", SVG_RENDER_TIMEOUT_MS);
+            None
+        }
+    }
+}
+
+fn decode_svg_inner(bytes: &[u8]) -> Option<image::RgbaImage> {
+    let font_db = svg_font_db().clone();
+    let options = usvg::Options {
+        fontdb: std::sync::Arc::new(font_db),
+        ..Default::default()
+    };
+    let tree = usvg::Tree::from_data(bytes, &options).ok()?;
+    let size = tree.size().to_int_size();
+    let w = size.width().clamp(1, SVG_MAX_DIM);
+    let h = size.height().clamp(1, SVG_MAX_DIM);
+    let mut pixmap = tiny_skia::Pixmap::new(w, h)?;
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    let rgba = pixmap.data().to_vec();
+    image::RgbaImage::from_raw(w, h, rgba)
+}
+
+static SVG_FONT_DB: std::sync::OnceLock<usvg::fontdb::Database> = std::sync::OnceLock::new();
+
+fn svg_font_db() -> &'static usvg::fontdb::Database {
+    SVG_FONT_DB.get_or_init(|| {
+        let mut db = usvg::fontdb::Database::new();
+        db.load_system_fonts();
+        db
+    })
 }
 

@@ -1,38 +1,45 @@
-use vayu_browser::engine::parser::Parser;
+use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::dom::NodeType;
 
 #[test]
 fn test_parsing_div_with_paragraph() {
     let html = String::from("<div><p>Hello, world!</p></div>");
-    let mut parser = Parser::new(html);
-    let doc = parser.parse_node();
+    let doc = parse_html(&html);
 
-    assert!(matches!(doc.node_type, NodeType::Element(_)));
-    assert_eq!(doc.tag_name(), Some("div"));
-    assert_eq!(doc.children.len(), 1);
+    assert!(matches!(doc.node_type, NodeType::Document));
+    let html_elem = doc.children.iter().find(|c| c.tag_name() == Some("html")).expect("should find html");
+    let body = html_elem.children.iter().find(|c| c.tag_name() == Some("body")).expect("should find body");
+    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
+    
+    assert!(matches!(div.node_type, NodeType::Element(_)));
+    assert_eq!(div.tag_name(), Some("div"));
+    assert_eq!(div.children.len(), 1);
 
-    let p = &doc.children[0];
+    let p = &div.children[0];
     assert!(matches!(p.node_type, NodeType::Element(_)));
     assert_eq!(p.tag_name(), Some("p"));
     assert_eq!(p.children.len(), 1);
     assert!(matches!(p.children[0].node_type, NodeType::Text(_)));
 
-    let text = doc.text_content();
+    let text = div.text_content();
     assert_eq!(text, "Hello, world!");
 }
 
 #[test]
 fn test_parsing_multiple_elements() {
     let html = String::from("<div><h1>Title</h1><p>Content here.</p></div>");
-    let mut parser = Parser::new(html);
-    let doc = parser.parse_node();
+    let doc = parse_html(&html);
 
-    assert_eq!(doc.tag_name(), Some("div"));
-    assert_eq!(doc.children.len(), 2);
-    assert_eq!(doc.children[0].tag_name(), Some("h1"));
-    assert_eq!(doc.children[1].tag_name(), Some("p"));
+    let html_elem = doc.children.iter().find(|c| c.tag_name() == Some("html")).expect("should find html");
+    let body = html_elem.children.iter().find(|c| c.tag_name() == Some("body")).expect("should find body");
+    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
+    
+    assert_eq!(div.tag_name(), Some("div"));
+    assert_eq!(div.children.len(), 2);
+    assert_eq!(div.children[0].tag_name(), Some("h1"));
+    assert_eq!(div.children[1].tag_name(), Some("p"));
 
-    let text = doc.text_content();
+    let text = div.text_content();
     assert!(text.contains("Title"));
     assert!(text.contains("Content here."));
 }
@@ -49,10 +56,10 @@ fn test_should_skip_tag_filters() {
 
 #[test]
 fn test_extract_and_layout_pipeline() {
-    use vayu_browser::engine::parser::Parser;
+    use vayu_browser::engine::parser::parse_html;
     use vayu_browser::engine::stratus;
     use vayu_browser::engine::pipeline::extractor::extract_elements;
-    use vayu_browser::engine::pipeline::layout::apply_caelum_layout;
+    use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 
     let html = r#"
         <div class="container">
@@ -67,8 +74,7 @@ fn test_extract_and_layout_pipeline() {
         .highlight { color: red; font-weight: bold; }
     "#.to_string();
 
-    let mut parser = Parser::new(html);
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let stylesheet = stratus::parse(&css);
 
     let mut elements = Vec::new();
@@ -92,7 +98,7 @@ fn test_extract_and_layout_pipeline() {
     assert_eq!(highlight.font_weight, "bold");
 
     let max_el = elements.len().min(2000);
-    apply_caelum_layout(&mut elements[..max_el], 800.0, 600.0);
+    apply_taffy_layout(&mut elements[..max_el], 800.0, 600.0);
 
     let container = elements.iter().find(|e| e.tag == "div").unwrap();
     assert!(container.width > 0.0, "container should have width");

@@ -4,6 +4,7 @@ pub mod korlang;
 pub mod net;
 pub mod parser;
 pub mod style;
+pub mod text;
 
 pub mod stratus;
 

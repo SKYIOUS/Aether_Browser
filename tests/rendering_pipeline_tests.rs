@@ -5,8 +5,8 @@ use vayu_browser::engine::stratus::{
 use vayu_browser::engine::pipeline::extractor::{
     should_skip_tag, should_skip_content, extract_elements, StyledElement, decode_html_entities,
 };
-use vayu_browser::engine::pipeline::layout::apply_caelum_layout;
-use vayu_browser::engine::parser::Parser;
+use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
+use vayu_browser::engine::parser::parse_html;
 
 fn resolve(css: &str, tag: &str) -> ComputedStyle {
     let sheet = stratus::parse(css);
@@ -231,8 +231,7 @@ fn test_no_skip_a() {
 #[test]
 fn test_extract_elements_from_simple_html() {
     let html = r#"<div><p>Hello</p></div>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -242,8 +241,7 @@ fn test_extract_elements_from_simple_html() {
 #[test]
 fn test_extract_elements_no_script_content() {
     let html = r#"<div><script>var x=1;</script><p>visible</p></div>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -253,8 +251,7 @@ fn test_extract_elements_no_script_content() {
 #[test]
 fn test_extract_elements_script_content_skipped() {
     let html = r#"<div><script>alert('xss')</script><p>safe</p></div>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -265,8 +262,7 @@ fn test_extract_elements_script_content_skipped() {
 #[test]
 fn test_extract_elements_head_content_hidden() {
     let html = r#"<html><head><title>T</title></head><body><p>body</p></body></html>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -285,7 +281,7 @@ fn test_block_elements_stack_vertically() {
         make_test("h1", "Title", "block", Some(0)),
         make_test("p", "Paragraph", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y > elements[1].y, "p.y={} should be > h1.y={}", elements[2].y, elements[1].y);
 }
 
@@ -295,7 +291,7 @@ fn test_block_elements_have_width() {
         make_test("div", "", "block", None),
         make_test("p", "Hello", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0, "p should have width");
 }
 
@@ -305,7 +301,7 @@ fn test_block_elements_have_height() {
         make_test("div", "", "block", None),
         make_test("p", "Hello", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].height > 0.0, "p should have height from text");
 }
 
@@ -316,7 +312,7 @@ fn test_nested_block_elements() {
         make_test("div", "", "block", Some(0)),
         make_test("p", "Nested", "block", Some(1)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y >= elements[1].y, "nested p should be below parent div");
 }
 
@@ -328,7 +324,7 @@ fn test_multiple_siblings_stacked() {
         make_test("p", "Two", "block", Some(0)),
         make_test("p", "Three", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y > elements[1].y, "second p below first");
     assert!(elements[3].y > elements[2].y, "third p below second");
 }
@@ -341,7 +337,7 @@ fn test_block_with_margin_top() {
     let mut el = make_test("p", "Hello", "block", Some(0));
     el.margin_top = 20.0;
     let mut elements = vec![parent, el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 19.0, "p.y={} should be >= 20 (with padding)", elements[1].y);
 }
 
@@ -356,7 +352,7 @@ fn test_inline_siblings_flow_horizontally() {
         make_test("span", "Hello", "inline", Some(0)),
         make_test("span", "World", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].x >= elements[1].x, "second span x={} >= first span x={}", elements[2].x, elements[1].x);
 }
 
@@ -366,7 +362,7 @@ fn test_inline_in_block() {
         make_test("div", "", "block", None),
         make_test("span", "Hi", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].x >= 0.0);
     assert!(elements[1].width > 0.0);
 }
@@ -377,7 +373,7 @@ fn test_inline_wraps_when_long() {
         make_test("div", "", "block", None),
         make_test("span", "AAAAAAAAAA BBBBBBBBBB CCCCCCCCCC DDDDDDDDDD", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 200.0, 600.0);
+    apply_taffy_layout(&mut elements, 200.0, 600.0);
     assert!(elements[1].height > elements[1].font_size, "long text should wrap to multiple lines");
 }
 
@@ -389,7 +385,7 @@ fn test_inline_mixed_with_block() {
         make_test("p", "Block", "block", Some(0)),
         make_test("span", "World", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     for el in &elements {
         assert!(el.x.is_finite() && el.y.is_finite());
     }
@@ -404,7 +400,7 @@ fn test_inline_block_element() {
         make_test("div", "", "block", None),
         el,
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0);
 }
 
@@ -416,7 +412,7 @@ fn test_multiple_inline_spans() {
         make_test("span", "B", "inline", Some(0)),
         make_test("span", "C", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[3].x >= elements[2].x);
     assert!(elements[2].x >= elements[1].x);
 }
@@ -437,7 +433,7 @@ fn test_flex_row_direction() {
         make_test("span", "A", "flex", Some(0)),
         make_test("span", "B", "flex", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].x >= elements[1].x, "flex row: B.x={} >= A.x={}", elements[2].x, elements[1].x);
 }
 
@@ -453,7 +449,7 @@ fn test_flex_column_direction() {
         make_test("p", "First", "flex", Some(0)),
         make_test("p", "Second", "flex", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y > elements[1].y, "flex col: Second.y={} > First.y={}", elements[2].y, elements[1].y);
 }
 
@@ -468,7 +464,7 @@ fn test_flex_justify_center() {
         },
         make_test("span", "X", "flex", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].x > 0.0, "flex centered child should not be at x=0");
 }
 
@@ -483,7 +479,7 @@ fn test_flex_align_items_center() {
         },
         make_test("span", "X", "flex", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y > 0.0, "flex aligned child should not be at y=0");
 }
 
@@ -500,7 +496,7 @@ fn test_flex_wrap_nowrap() {
         make_test("span", "BBBB", "flex", Some(0)),
         make_test("span", "CCCC", "flex", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     for el in &elements[1..] {
         assert!(el.x.is_finite() && el.y.is_finite());
     }
@@ -520,7 +516,7 @@ fn test_flex_grow() {
         },
         el_a, el_b,
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0);
     assert!(elements[2].width > 0.0);
 }
@@ -530,7 +526,7 @@ fn test_flex_column_stretch_empty_block_child() {
     let mut elements = vec![
         make_test("div", "", "block", None),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     println!("Empty block child: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
     assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
 }
@@ -541,7 +537,7 @@ fn test_flex_column_stretch_empty_block_child_with_sibling() {
         make_test("div", "", "block", None),
         make_test("p", "Hello", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     println!("Empty block: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
     println!("P element: x={:.1} y={:.1} w={:.1} h={:.1}", elements[1].x, elements[1].y, elements[1].width, elements[1].height);
     assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
@@ -569,7 +565,7 @@ fn test_grid_children_in_grid_container() {
         make_test("div", "A", "block", Some(0)),
         make_test("div", "B", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     for el in &elements {
         assert!(el.x.is_finite() && el.y.is_finite());
     }
@@ -587,7 +583,7 @@ fn test_grid_single_column() {
         make_test("div", "2", "block", Some(0)),
         make_test("div", "3", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[3].y >= elements[2].y);
     assert!(elements[2].y >= elements[1].y);
 }
@@ -602,7 +598,7 @@ fn test_grid_item_sizes() {
         },
         make_test("div", "Cell", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0);
     assert!(elements[1].height > 0.0);
 }
@@ -616,7 +612,7 @@ fn test_grid_empty_container() {
             ..make_test("div", "", "grid", None)
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].width > 0.0);
 }
 
@@ -634,7 +630,7 @@ fn test_float_left_element() {
         el,
         make_test("p", "Content beside float", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].x >= 0.0);
     assert!(elements[2].x >= 0.0);
 }
@@ -649,7 +645,7 @@ fn test_float_right_element() {
         el,
         make_test("p", "Content", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     for el in &elements {
         assert!(el.x.is_finite() && el.y.is_finite());
     }
@@ -662,7 +658,7 @@ fn test_float_does_not_affect_siblings_positioning() {
         make_test("p", "First", "block", Some(0)),
         make_test("p", "Second", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y > elements[1].y, "non-floated siblings should stack vertically");
 }
 
@@ -672,7 +668,7 @@ fn test_clear_both() {
         make_test("div", "", "block", None),
         make_test("p", "After clear", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 0.0);
 }
 
@@ -689,7 +685,7 @@ fn test_multiple_floats() {
         el1, el2,
         make_test("p", "After", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     for el in &elements {
         assert!(el.x.is_finite() && el.y.is_finite());
     }
@@ -707,7 +703,7 @@ fn test_margin_top_on_first_element() {
     let mut el = make_test("p", "Hello", "block", Some(0));
     el.margin_top = 30.0;
     let mut elements = vec![parent, el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 29.0, "p.y={} should be >= margin_top=30 (with padding)", elements[1].y);
 }
 
@@ -718,7 +714,7 @@ fn test_margin_bottom_spacing() {
     let mut el2 = make_test("p", "Second", "block", None);
     el2.margin_top = 10.0;
     let mut elements = vec![el1, el2];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     let gap = elements[1].y - (elements[0].y + elements[0].height);
     assert!(gap >= 10.0, "gap between elements should be at least 10, got {}", gap);
 }
@@ -729,7 +725,7 @@ fn test_zero_margins() {
         make_test("p", "A", "block", None),
         make_test("p", "B", "block", None),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= elements[0].y + elements[0].height - 1.0);
 }
 
@@ -741,7 +737,7 @@ fn test_large_margin_top() {
     let mut el = make_test("p", "Spaced", "block", Some(0));
     el.margin_top = 100.0;
     let mut elements = vec![parent, el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 99.0, "p.y={} should be >= 100 (with padding)", elements[1].y);
 }
 
@@ -754,7 +750,7 @@ fn test_margins_on_nested_elements() {
             ..make_test("p", "Nested", "block", Some(0))
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].y >= 20.0, "nested p y={} should be >= 20", elements[1].y);
 }
 
@@ -770,7 +766,7 @@ fn test_border_widths_applied() {
             ..make_test("div", "Bordered", "block", None)
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].border_widths[0] == 2.0);
 }
 
@@ -781,7 +777,7 @@ fn test_padding_affects_size() {
     el.css_width = Some(200.0);
     el.css_height = Some(100.0);
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].width >= 200.0);
 }
 
@@ -791,7 +787,7 @@ fn test_border_color_set() {
     el.border_color = Some(iced::Color::from_rgb(1.0, 0.0, 0.0));
     el.border_widths = [1.0, 1.0, 1.0, 1.0];
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].border_color.is_some());
 }
 
@@ -800,7 +796,7 @@ fn test_no_border_no_padding() {
     let mut elements = vec![
         make_test("p", "Clean", "block", None),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert_eq!(elements[0].border_widths, [0.0; 4]);
     assert_eq!(elements[0].padding, [0.0; 4]);
 }
@@ -811,7 +807,7 @@ fn test_element_positioning_with_padding() {
     el.padding = [5.0, 5.0, 5.0, 5.0];
     el.css_width = Some(200.0);
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].x >= 0.0);
     assert!(elements[0].y >= 0.0);
 }
@@ -823,14 +819,14 @@ fn test_element_positioning_with_padding() {
 #[test]
 fn test_empty_elements_vec() {
     let mut elements: Vec<StyledElement> = vec![];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements.is_empty());
 }
 
 #[test]
 fn test_single_element() {
     let mut elements = vec![make_test("div", "Solo", "block", None)];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].width > 0.0);
 }
 
@@ -838,7 +834,7 @@ fn test_single_element() {
 fn test_display_none_elements_ignored() {
     let el = make_test("div", "Hidden", "none", None);
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert_eq!(elements[0].display, "none");
 }
 
@@ -848,7 +844,7 @@ fn test_very_narrow_container() {
         make_test("div", "", "block", None),
         make_test("p", "Hello World", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 50.0, 600.0);
+    apply_taffy_layout(&mut elements, 50.0, 600.0);
     assert!(elements[1].height > elements[1].font_size, "text should wrap in narrow container");
 }
 
@@ -858,7 +854,7 @@ fn test_very_wide_container() {
         make_test("div", "", "block", None),
         make_test("p", "Hello", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 5000.0, 600.0);
+    apply_taffy_layout(&mut elements, 5000.0, 600.0);
     assert!(elements[1].width > 0.0);
 }
 
@@ -868,7 +864,7 @@ fn test_long_text_wrapping() {
         make_test("div", "", "block", None),
         make_test("p", "This is a very long paragraph that should wrap across multiple lines when rendered in a constrained width container", "block", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 300.0, 600.0);
+    apply_taffy_layout(&mut elements, 300.0, 600.0);
     assert!(elements[1].height > elements[1].font_size);
 }
 
@@ -878,7 +874,7 @@ fn test_elements_with_image_dimensions() {
     el.css_width = Some(300.0);
     el.css_height = Some(200.0);
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert_eq!(elements[0].width, 300.0);
     assert_eq!(elements[0].height, 200.0);
 }
@@ -889,7 +885,7 @@ fn test_link_element_preserves_href() {
     el.is_link = true;
     el.href = Some("https://example.com".to_string());
     let mut elements = vec![el];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].is_link);
     assert_eq!(elements[0].href.as_deref(), Some("https://example.com"));
 }
@@ -901,7 +897,7 @@ fn test_multiple_parent_levels() {
         make_test("div", "", "block", Some(0)),
         make_test("p", "Deep", "block", Some(1)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[2].y >= elements[1].y);
     assert!(elements[1].y >= elements[0].y);
 }
@@ -913,7 +909,7 @@ fn test_font_size_affects_height() {
     let mut el_large = make_test("p", "Large", "block", None);
     el_large.font_size = 32.0;
     let mut elements = vec![el_small, el_large];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].height > elements[0].height, "larger font should produce taller element");
 }
 
@@ -984,8 +980,7 @@ fn test_decode_mixed_text() {
 #[test]
 fn test_decode_in_extracted_text() {
     let html = r#"<p>hello &amp; goodbye</p>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -996,8 +991,7 @@ fn test_decode_in_extracted_text() {
 #[test]
 fn test_decode_href_attribute() {
     let html = r#"<a href="https://example.com?a=1&amp;b=2">link</a>"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -1008,8 +1002,7 @@ fn test_decode_href_attribute() {
 #[test]
 fn test_decode_alt_attribute() {
     let html = r#"<img src="x.png" alt="photo &amp; picture">"#;
-    let mut parser = Parser::new(html.to_string());
-    let dom = parser.parse_node();
+    let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
@@ -1023,7 +1016,7 @@ fn test_inline_child_offset_prevents_overlap() {
         make_test("p", "Hello", "block", None),
         make_test("a", "world", "inline", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 600.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     let parent = &elements[0];
     let child = &elements[1];
     assert!(child.x > parent.x + 1.0,

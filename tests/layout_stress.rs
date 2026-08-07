@@ -1,4 +1,4 @@
-use vayu_browser::engine::pipeline::{apply_caelum_layout, StyledElement};
+use vayu_browser::engine::pipeline::{apply_taffy_layout, StyledElement};
 use iced::Color;
 use iced::widget::image::Handle;
 
@@ -73,7 +73,7 @@ fn check_positions(elements: &[StyledElement]) {
 #[test]
 fn single_block_element() {
     let mut elements = vec![make_el("div", None)];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     assert_eq!(elements[0].x, 0.0);
     assert_eq!(elements[0].y, 0.0);
@@ -85,7 +85,7 @@ fn two_blocks_parent_child() {
         make_el("div", None),
         make_el("p", Some(0)),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     assert!(elements[1].x >= 0.0);
     assert!(elements[1].y >= 0.0);
@@ -97,7 +97,7 @@ fn thousand_flat_elements() {
     for _ in 0..999 {
         elements.push(make_el("div", Some(0)));
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -110,7 +110,7 @@ fn thousand_inline_siblings() {
         el.text = format!("item{}", i);
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -120,7 +120,7 @@ fn deep_nesting_50() {
     for i in 0..50 {
         elements.push(make_el("div", Some(i)));
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -130,7 +130,7 @@ fn deep_nesting_100() {
     for i in 0..100 {
         elements.push(make_el("div", Some(i)));
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -146,7 +146,7 @@ fn mixed_inline_block() {
         }
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -160,7 +160,7 @@ fn large_text_elements() {
         el.text = long_text.clone();
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -179,7 +179,7 @@ fn all_display_types() {
         }
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
@@ -193,7 +193,7 @@ fn margins_affect_layout() {
         el.css_height = Some(30.0);
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     for i in 2..elements.len() {
         assert!(
@@ -219,7 +219,7 @@ fn padding_contains_children() {
             ..make_el("child", Some(0))
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     let child = &elements[1];
     let parent = &elements[0];
@@ -245,14 +245,14 @@ fn borders_no_crash() {
             ..make_el("child", Some(0))
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
 }
 
 #[test]
 fn empty_slice_no_panic() {
     let mut elements: Vec<StyledElement> = vec![];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn wide_container() {
         el.css_height = Some(20.0);
         elements.push(el);
     }
-    apply_caelum_layout(&mut elements, 2000.0, 6000.0);
+    apply_taffy_layout(&mut elements, 2000.0, 6000.0);
     check_positions(&elements);
     for el in &elements {
         assert!(el.width <= 2000.0, "width {} exceeds container {}", el.width, 2000.0);
@@ -277,7 +277,7 @@ fn nested_position_accumulation_child_before_parent() {
         make_el("child", Some(1)),
         make_el("parent", None),
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     let child = &elements[0];
     let parent = &elements[1];
@@ -295,7 +295,7 @@ fn image_element_has_content() {
             ..make_el("img", None)
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     assert!(elements[0].height > 1.0, "image should not have minimum 1px height, got {}", elements[0].height);
 }
@@ -309,7 +309,7 @@ fn parent_expands_to_contain_children() {
             ..make_el("child", Some(0))
         },
     ];
-    apply_caelum_layout(&mut elements, 800.0, 6000.0);
+    apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     let parent = &elements[0];
     let child = &elements[1];
