@@ -220,8 +220,16 @@ pub fn apply_caelum_layout(elements: &mut [StyledElement], container_width: f32,
             heights[i] = if lh.is_finite() && lh > 0.0 { lh } else { el.css_height.unwrap_or(0.0) };
         }
     }
-    // Fix: Remove double-addition of parent positions - Caelum already returns absolute positions
-    // The previous code was adding parent positions again, causing elements to be offset incorrectly
+    // Accumulate parent coordinates to make layout locations absolute, since Caelum returns positions relative to the parent.
+    // Since tree/elements are ordered top-down, parent_index is always < child index.
+    for i in 0..elements.len() {
+        if let Some(pidx) = elements[i].parent_index {
+            if pidx < i {
+                abs_x[i] += abs_x[pidx];
+                abs_y[i] += abs_y[pidx];
+            }
+        }
+    }
     for (i, el) in elements.iter_mut().enumerate() {
         el.x = abs_x[i];
         el.y = abs_y[i];
