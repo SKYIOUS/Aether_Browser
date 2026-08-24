@@ -28,8 +28,9 @@ invalidates a statement in these docs updates them in the same commit.
    no comment churn, no reformatting of untouched lines. Exception: deleting
    what your own change made redundant is in scope (Operating protocol §3) —
    anything else outside the named task is drift.
-3. **Root cause, not symptom.** Before editing a function, find every caller.
-   Fix at the shared choke point once — not per-caller guards.
+3. **Root cause, not symptom.** Before changing a function's behavior or
+   contract, find every caller. Fix at the shared choke point once — not
+   per-caller guards.
 4. **Files normally stay under 1000 lines.** Crossing means extract a
    submodule — unless extraction would worsen cohesion, which requires a
    documented reason naming why (commit message or ADR).
@@ -42,14 +43,19 @@ invalidates a statement in these docs updates them in the same commit.
    `CONTEXT.md`. No second vocabulary.
 7. **Comments carry why, not what.** Deliberate ceilings get a
    `ponytail:` marker naming the ceiling and upgrade path.
+8. **Security boundaries are explicit.** Page-controlled content must never
+   reach browser UI state, Korlang, filesystem APIs, privileged host
+   capabilities, or other-origin data except through an explicitly reviewed
+   bridge with an enforced policy and negative-path tests.
 
 ## Operating protocol (how every task runs)
 1. **Skills before action.** Invoke matching skills BEFORE responding,
    exploring, or asking clarifying questions — when available in the
    environment. Process skills first (brainstorming / systematic-debugging /
-   grill-\*), implementation skills second. If a skill proves wrong mid-task,
-   say so and drop it explicitly. No matching skill exists → proceed under
-   this contract and note that.
+   grill-\*), implementation skills second. If a prescribed skill is found
+   inapplicable or incorrect, stop using it and record the reason in the task
+   evidence. No matching skill exists → proceed under this contract and note
+   that.
 2. **Codebase Memory MCP always, with a fallback.** The graph is the map of
    record:
    - Before editing any symbol → `search_graph` / `get_code_snippet` it.
@@ -80,11 +86,13 @@ invalidates a statement in these docs updates them in the same commit.
    - Independent subtasks run as parallel subagent dispatches — each with
      disjoint file scopes stated upfront; overlapping scopes serialize.
      Reviewers are read-only: they report findings, they do not edit.
-5. **The loop never stops.** Every task runs PLAN → DO → CHECK in continuous
-   cycles: plan the slice (todo list), implement it, run its tests, feed the
-   results into the next slice's plan. Stopping between loops is how half-done
-   work ships; a task is done only when a full loop closes with green
-   evidence and prove/prune/re-check complete.
+5. **The loop never stops.** Every **implementation-changing** task runs
+   PLAN → DO → CHECK in continuous cycles: plan the slice (todo list),
+   implement it, run its tests, feed the results into the next slice's plan.
+   Investigation, review, and documentation tasks use the appropriate subset
+   of the loop but must still close with evidence. Stopping between loops is
+   how half-done work ships; a task is done only when a full loop closes with
+   green evidence and prove/prune/re-check complete.
 
 ## Test-first mandate
 1. **Failing test first** for any testable behavior change or bugfix:
@@ -108,7 +116,8 @@ invalidates a statement in these docs updates them in the same commit.
 3. **No placeholders.** No stubs "for later"; no TODO/FIXME without a matching
    PLAN.md or issues.md row naming who/when.
 4. **Never invent APIs, flags, or dependencies.** Verify against real source
-   (codebase memory MCP) or official docs (webfetch) before first use.
+   (codebase memory MCP) or authoritative upstream documentation before first
+   use.
 5. **Errors are handled, never swallowed.** No silent `.ok()` on data paths,
    no catch-log-continue where state matters.
 6. **No scope drift.** Renames, reformats, comment edits outside the named
@@ -121,8 +130,9 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status (verified 2026-08-24): 444 tests green; CI gates fmt/clippy/test on
-  Linux+Windows+macOS (`.github/workflows/ci.yml`)
+- Status baseline (verified 2026-08-24): 444 tests green; CI gates
+  fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
+  Refresh this figure whenever the suite changes materially.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
   change ship in the same commit (Doc discipline above). Branches: short-lived
@@ -134,14 +144,19 @@ Rust, edition 2021. Entry: `src/main.rs` → `src/lib.rs` → `src/ui/mod.rs`
 plus planned `crates/aether-js` (ADR-0003). UI is Iced 0.13 (canvas/image/
 tiny-skia/wgpu/tokio), theme forced Light.
 
+Architecture status legend: **CURRENT** = exists, authoritative ·
+**INTERIM** = use only within existing boundaries, replacement planned ·
+**TARGET** = planned; do not implement unless PLAN.md authorizes it.
+
 Engine stack:
-- HTML: html5ever 0.39 + custom TreeSink (`src/engine/parser.rs`) → `aether_dom::Node`
-- CSS: cssparser 0.37 tokenizer in Stratus (`src/engine/stratus.rs`), values/cascade in `aether-css`; selectors crate matching in `src/engine/js/selector_engine.rs`
-- Layout seam: `apply_taffy_layout()` (taffy 0.12) in `src/engine/pipeline/layout.rs`, incl. inline formatting context
-- Text: cosmic-text measurement/shaping (`src/engine/text.rs`), LRU-cached
-- JS: rquickjs 0.12 (`src/engine/js/`, JsBridge flat DOM behind `Arc<Mutex<>>`) — interim until aether-js swap gate
-- Net: blocking reqwest, cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`)
-- Korlang: embedded UI DSL VM driving sidebar/chrome; never page-reachable except through binding policy
+- HTML (CURRENT): html5ever 0.39 + custom TreeSink (`src/engine/parser.rs`) → `aether_dom::Node`
+- CSS (CURRENT): cssparser 0.37 tokenizer in Stratus (`src/engine/stratus.rs`), values/cascade in `aether-css`; selectors crate matching in `src/engine/js/selector_engine.rs`
+- Layout seam (CURRENT): `apply_taffy_layout()` (taffy 0.12) in `src/engine/pipeline/layout.rs`, incl. inline formatting context
+- Text (CURRENT): cosmic-text measurement/shaping (`src/engine/text.rs`), LRU-cached
+- JS (INTERIM): rquickjs 0.12 (`src/engine/js/`, JsBridge flat DOM behind `Arc<Mutex<>>`) until the aether-js swap gate
+- JS engine (TARGET): `crates/aether-js` per ADR-0003 + js-engine-plan.md rungs
+- Net (INTERIM transport): blocking reqwest via `run_blocking()`, cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`); async replacement is PLAN D
+- Korlang (CURRENT): embedded UI DSL VM driving sidebar/chrome; never page-reachable except through binding policy (Non-negotiable #8)
 
 Module map:
 ```
