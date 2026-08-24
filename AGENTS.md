@@ -52,6 +52,17 @@ invalidates a statement in these docs updates them in the same commit.
      code, docs, deps. Leaving dead weight behind is an incomplete task.
    - **Re-check:** fresh read of the final diff; adversarial pass over risky
      logic; every touched doc re-checked against reality.
+4. **Subagents over solo guessing.** Dispatch them instead of hand-waving:
+   - Unfamiliar area → `explore` agent before planning anything.
+   - Non-trivial diff → fresh-context reviewer (code-review / adversarial /
+     test-gap finder) before claiming done; reviewers get no stake in the
+     outcome, so their findings outrank self-assessment.
+   - Independent subtasks run as parallel subagent dispatches.
+5. **The loop never stops.** Every task runs PLAN → DO → CHECK in continuous
+   cycles: plan the slice (todo list), implement it, run its tests, feed the
+   results into the next slice's plan. Stopping between loops is how half-done
+   work ships; a task is done only when a full loop closes with green
+   evidence and prove/prune/re-check complete.
 
 ## Test-first mandate
 1. **Failing test first** for any feature or bugfix: red → green → refactor.
