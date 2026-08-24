@@ -20,7 +20,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Non-negotiables
 1. **Evidence before claims.** Run `cargo test`; run `cargo fmt --check` +
    `cargo clippy -- -D warnings` when touching code CI covers. Cite output.
-   Never report success from intent.
+   Never report success from intent. An unverified claim is a false claim.
 2. **Scope discipline.** Touch only what the task names. No drive-by refactors,
    no comment churn, no reformatting of untouched lines.
 3. **Root cause, not symptom.** Before editing a function, find every caller.
@@ -33,6 +33,53 @@ invalidates a statement in these docs updates them in the same commit.
    `CONTEXT.md`. No second vocabulary.
 7. **Comments carry why, not what.** Deliberate ceilings get a
    `ponytail:` marker naming the ceiling and upgrade path.
+
+## Operating protocol (how every task runs)
+1. **Skills before action.** Invoke matching skills BEFORE responding,
+   exploring, or asking clarifying questions. Process skills first
+   (brainstorming / systematic-debugging / grill-\*), implementation skills
+   second. If a skill proves wrong mid-task, say so and drop it explicitly.
+2. **Codebase Memory MCP always.** The graph is the map of record:
+   - Before editing any symbol → `search_graph` / `get_code_snippet` it.
+   - Before changing a function → `trace_path` every caller.
+   - Before optimizing anything → `query_graph` complexity/hot-path fields;
+     measure, never guess.
+   - After structural changes → re-index so the graph stays truthful.
+3. **Exhaustive effort is the default, not a mode.** Every task ends with
+   **prove → prune → re-check**:
+   - **Prove:** evidence attached (command output, test names, file:line refs).
+   - **Prune:** same-change deletion of everything the work made redundant —
+     code, docs, deps. Leaving dead weight behind is an incomplete task.
+   - **Re-check:** fresh read of the final diff; adversarial pass over risky
+     logic; every touched doc re-checked against reality.
+
+## Test-first mandate
+1. **Failing test first** for any feature or bugfix: red → green → refactor.
+   Implementation without a preceding failing test is rejected on review.
+2. Bug fixes begin with a **reproduction test** that fails on old code and
+   passes on new. "Fixed" without a repro is not fixed.
+3. Trust boundaries (net input, CSP, cookies, JS↔DOM bridge, aether-js host
+   layer) get **negative-path tests**, not just happy paths.
+4. aether-js work uses **test262** as its harness; gates per js-engine-plan.md §3.
+5. Trivial one-liners are exempt — YAGNI applies to tests too.
+
+## Anti-slop policy (hard bans)
+1. **No narration comments.** Comments exist only for non-obvious why.
+   `// increment counter` and friends are deleted on sight.
+2. **No speculative abstractions.** No single-implementation traits, factories
+   for one product, config knobs for constants. Deletion beats addition.
+3. **No placeholders.** No stubs "for later"; no TODO/FIXME without a matching
+   PLAN.md or issues.md row naming who/when.
+4. **Never invent APIs, flags, or dependencies.** Verify against real source
+   (codebase memory MCP) or official docs (webfetch) before first use.
+5. **Errors are handled, never swallowed.** No silent `.ok()` on data paths,
+   no catch-log-continue where state matters.
+6. **No scope drift.** Renames, reformats, comment edits outside the named
+   task are reverted regardless of quality.
+7. **No slop prose.** No emoji, no filler ("In summary…"), no sycophancy in
+   commits, docs, PRs, or responses. State facts once.
+8. **3am rule.** If you couldn't defend the line during a production incident,
+   don't ship it.
 
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
