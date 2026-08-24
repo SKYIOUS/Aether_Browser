@@ -13,12 +13,57 @@ use lru::LruCache;
 use resvg::usvg;
 use resvg::tiny_skia;
 
-use super::extractor::{extract_elements_flat, StyledElement};
+use super::extractor::{extract_elements_flat, MAX_ELEMENTS, StyledElement};
 use super::layout::apply_taffy_layout;
 
-static CSS_CACHE: OnceLock<Mutex<LruCache<String, Stylesheet>>> = OnceLock::new();
-fn css_cache() -> &'static Mutex<LruCache<String, Stylesheet>> {
+static CSS_CACHE: OnceLock<Mutex<LruCache<String, (Stylesheet, usize)>>> = OnceLock::new();
+fn css_cache() -> &'static Mutex<LruCache<String, (Stylesheet, usize)>> {
     CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
+}
+
+// ponytail: byte ceilings, not fidelity targets (PLAN A1) — generous enough
+// that real documents and stylesheets process whole; they only bound
+// pathological inputs.
+const MAX_HTML_BYTES: usize = 5_000_000;
+const MAX_CSS_SOURCE_BYTES: usize = 500_000;
+const CSS_TOTAL_BUDGET_BYTES: usize = 8_000_000;
+
+fn trim_to_budget(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes { return s; }
+    let mut end = max_bytes;
+    while !s.is_char_boundary(end) { end -= 1; }
+    &s[..end]
+}
+
+fn apply_html_budget(html: String, max_bytes: usize) -> String {
+    let end = trim_to_budget(&html, max_bytes).len();
+    if end == html.len() { return html; }
+    plog!("FETCH", "Truncated HTML from {} to {} bytes", html.len(), end);
+    let mut out = html;
+    out.truncate(end);
+    out
+}
+
+// Greedy in document order: a source is kept while cumulative retained bytes
+// fit the budget; the first non-fitting source — and everything after it — is
+// skipped whole. Counts exactly the bytes handed in, i.e. post per-source-trim,
+// cache hits included. The `used` carry makes inline + external phases share
+// one cumulative budget. Called once per external sheet, so under pressure a
+// later small sheet can outlive an earlier large skip — ceiling behavior,
+// not cascade-order fidelity.
+fn css_sources_within_total_budget<'a>(
+    sources: &[&'a str],
+    used_bytes: usize,
+    budget: usize,
+) -> (Vec<&'a str>, usize) {
+    let mut kept = Vec::new();
+    let mut total = used_bytes;
+    for source in sources {
+        if total + source.len() > budget { break; }
+        total += source.len();
+        kept.push(*source);
+    }
+    (kept, total)
 }
 
 fn extract_styles(node: &Node, styles: &mut Vec<String>, depth: usize) {
@@ -261,13 +306,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     let net::Response { body: html, headers, final_url: page_url, .. } = response;
     let csp_policy = net::parse_csp_from_headers(&headers);
 
-    let max_html = 1_000_000;
-    let html = if html.len() > max_html {
-        plog!("FETCH", "Truncated from {} to {}", html.len(), max_html);
-        html[..max_html].to_string()
-    } else {
-        html
-    };
+    let html = apply_html_budget(html, MAX_HTML_BYTES);
 
     let dom_node = crate::engine::parser::parse_html(&html);
     plog!("PARSE", "DOM root has {} children", dom_node.children.len());
@@ -278,38 +317,56 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
 
     let inline_styles_ok = net::csp_allows_inline_style(&csp_policy);
     let mut stylesheet = Stylesheet { rules: Vec::new() };
-    let style_limit = styles.len().min(50);
-    plog!("STYLE", "Processing up to {} style blocks", style_limit);
-    for (si, style_content) in styles.iter().take(style_limit).enumerate() {
-        if !inline_styles_ok {
-            plog!("CSP", "Blocked inline style block {} (no 'unsafe-inline')", si);
-            break;
+    let mut css_used = 0usize;
+    if inline_styles_ok {
+        let inline_refs: Vec<&str> = styles
+            .iter()
+            .map(|s| {
+                if s.len() > MAX_CSS_SOURCE_BYTES {
+                    plog!("CSS", "Trimmed inline style from {} to {} bytes", s.len(), MAX_CSS_SOURCE_BYTES);
+                }
+                trim_to_budget(s, MAX_CSS_SOURCE_BYTES)
+            })
+            .collect();
+        let (kept, used) = css_sources_within_total_budget(&inline_refs, css_used, CSS_TOTAL_BUDGET_BYTES);
+        if kept.len() < inline_refs.len() {
+            plog!("CSS", "Total-CSS budget skipped {} inline style block(s)", inline_refs.len() - kept.len());
         }
-        let max_css_len = 500_000;
-        let trimmed = if style_content.len() > max_css_len {
-            plog!("CSS", "Truncated inline style {} from {} to {}", si, style_content.len(), max_css_len);
-            &style_content[..max_css_len]
-        } else {
-            style_content.as_str()
-        };
-        stylesheet.rules.extend(crate::engine::stratus::parse(trimmed).rules);
+        for (si, trimmed) in kept.iter().enumerate() {
+            let rules = crate::engine::stratus::parse(trimmed).rules;
+            plog!("STYLE", "Parsed {} rules from inline style {}", rules.len(), si);
+            stylesheet.rules.extend(rules);
+        }
+        css_used = used;
+    } else {
+        plog!("CSP", "Blocked all {} inline style block(s) (no 'unsafe-inline')", styles.len());
     }
-    plog!("CSS", "Parsed {} rules from inline styles", stylesheet.rules.len());
+    plog!("CSS", "{} rules from inline styles, {} bytes of budget used", stylesheet.rules.len(), css_used);
 
     let mut link_urls = Vec::new();
     extract_links(&dom_node, &mut link_urls, 0);
-    let link_limit = link_urls.len().min(50);
-    plog!("CSS", "Found {} external CSS links, processing {}", link_urls.len(), link_limit);
-    for link_url in link_urls.iter().take(link_limit) {
+    plog!("CSS", "Found {} external CSS links", link_urls.len());
+    for link_url in link_urls.iter() {
+        // Check before fetching: an exhausted budget must not download sheets
+        // only to discard them (net::fetch has no download-size cap).
+        if css_used >= CSS_TOTAL_BUDGET_BYTES {
+            plog!("CSS", "Total-CSS budget exhausted; skipping remaining external sheets");
+            break;
+        }
         let resolved = net::resolve_url(link_url, &url);
         if !net::csp_allows_style_url(&resolved, &page_url, &csp_policy) {
             plog!("CSP", "Blocked external CSS: {}", resolved);
             continue;
         }
         if let Ok(mut cache) = css_cache().lock() {
-            if let Some(cached) = cache.get(&resolved) {
+            if let Some((cached, cached_bytes)) = cache.get(&resolved) {
+                if css_used + cached_bytes > CSS_TOTAL_BUDGET_BYTES {
+                    plog!("CSS", "Total-CSS budget skipped cached sheet {}", resolved);
+                    continue;
+                }
                 plog!("CSS", "Cache HIT: {}", resolved);
                 stylesheet.rules.extend(cached.rules.clone());
+                css_used += cached_bytes;
                 continue;
             }
         }
@@ -319,21 +376,27 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
                 if css_status >= 400 {
                     plog!("CSS", "External CSS HTTP error {} for {}", css_status, resolved);
                 } else {
-                    let max_css_len = 500_000;
-                    let trimmed = if css_content.len() > max_css_len {
-                        plog!("CSS", "Truncated external CSS from {} to {}", css_content.len(), max_css_len);
-                        css_content[..max_css_len].to_string()
-                    } else {
-                        css_content
+                    let trimmed = {
+                        if css_content.len() > MAX_CSS_SOURCE_BYTES {
+                            plog!("CSS", "Trimmed external CSS from {} to {} bytes", css_content.len(), MAX_CSS_SOURCE_BYTES);
+                        }
+                        trim_to_budget(&css_content, MAX_CSS_SOURCE_BYTES)
                     };
-                    let parsed = crate::engine::stratus::parse(&trimmed);
+                    let (kept, used_after) =
+                        css_sources_within_total_budget(&[trimmed], css_used, CSS_TOTAL_BUDGET_BYTES);
+                    if kept.is_empty() {
+                        plog!("CSS", "Total-CSS budget skipped external sheet {}", resolved);
+                        continue;
+                    }
+                    let parsed = crate::engine::stratus::parse(trimmed);
                     if let Ok(mut cache) = css_cache().lock() {
                         // ponytail: LruCache::put auto-evicts LRU entry when over capacity
-                        cache.put(resolved.clone(), parsed.clone());
+                        cache.put(resolved.clone(), (parsed.clone(), trimmed.len()));
                     }
                     let rules = parsed.rules;
                     let count = rules.len();
                     stylesheet.rules.extend(rules);
+                    css_used = used_after;
                     plog!("CSS", "Parsed {} rules from external CSS", count);
                 }
             }
@@ -394,10 +457,9 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
         guard.nodes.clone()
     };
 
-    let mut elements = Vec::with_capacity(flat_nodes.len().min(2000));
+    let mut elements = Vec::with_capacity(flat_nodes.len().min(MAX_ELEMENTS));
     extract_elements_flat(&flat_nodes, &mut elements, &stylesheet, content_width, viewport_h);
     plog!("EXTRACT", "Extracted {} elements", elements.len());
-    elements.truncate(2000);
 
     // ponytail: per-page decoded image LRU, max 50 entries
     let mut img_cache: LruCache<String, (f32, f32, Handle)> = LruCache::new(NonZeroUsize::new(50).unwrap());
@@ -597,3 +659,69 @@ fn svg_font_db() -> &'static usvg::fontdb::Database {
     })
 }
 
+
+#[cfg(test)]
+mod budget_tests {
+    use super::{apply_html_budget, css_sources_within_total_budget};
+
+    const MB: usize = 1_000_000;
+
+    #[test]
+    fn html_under_budget_is_untouched() {
+        let html = "<html><body>hi</body></html>".to_string();
+        assert_eq!(apply_html_budget(html.clone(), 5 * MB), html);
+    }
+
+    // ponytail companion check: the cut must respect UTF-8 char boundaries,
+    // which the old `html[..max]` slice would have panicked on.
+    #[test]
+    fn html_budget_cut_respects_char_boundaries() {
+        let max = 5 * MB;
+        let mut html = "a".repeat(max - 1);
+        html.push('\u{00E9}'); // 2-byte char straddling the cut point
+        let out = apply_html_budget(html, max);
+        assert_eq!(out.len(), max - 1);
+        assert!(std::str::from_utf8(out.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn css_budget_keeps_everything_under_budget() {
+        let sources = vec!["abc", "de"];
+        let (kept, total) = css_sources_within_total_budget(&sources, 0, 10);
+        assert_eq!(kept, vec!["abc", "de"]);
+        assert_eq!(total, 5);
+    }
+
+    // Inline and external phases share one cumulative counter via `used`.
+    #[test]
+    fn css_budget_is_cumulative_across_phases() {
+        let (_kept, used) = css_sources_within_total_budget(&["12345"], 0, 10);
+        assert_eq!(used, 5);
+        let (kept2, used2) = css_sources_within_total_budget(&["67890"], used, 10);
+        assert_eq!(kept2, vec!["67890"]);
+        assert_eq!(used2, 10);
+        let (kept3, _) = css_sources_within_total_budget(&["zzz"], used2, 10);
+        assert!(kept3.is_empty(), "exhausted budget must skip later sources");
+    }
+
+    // Deterministic: a source that would push past the budget is skipped
+    // whole (no mid-source split beyond the caller's per-source trim), and so
+    // is everything after it in document order.
+    #[test]
+    fn css_budget_skips_overflowing_source_and_rest() {
+        let sources = vec!["aaaa", "bbbbbbbb", "cc"];
+        let (kept, total) = css_sources_within_total_budget(&sources, 3, 10);
+        assert_eq!(kept, vec!["aaaa"]);
+        assert_eq!(total, 7);
+    }
+
+    // Accounting counts what the caller passes: bytes retained after the
+    // per-source 500KB trim. Cache hits flow through the same call site.
+    #[test]
+    fn css_budget_counts_retained_bytes_not_original() {
+        let big = "x".repeat(100);
+        let (kept, total) = css_sources_within_total_budget(&[big.as_str()], 0, 10);
+        assert!(kept.is_empty(), "source larger than the whole budget must be skipped");
+        assert_eq!(total, 0);
+    }
+}

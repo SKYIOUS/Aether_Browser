@@ -46,13 +46,13 @@ ECMAScript engine in Rust; detailed plan:
 Modern pages silently lose content today. Four caps do it, and painting is O(all
 elements):
 
-1. **Cap removal with a memory budget** (`src/engine/pipeline/extractor.rs`,
-   `fetcher.rs`)
-   - Element cap 2000 → budget-based (e.g. keep extracting; stop at ~100k
-     elements or RAM guard). Depth 50 → ~200. Text node 5000 chars → raise to
-     64k. HTML 1MB → 5MB. CSS sources 50 → raise with total-bytes cap.
-   - Acceptance: a full Wikipedia article and a Bootstrap dashboard extract
-     without silent drops; test asserts element counts above old caps.
+1. **Cap removal with a memory budget — DONE 2026-08-24**
+   (`src/engine/pipeline/extractor.rs`, `fetcher.rs`)
+   - Shipped: 100_000-element / depth-200 / 64k-text budgets in extractor
+     (both extraction paths), 5MB HTML, 500KB/CSS source, 8MB cumulative CSS
+     budget across inline+external (cache hits included) in fetcher.
+   - Evidence: `tests/extraction_budget_tests.rs` asserts counts past the old
+     caps; hard-stop semantics pinned by `depth_budget_is_hard_stop_but_past_old_cap`.
 
 2. **Viewport culling in paint + hit-test**
    (`src/ui/screens/browser/canvas.rs`)

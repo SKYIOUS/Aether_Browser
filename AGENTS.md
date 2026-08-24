@@ -130,8 +130,8 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24): 444 tests green; CI gates
-  fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
+- Status baseline (verified 2026-08-24, Windows local): 464 tests green; CI
+  gates fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
@@ -181,7 +181,10 @@ fetch_page_content() (async on Iced thread)
 - Runtime data files (gitignored): `vayu_settings.json`, `vayu_tabs.json`, `vayu_local_storage.json`, `vayu_cookies.json`
 - Linker is `rust-lld` (`.cargo/config.toml`); don't switch to lld-link unless installed
 - Iced 0.13: `Task::perform(future, mapper)`; there is no `iced::Command`
-- Element caps live: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML (removal planned, PLAN A1)
+- Extraction budgets (A1, done): safety-stop ceilings, not fidelity targets —
+  100_000 elements (`MAX_ELEMENTS`), depth 200, 64k chars/text node
+  (`src/engine/pipeline/extractor.rs`), 5MB HTML, 500KB/CSS source,
+  8MB cumulative CSS (`src/engine/pipeline/fetcher.rs`)
 - Blocking reqwest confined to `tokio::task::spawn_blocking` workers — never on the Iced UI thread; don't expand beyond existing network boundaries (async replacement: PLAN D)
 - Browser submodules read `BrowserScreen` private fields directly (child-module access)
 - `Tab::new(title, url, workspace_id)` — three args

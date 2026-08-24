@@ -18,13 +18,14 @@
 | 4 | DOM API surface minimal (limited standard properties/methods over `aether-dom`) | `crates/aether-dom`, bridge modules | Page JS fails on missing APIs | Ongoing fidelity work (PLAN Phase A/B) |
 | 5 | CSS custom properties (`--var`) and `calc()` unsupported (no matches in `aether-css`) | `crates/aether-css` | Ubiquitous on modern sites | Unscheduled |
 | 6 | No float or table layout (taffy covers flex/grid/block+inline only) | `src/engine/pipeline/layout.rs` | Legacy and data-heavy pages misrender | PLAN Phase D territory |
-| 7 | No byte-budget or memory-pressure handling for decoded images / DOM / caches (entry counts only) | `src/engine/pipeline/fetcher.rs`, extractor | OOM risk on heavy pages | Overlaps PLAN A1 budgets |
+| 7 | Static byte ceilings exist (HTML/CSS/DOM budgets from A1) but no runtime memory-pressure response; CSS/image caches remain entry-count LRUs without byte accounting | `src/engine/pipeline/fetcher.rs`, `src/engine/pipeline/extractor.rs` | OOM risk on heavy sessions persists via cache growth | Partially addressed by PLAN A1; pressure handling unscheduled |
 | 8 | Hand-rolled logging (`plog!`), no levels/filtering/structure | `src/logging.rs`, call sites | Poor diagnosability | Unscheduled; candidate: `tracing` |
 | 9 | Residual `String`-typed errors in net paths despite thiserror adoption elsewhere | `src/engine/net/mod.rs` | Lost error context/kind matching | Unscheduled |
 | 10 | CI clippy gate runs without `--all-targets`; widening fails today: `clippy::needless_range_loop` in `korlang` bytecode compiler | `.github/workflows/ci.yml`, `korlang/src` | Test/bench code escapes the lint gate | Fix lint first, then widen CI command |
+| 11 | The fmt/clippy/test CI workflow has never run (`gh run list`: CodeQL only); repo is not rustfmt-clean under any recent stable (~1400 diff hunks) and carries ≥14 pre-existing `clippy -D warnings` failures (korlang needless_range_loop, aether-css match→`?`, 12 in vayu-browser incl. if-same-then-else, collapsible-if, useless format!) | `.github/workflows/ci.yml`, repo-wide | Gates documented as binding have never been enforced; "green" claims were unverified until 2026-08-24 | Dedicated formatting/lint chore + first real CI run; do not fix opportunistically inside feature tasks |
 
-Already scheduled in PLAN.md — see there, not here: cap removal + budgets (A1),
-viewport culling (A2), TreeSink stubs (A5), TLS/cookies-enforcement/CSP-for-`<link>`
+Already scheduled in PLAN.md — see there, not here: viewport culling (A2),
+TreeSink stubs (A5), TLS/cookies-enforcement/CSP-for-`<link>`
 (C), async fetch + `@font-face` (D), global-statics/multi-window fragility,
 dual extraction paths, `browser/mod.rs` size pressure, `parse_fragment`
 divergence (Known Debt).

@@ -9,6 +9,16 @@ use crate::engine::stratus::Stylesheet;
 use crate::engine::stratus;
 use crate::ui::style::C;
 
+// ponytail: hard safety ceilings, not fidelity targets — normal pages must
+// extract whole (PLAN A1); these only bound pathological inputs. Element
+// ceiling doubles as the RAM guard until StyledElement slimming (PLAN A3)
+// shrinks the per-element cost. MAX_DEPTH also bounds native-recursion depth
+// in the walk fns; an explicit-stack walk is the upgrade path if profiling
+// ever pushes it higher.
+pub(crate) const MAX_ELEMENTS: usize = 100_000;
+pub(crate) const MAX_DEPTH: usize = 200;
+const MAX_TEXT_LEN: usize = 64_000;
+
 type SkipFn = Box<dyn Fn(&Node) -> bool>;
 
 #[derive(Debug, Clone)]
@@ -396,7 +406,7 @@ pub fn extract_elements(
     viewport_w: f32,
     viewport_h: f32,
 ) {
-    if depth > 50 || elements.len() >= 2000 { return; }
+    if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS { return; }
 
     match &node.node_type {
         NodeType::Document => {
@@ -407,7 +417,7 @@ pub fn extract_elements(
         NodeType::Comment(_) => {}
         NodeType::Text(text) => {
             let txt = decode_html_entities(text.trim());
-            if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
+            if !txt.is_empty() && txt.len() < MAX_TEXT_LEN && !txt.chars().all(|c| c.is_whitespace()) {
                 if let Some(ref ps) = parent_style {
                     let mut el = make_element("text", txt, ps, parent_idx, dom_path.clone());
                     el.background_color = None;
@@ -720,7 +730,7 @@ pub(crate) fn extract_elements_flat(
         vw: f32,
         vh: f32,
     ) {
-        if depth > 50 || elements.len() >= 2000 { return; }
+        if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS { return; }
         let node = match nodes.get(node_id as usize) { Some(n) => n, None => return };
 
         if node.is_document {
@@ -734,7 +744,7 @@ pub(crate) fn extract_elements_flat(
 
         if node.is_text {
             let txt = decode_html_entities(node.text.trim());
-            if !txt.is_empty() && txt.len() < 5000 && !txt.chars().all(|c| c.is_whitespace()) {
+            if !txt.is_empty() && txt.len() < MAX_TEXT_LEN && !txt.chars().all(|c| c.is_whitespace()) {
                 if let Some(ref ps) = parent_style {
                     let mut el = make_element("text", txt, ps, parent_idx, dom_path.clone());
                     el.background_color = None;
@@ -961,6 +971,92 @@ mod tests {
         crate::engine::pipeline::extractor::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
         let img = elements.iter().find(|e| e.tag == "img").expect("should find <img>");
         assert_eq!(img.text, "photo & picture", "alt &amp; should decode");
+    }
+
+    // Flat extraction path must honor the same budget as the tree path.
+    #[test]
+    fn flat_path_passes_old_element_cap() {
+        use crate::engine::js::js_bridge::FlatNode;
+        let mut nodes = vec![FlatNode {
+            parent: None,
+            children: (1..=2500u32).collect(),
+            tag: String::new(),
+            attrs: std::collections::HashMap::new(),
+            text: String::new(),
+            is_text: false,
+            is_document: true,
+            inline_styles: std::collections::HashMap::new(),
+        }];
+        for _i in 1..=2500u32 {
+            nodes.push(FlatNode {
+                parent: Some(0),
+                children: vec![],
+                tag: "div".to_string(),
+                attrs: std::collections::HashMap::new(),
+                text: String::new(),
+                is_text: false,
+                is_document: false,
+                inline_styles: std::collections::HashMap::new(),
+            });
+        }
+        let sheet = Stylesheet { rules: vec![] };
+        let mut elements = Vec::new();
+        super::extract_elements_flat(&nodes, &mut elements, &sheet, 800.0, 600.0);
+        assert!(
+            elements.len() > 2000,
+            "flat path should pass the old 2000-element cap, got {}",
+            elements.len()
+        );
+    }
+
+    // The budget is a bounded safety stop, not a fidelity target: extraction
+    // must halt at MAX_DEPTH even on pathological nesting, while still
+    // admitting depths the old cap of 50 rejected. Runs on a sized stack
+    // because extract_elements recurses natively — debug frames at pathological
+    // depths exceed the default libtest stack, which says nothing about the
+    // budget semantics under test here.
+    #[test]
+    fn depth_budget_is_hard_stop_but_past_old_cap() {
+        let result = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(|| {
+                const NESTING: usize = 300;
+                let mut html = String::from("<html><body>");
+                for _ in 0..NESTING {
+                    html.push_str("<div>");
+                }
+                html.push_str("<p>bottom</p>");
+                for _ in 0..NESTING {
+                    html.push_str("</div>");
+                }
+                html.push_str("</body></html>");
+
+                let dom = parse_html(&html);
+                let sheet = Stylesheet { rules: vec![] };
+                let mut elements = Vec::new();
+                super::extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+                (
+                    !elements.is_empty(),
+                    elements.iter().map(|e| e.dom_path.len()).max().unwrap_or(0),
+                )
+            })
+            .expect("spawn stress thread")
+            .join()
+            .expect("stress thread panicked");
+        let (has_content, deepest) = result;
+
+        assert!(has_content, "shallow content still extracted");
+        assert!(
+            deepest > 50,
+            "budget must admit depth beyond the old cap of 50 (deepest: {})",
+            deepest
+        );
+        assert!(
+            deepest <= super::MAX_DEPTH + 4,
+            "extraction must stop at the depth budget (deepest: {}, budget: {})",
+            deepest,
+            super::MAX_DEPTH
+        );
     }
 }
 

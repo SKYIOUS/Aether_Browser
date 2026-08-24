@@ -31,7 +31,8 @@ cargo test
 ## Limitations
 Prototype — not a production browser.
 - No process isolation or sandbox; single-process with blocking network I/O
-- Page caps: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML, ≤50 style blocks
+- Page budgets (safety ceilings, not fidelity targets): 100k elements, depth
+  200, 64k chars/text node, 5MB HTML, ≤500KB per CSS source, 8MB total CSS
 - No CSS animations/transitions, custom properties, calc(), float/table layout
 - No audio/video; no @font-face yet; Intl absent
 - Event system is minimal (no bubbling/capture); JS callbacks re-parsed per tick
