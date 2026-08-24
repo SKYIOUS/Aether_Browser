@@ -6,11 +6,41 @@ use crate::ui::style::*;
 use crate::plog;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccentColor {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+}
+
+impl Default for AccentColor {
+    fn default() -> Self {
+        Self { r: 0.25, g: 0.50, b: 0.90 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub enum TabLayout {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VayuSettings {
     pub home_page_url: String,
     pub default_search_engine: String,
     pub js_enabled: bool,
     pub cookies_enabled: bool,
+    #[serde(default)]
+    pub tab_layout: TabLayout,
+    #[serde(default)]
+    pub dark_mode: bool,
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
+    #[serde(default)]
+    pub show_bookmarks_bar: bool,
+    #[serde(default)]
+    pub accent_color: AccentColor,
 }
 
 impl Default for VayuSettings {
@@ -20,6 +50,11 @@ impl Default for VayuSettings {
             default_search_engine: "duckduckgo".to_string(),
             js_enabled: true,
             cookies_enabled: true,
+            tab_layout: TabLayout::Horizontal,
+            dark_mode: false,
+            sidebar_collapsed: false,
+            show_bookmarks_bar: true,
+            accent_color: AccentColor::default(),
         }
     }
 }

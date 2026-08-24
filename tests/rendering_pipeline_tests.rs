@@ -1023,3 +1023,53 @@ fn test_inline_child_offset_prevents_overlap() {
         "inline child x={} should be offset from parent x={}", child.x, parent.x);
     assert!(child.y >= parent.y - 1.0, "inline child y={} should align with parent y={}", child.y, parent.y);
 }
+
+#[test]
+fn test_inline_formatting_tags_inside_paragraph() {
+    let html = r##"<p>Hello <b>bold</b> and <i>italic</i> and <a href="#">link</a></p>"##;
+    let dom = vayu_browser::engine::parser::parse_html(html);
+    let sheet = vayu_browser::engine::stratus::parse("");
+    let mut elements = Vec::new();
+    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
+    assert!(p.text.contains("Hello"), "paragraph should contain direct text");
+    let b = elements.iter().find(|e| e.tag == "b").expect("should find <b>");
+    assert_eq!(b.text, "bold");
+    let i = elements.iter().find(|e| e.tag == "i").expect("should find <i>");
+    assert_eq!(i.text, "italic");
+    let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
+    assert_eq!(a.text, "link");
+}
+
+#[test]
+fn test_margin_auto_centers_block() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        StyledElement {
+            margin_left: None, margin_right: None,
+            css_width: Some(100.0),
+            ..make_test("div", "", "block", Some(0))
+        },
+    ];
+    elements[1].margin_left = Some(0.0);
+    elements[1].margin_right = Some(0.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
+    assert!(elements[1].x.is_finite(), "centered element x should be finite");
+}
+
+#[test]
+fn test_inline_link_has_text_width() {
+    let html = r##"<div><h1>Example Domain</h1><p>This domain is for use in illustrative examples.</p><a href="https://example.com">Learn more</a></div>"##;
+    let dom = vayu_browser::engine::parser::parse_html(html);
+    let sheet = vayu_browser::engine::stratus::parse("");
+    let mut elements = Vec::new();
+    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 1440.0, 900.0);
+    apply_taffy_layout(&mut elements, 1440.0, 900.0);
+    let h1 = elements.iter().find(|e| e.tag == "h1").expect("should find h1");
+    let p = elements.iter().find(|e| e.tag == "p").expect("should find p");
+    let a = elements.iter().find(|e| e.tag == "a").expect("should find a");
+    assert_eq!(h1.width, 1440.0, "h1 should fill container width");
+    assert_eq!(p.width, 1440.0, "p should fill container width");
+    assert!(a.width < 1440.0, "inline a should have text width, not container width, got {}", a.width);
+    assert!(a.width > 0.0, "inline a should have positive width");
+}

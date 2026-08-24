@@ -31,161 +31,6 @@ impl FlatNode {
     }
 }
 
-// ── CSS Selector types ──────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-pub(crate) enum SimpleSel {
-    Universal,
-    Tag(String),
-    Class(String),
-    Id(String),
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum Combinator {
-    Descendant,
-    Child,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CompoundSel {
-    pub(crate) simples: Vec<SimpleSel>,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ComplexSel {
-    pub(crate) compound: CompoundSel,
-    pub(crate) combinator: Option<(Combinator, Box<ComplexSel>)>,
-}
-
-pub(crate) fn simple_sel_to_stratus(sel: &SimpleSel) -> crate::engine::stratus::SimpleSelector {
-    use crate::engine::stratus::SimpleSelector;
-    match sel {
-        SimpleSel::Universal => SimpleSelector { tag_name: None, id: None, class: vec![], attribute: None, pseudo_class: None },
-        SimpleSel::Tag(t) => SimpleSelector { tag_name: Some(t.clone()), id: None, class: vec![], attribute: None, pseudo_class: None },
-        SimpleSel::Class(c) => SimpleSelector { tag_name: None, id: None, class: vec![c.clone()], attribute: None, pseudo_class: None },
-        SimpleSel::Id(id) => SimpleSelector { tag_name: None, id: Some(id.clone()), class: vec![], attribute: None, pseudo_class: None },
-    }
-}
-
-pub(crate) fn matches_simple(node: &FlatNode, sel: &SimpleSel) -> bool {
-    if node.is_text || node.is_document { return false; }
-    let element = crate::engine::stratus::ElementData::with_attributes(node.tag.clone(), node.attrs.clone());
-    let ss = simple_sel_to_stratus(sel);
-    ss.matches(&element)
-}
-
-pub(crate) fn parse_simple_selector(s: &str, pos: &mut usize) -> Option<SimpleSel> {
-    let chars: Vec<char> = s.chars().collect();
-    if *pos >= chars.len() { return None; }
-    match chars[*pos] {
-        '*' => { *pos += 1; Some(SimpleSel::Universal) }
-        '.' => {
-            *pos += 1;
-            let start = *pos;
-            while *pos < chars.len() && chars[*pos] != '.' && chars[*pos] != '#' && chars[*pos] != '[' && !chars[*pos].is_whitespace() && chars[*pos] != '>' { *pos += 1; }
-            if *pos > start { Some(SimpleSel::Class(chars[start..*pos].iter().collect())) } else { None }
-        }
-        '#' => {
-            *pos += 1;
-            let start = *pos;
-            while *pos < chars.len() && chars[*pos] != '.' && chars[*pos] != '#' && chars[*pos] != '[' && !chars[*pos].is_whitespace() && chars[*pos] != '>' { *pos += 1; }
-            if *pos > start { Some(SimpleSel::Id(chars[start..*pos].iter().collect())) } else { None }
-        }
-        c if c.is_alphanumeric() || c == '-' => {
-            let start = *pos;
-            while *pos < chars.len() && (chars[*pos].is_alphanumeric() || chars[*pos] == '-') { *pos += 1; }
-            Some(SimpleSel::Tag(chars[start..*pos].iter().collect()))
-        }
-        _ => None,
-    }
-}
-
-pub(crate) fn parse_compound(s: &str, pos: &mut usize) -> CompoundSel {
-    let chars: Vec<char> = s.chars().collect();
-    let mut simples = vec![];
-    skip_ws(s, pos);
-    loop {
-        if *pos >= chars.len() { break; }
-        if chars[*pos] == '>' || chars[*pos] == '+' || chars[*pos] == '~' || chars[*pos] == ',' { break; }
-        if let Some(simple) = parse_simple_selector(s, pos) {
-            simples.push(simple);
-        } else { break; }
-        if *pos < chars.len() && chars[*pos].is_whitespace() { break; }
-    }
-    if simples.is_empty() { simples.push(SimpleSel::Universal); }
-    CompoundSel { simples }
-}
-
-pub(crate) fn skip_ws(s: &str, pos: &mut usize) {
-    let chars: Vec<char> = s.chars().collect();
-    while *pos < chars.len() && chars[*pos].is_whitespace() { *pos += 1; }
-}
-
-pub(crate) fn parse_combinator(s: &str, pos: &mut usize) -> Option<Combinator> {
-    let chars: Vec<char> = s.chars().collect();
-    skip_ws(s, pos);
-    if *pos >= chars.len() { return None; }
-    if chars[*pos] == '>' {
-        *pos += 1;
-        skip_ws(s, pos);
-        Some(Combinator::Child)
-    } else {
-        Some(Combinator::Descendant)
-    }
-}
-
-pub(crate) fn parse_complex(s: &str) -> Option<ComplexSel> {
-    let s = s.trim();
-    if s.is_empty() { return None; }
-    let mut pos = 0;
-    let compound = parse_compound(s, &mut pos);
-    let combinator = if pos < s.len() {
-        let comb = parse_combinator(s, &mut pos);
-        comb.map(|c| {
-            let rest = parse_complex(&s[pos..]).unwrap_or(ComplexSel { compound: CompoundSel { simples: vec![SimpleSel::Universal] }, combinator: None });
-            (c, Box::new(rest))
-        })
-    } else { None };
-    Some(ComplexSel { compound, combinator })
-}
-
-pub(crate) fn matches_compound(node: &FlatNode, sel: &CompoundSel) -> bool {
-    sel.simples.iter().all(|s| matches_simple(node, s))
-}
-
-pub(crate) fn matches_complex(nodes: &[FlatNode], node_id: u32, sel: &ComplexSel) -> bool {
-    fn inner(nodes: &[FlatNode], node_id: u32, compound: &CompoundSel, combinator: &Option<(Combinator, Box<ComplexSel>)>) -> bool {
-        match combinator {
-            Some((combinator, rest)) => {
-                if !inner(nodes, node_id, &rest.compound, &rest.combinator) { return false; }
-                let node = match nodes.get(node_id as usize) { Some(n) => n, None => return false };
-                match combinator {
-                    Combinator::Child => {
-                        node.parent.is_some_and(|pid| {
-                            nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound))
-                        })
-                    }
-                    Combinator::Descendant => {
-                        let mut current = node.parent;
-                        while let Some(pid) = current {
-                            if nodes.get(pid as usize).is_some_and(|n| matches_compound(n, compound)) {
-                                return true;
-                            }
-                            current = nodes.get(pid as usize).and_then(|n| n.parent);
-                        }
-                        false
-                    }
-                }
-            }
-            None => {
-                nodes.get(node_id as usize).is_some_and(|n| matches_compound(n, compound))
-            }
-        }
-    }
-    inner(nodes, node_id, &sel.compound, &sel.combinator)
-}
-
 // ── Timer entry ─────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -218,9 +63,13 @@ pub(crate) struct UrlParts {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct CookieEntry {
     pub(crate) value: String,
     pub(crate) expires: Option<Instant>,
+    pub(crate) http_only: bool,
+    pub(crate) secure: bool,
+    pub(crate) same_site: String,
 }
 
 pub(crate) type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>>;
@@ -288,6 +137,27 @@ pub(crate) fn cookie_store() -> &'static RwLock<CookieOriginStore> {
 pub(crate) fn local_storage_store() -> &'static RwLock<OriginStore> {
     static LOCAL_STORAGE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
     LOCAL_STORAGE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+
+pub(crate) fn save_local_storage() {
+    if let Ok(store) = local_storage_store().read() {
+        if let Ok(json) = serde_json::to_string(&*store) {
+            if let Err(e) = std::fs::write("vayu_local_storage.json", json) {
+                plog!("storage", "Failed to save localStorage: {}", e);
+            }
+        }
+    }
+}
+
+pub(crate) fn load_local_storage() {
+    if let Ok(data) = std::fs::read_to_string("vayu_local_storage.json") {
+        if let Ok(parsed) = serde_json::from_str::<OriginStore>(&data) {
+            if let Ok(mut store) = local_storage_store().write() {
+                *store = parsed;
+            }
+        }
+    }
 }
 
 impl Default for UrlParts {
@@ -416,7 +286,12 @@ impl JsBridge {
     }
 
     pub fn report_js_error(&mut self, msg: String) {
-        self.js_errors.push(msg);
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let time_str = format!("[{:02}:{:02}:{:02}]", (ts / 3600) % 24, (ts / 60) % 60, ts % 60);
+        self.js_errors.push(format!("{} {}", time_str, msg));
         if self.js_errors.len() > 50 {
             self.js_errors.remove(0);
         }
@@ -432,15 +307,18 @@ impl JsBridge {
 
     // ── Load DOM tree from crate DOM ────────────────────────────────
 
-    fn flatten(node: &Node, nodes: &mut Vec<FlatNode>) -> u32 {
+    fn flatten(node: &Node, nodes: &mut Vec<FlatNode>, depth: usize) -> u32 {
+        if depth > 100 { return 0; }
         let id = nodes.len() as u32;
         match &node.node_type {
             NodeType::Document => {
                 nodes.push(FlatNode::document());
                 for child in &node.children {
-                    let child_id = Self::flatten(child, nodes);
-                    nodes[id as usize].children.push(child_id);
-                    nodes[child_id as usize].parent = Some(id);
+                    let child_id = Self::flatten(child, nodes, depth + 1);
+                    if child_id > 0 {
+                        nodes[id as usize].children.push(child_id);
+                        nodes[child_id as usize].parent = Some(id);
+                    }
                 }
             }
             NodeType::Text(text) => {
@@ -452,9 +330,11 @@ impl JsBridge {
                 fn_.attrs = elem.attributes.clone();
                 nodes.push(fn_);
                 for child in &node.children {
-                    let child_id = Self::flatten(child, nodes);
-                    nodes[id as usize].children.push(child_id);
-                    nodes[child_id as usize].parent = Some(id);
+                    let child_id = Self::flatten(child, nodes, depth + 1);
+                    if child_id > 0 {
+                        nodes[id as usize].children.push(child_id);
+                        nodes[child_id as usize].parent = Some(id);
+                    }
                 }
             }
         }
@@ -464,7 +344,7 @@ impl JsBridge {
     pub fn load_dom(root: &Node, url: &str) -> Self {
         let nodes = {
             let mut n = vec![];
-            Self::flatten(root, &mut n);
+            Self::flatten(root, &mut n, 0);
             n
         };
         let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![], js_errors: vec![] };
@@ -494,15 +374,17 @@ impl JsBridge {
 
     // ── Convert back to crate DOM tree ──────────────────────────────
 
-    fn to_dom_node(&self, id: u32) -> Node {
+    fn to_dom_node(&self, id: u32, visited: &mut std::collections::HashSet<u32>, depth: usize) -> Node {
+        if depth > 100 { return Node::new_document(); }
+        if !visited.insert(id) { return Node::new_document(); }
         let node = &self.nodes[id as usize];
         if node.is_document {
-            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c)).collect();
+            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c, visited, depth + 1)).collect();
             Node { children, node_type: NodeType::Document }
         } else if node.is_text {
             Node { children: vec![], node_type: NodeType::Text(node.text.clone()) }
         } else {
-            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c)).collect();
+            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c, visited, depth + 1)).collect();
             Node { children, node_type: NodeType::Element(ElementData { tag_name: node.tag.clone(), attributes: node.attrs.clone() }) }
         }
     }
@@ -511,7 +393,8 @@ impl JsBridge {
         if self.nodes.is_empty() {
             return Node::new_document();
         }
-        self.to_dom_node(0)
+        let mut visited = std::collections::HashSet::new();
+        self.to_dom_node(0, &mut visited, 0)
     }
 
     // ── DOM manipulation methods ────────────────────────────────────
@@ -1462,6 +1345,8 @@ const SHIM_JS: &str = r#"
         this.status = 0;
         this.statusText = "";
         this.responseText = "";
+        this.response = null;
+        this.responseType = "";
         this._method = "GET";
         this._url = "";
         this._async = true;
@@ -1474,6 +1359,9 @@ const SHIM_JS: &str = r#"
         this.readyState = 1;
     };
 
+    window.XMLHttpRequest.prototype.setRequestHeader = function() {};
+    window.XMLHttpRequest.prototype.getResponseHeader = function() { return null; };
+
     // ponytail: sync XHR — blocks JS thread, 3s timeout via __fetchXhr
     window.XMLHttpRequest.prototype.send = function() {
         this.readyState = 2;
@@ -1482,14 +1370,22 @@ const SHIM_JS: &str = r#"
         this.status = m ? parseInt(m[1], 10) : 0;
         this.responseText = m ? raw.slice(m[0].length) : raw;
         this.statusText = this.status >= 200 && this.status < 300 ? "OK" : this.responseText;
+        if (this.responseType === "json") {
+            try { this.response = JSON.parse(this.responseText); }
+            catch(e) { this.response = null; }
+        } else if (this.responseType === "text" || this.responseType === "") {
+            this.response = this.responseText;
+        }
         this.readyState = 4;
         if (typeof this.onreadystatechange === "function") {
             this.onreadystatechange();
         }
+        if (this.status >= 200 && this.status < 300 && typeof this.onload === "function") {
+            this.onload();
+        } else if (typeof this.onerror === "function") {
+            this.onerror();
+        }
     };
-
-    window.XMLHttpRequest.prototype.setRequestHeader = function() {};
-    window.XMLHttpRequest.prototype.getResponseHeader = function() { return null; };
 
     // ── window.navigator ────────────────────────────────────────────
 

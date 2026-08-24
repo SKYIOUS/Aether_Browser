@@ -265,3 +265,68 @@ fn test_cascade_order() {
     let style = resolve("div { color: red; } div { color: blue; }", "div");
     assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
 }
+
+// ── 20. color-mix support (Phase 3.3) ──
+
+#[test]
+fn test_color_mix_basic() {
+    let sheet = stratus::parse("div { color: color-mix(in srgb, red, blue); }");
+    eprintln!("rules: {}", sheet.rules.len());
+    for rule in &sheet.rules {
+        for decl in &rule.declarations {
+            eprintln!("decl: {:?} = {:?}", decl.name, decl.value);
+        }
+    }
+    let style = resolve("div { color: color-mix(in srgb, red, blue); }", "div");
+    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+}
+
+#[test]
+fn test_color_mix_with_hex() {
+    let style = resolve("div { color: color-mix(in srgb, #ff0, #00f); }", "div");
+    assert_eq!(style.color, Some(Color { r: 255, g: 255, b: 0, a: 255 }));
+}
+
+// ── 21. Resource limits (Phase 1.1) ──
+
+#[test]
+fn test_parse_handles_oversized_input() {
+    let huge_css = "div { color: red; } ".repeat(10000);
+    let sheet = stratus::parse(&huge_css);
+    assert!(sheet.rules.len() <= 50000, "should respect iteration limit");
+}
+
+// ── 22. Unit parsing case-insensitivity (Phase 1.5) ──
+
+#[test]
+fn test_unit_uppercase_px() {
+    let style = resolve("div { font-size: 16PX; }", "div");
+    assert_eq!(style.font_size, Some(16.0));
+}
+
+#[test]
+fn test_unit_mixed_case_em() {
+    let style = resolve("div { font-size: 1.5Em; }", "div");
+    assert_eq!(style.font_size, Some(24.0));
+}
+
+// ── 23. Inline elements collect text from children (Phase 2.2) ──
+
+#[test]
+fn test_inline_child_text_inherited() {
+    let html = r##"<p>Hello <b>bold</b> and <i>italic</i> and <a href="#">link</a></p>"##;
+    let dom = vayu_browser::engine::parser::parse_html(html);
+    let sheet = vayu_browser::engine::stratus::parse("");
+    let mut elements = Vec::new();
+    vayu_browser::engine::pipeline::extractor::extract_elements(
+        &dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0
+    );
+    let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
+    assert!(p.text.contains("Hello"), "paragraph should contain direct text");
+    let b = elements.iter().find(|e| e.tag == "b").expect("should find <b>");
+    assert_eq!(b.text, "bold");
+    let i = elements.iter().find(|e| e.tag == "i").expect("should find <i>");
+    assert_eq!(i.text, "italic");
+    let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
+    assert_eq!(a.text, "link");
+}

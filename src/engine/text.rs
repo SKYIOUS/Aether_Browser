@@ -14,29 +14,42 @@ fn font_system() -> &'static Mutex<FontSystem> {
     FONT_SYSTEM.get_or_init(|| Mutex::new(FontSystem::new()))
 }
 
+static MEASURE_CACHE: std::sync::OnceLock<Mutex<lru::LruCache<(String, u32), f32>>> = std::sync::OnceLock::new();
+
+fn measure_cache() -> &'static Mutex<lru::LruCache<(String, u32), f32>> {
+    MEASURE_CACHE.get_or_init(|| {
+        Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(512).unwrap()))
+    })
+}
+
 /// Measure the visual width of a text string at a given font size.
 ///
-/// This uses actual glyph shaping via `cosmic-text` instead of the old
-/// `unicode_width::UnicodeWidthStr::width() * font_size * 0.58` heuristic.
-/// It correctly handles proportional fonts, ligatures, kerning, CJK, and
-/// complex scripts.
-///
-/// # Performance Note
-///
-/// A new `Buffer::new()` allocation + glyph shaping + `FontSystem` mutex lock
-/// occurs on every call. This is the known hot-path cost when invoked from
-/// `wrap_text`'s per-word loop or inline positioning. The mutex on
-/// `FONT_SYSTEM` is a contention point under concurrent layout passes.
-/// A `ThreadLocal<Buffer>` cache is not feasible because `Buffer` borrows
-/// `FontSystem` at creation time; caching requires a per-`FontSystem` buffer
-/// pool. Tracked as a follow-up performance ticket.
+/// Results are cached to avoid repeated Buffer allocation and shaping.
 pub fn measure_text_width(text: &str, font_size: f32) -> f32 {
     if text.is_empty() {
         return 0.0;
     }
 
     let fs = if font_size.is_finite() { font_size.clamp(6.0, 200.0) } else { 16.0 };
-    let metrics = Metrics::new(fs, fs * 1.2);
+    let fs_key = (fs * 100.0) as u32;
+
+    if let Ok(mut cache) = measure_cache().lock() {
+        if let Some(&cached) = cache.get(&(text.to_string(), fs_key)) {
+            return cached;
+        }
+    }
+
+    let result = measure_text_width_uncached(text, fs);
+
+    if let Ok(mut cache) = measure_cache().lock() {
+        cache.put((text.to_string(), fs_key), result);
+    }
+
+    result
+}
+
+fn measure_text_width_uncached(text: &str, font_size: f32) -> f32 {
+    let metrics = Metrics::new(font_size, font_size * 1.2);
     let mut font_system = font_system().lock().unwrap();
 
     let mut buffer = Buffer::new(&mut font_system, metrics);
@@ -51,7 +64,7 @@ pub fn measure_text_width(text: &str, font_size: f32) -> f32 {
     }
 
     if total_width <= 0.0 {
-        fs * 0.5 * text.len() as f32
+        font_size * 0.5 * text.len() as f32
     } else {
         total_width
     }

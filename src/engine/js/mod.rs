@@ -2,6 +2,7 @@ pub mod js_bridge;
 pub mod timers;
 pub mod events;
 pub mod selector;
+pub mod selector_engine;
 pub mod fetch;
 pub mod storage;
 

@@ -1,4 +1,4 @@
-use vayu_browser::engine::parser::parse_html;
+﻿use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::stratus;
 use vayu_browser::engine::dom::NodeType;
 
@@ -22,7 +22,7 @@ fn test_basic_rendering_pipeline() {
         panic!("Root should be an element");
     }
     assert_eq!(body.children.len(), 3);
-    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
+    let _div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
 
     let css_text = "div { display: block; } p { color: blue; }".to_string();
     let stylesheet = stratus::parse(&css_text);
@@ -36,3 +36,5 @@ fn test_taffy_spatial_init() {
     assert_eq!(style.display, taffy::Display::Flex);
     assert_eq!(style.position, taffy::Position::Relative);
 }
+
+

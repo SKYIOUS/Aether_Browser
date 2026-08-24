@@ -6,7 +6,7 @@ pub mod navigator;
 pub use extractor::StyledElement;
 pub use fetcher::fetch_page_content;
 pub use layout::apply_taffy_layout;
-pub use navigator::{normalize_nav_url, save_tabs, load_tabs, Tab};
+pub use navigator::{normalize_nav_url, save_tabs, load_tabs, Tab, load_bookmarks, save_bookmarks, Bookmark};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

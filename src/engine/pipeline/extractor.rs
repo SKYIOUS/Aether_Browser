@@ -118,7 +118,7 @@ fn is_html_block_tag(tag: &str) -> bool {
         | "p" | "ul" | "ol" | "li" | "table" | "form" | "section" | "article"
         | "nav" | "header" | "footer" | "main" | "aside" | "blockquote"
         | "figure" | "figcaption" | "details" | "summary" | "dialog"
-        | "dd" | "dt" | "dl" | "pre" | "hr" | "fieldset" | "legend" | "address" | "canvas")
+        | "dd" | "dt" | "dl" | "pre" | "hr" | "fieldset" | "legend" | "address")
 }
 
 pub fn should_skip_tag(tag: &str) -> bool {
@@ -239,21 +239,17 @@ fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullSty
         NodeType::Element(e) => (e.tag_name.to_lowercase(), &e.attributes),
         _ => (String::new(), &HashMap::new()),
     };
-    compute_full_style_inner(&tag, attrs, Some(node), ss, vw, vh)
+    compute_full_style_inner(&tag, attrs, None, Some(node), ss, vw, vh)
 }
 
 fn compute_full_style_flat(node: &FlatNode, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
-    let mut merged = node.attrs.clone();
-    for (k, v) in &node.inline_styles {
-        merged.insert(k.clone(), v.clone());
-    }
-    compute_full_style_inner(&node.tag, &merged, None::<&Node>, ss, vw, vh)
+    compute_full_style_inner(&node.tag, &node.attrs, Some(&node.inline_styles), None::<&Node>, ss, vw, vh)
 }
 
 fn compute_full_style_inner(
     tag: &str,
     attrs: &HashMap<String, String>,
-    // ponytail: style module needs &Node; pass None for FlatNode path
+    inline_styles: Option<&HashMap<String, String>>,
     node: Option<&Node>,
     ss: &Stylesheet,
     vw: f32,
@@ -262,11 +258,22 @@ fn compute_full_style_inner(
     let cs = match node {
         Some(n) => crate::engine::style::compute_style_vp(n, ss, vw, vh),
         None => {
-            let element = crate::engine::stratus::ElementData::with_attributes(tag.to_string(), attrs.clone());
+            let merged = if let Some(inline) = inline_styles {
+                let mut m = HashMap::with_capacity(attrs.len() + inline.len());
+                m.extend(inline.iter().map(|(k, v)| (k.clone(), v.clone())));
+                m.extend(attrs.iter().map(|(k, v)| (k.clone(), v.clone())));
+                m
+            } else {
+                attrs.clone()
+            };
+            let element = crate::engine::stratus::ElementData::with_attributes_ref(tag.to_string(), &merged);
             crate::engine::stratus::resolve_style_vp(&element, ss, vw, vh)
         }
     };
-    let color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
+    let mut color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
+    if tag == "a" && cs.color.is_none() {
+        color = Color::from_rgb(0.0, 0.0, 0.93);
+    }
     let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.clamp(6.0, 200.0)).unwrap_or(16.0);
     let font_weight = cs.font_weight.unwrap_or_else(|| "normal".to_string());
     let background_color = cs.background_color.as_ref().map(stratus_color);
@@ -287,17 +294,17 @@ fn compute_full_style_inner(
     let bl = cs.border_left_width.filter(|v| v.is_finite()).unwrap_or(0.0).max(0.0);
     let border_color = cs.border_top_color.or(cs.border_right_color).or(cs.border_bottom_color).or(cs.border_left_color).map(|c| stratus_color(&c));
 
-            let mut display = crate::bridge_gen::display_to_string(&cs.display).to_string();
+    let mut display = cs.display.to_string();
     // ponytail: display:none elements still get a StyledElement but are skipped in layout
     if display == "inline" && is_html_block_tag(tag) {
         display = "block".to_string();
     }
 
-    let flex_direction = crate::bridge_gen::flex_direction_to_string(&cs.flex.flex_direction).to_string();
-    let flex_wrap = crate::bridge_gen::flex_wrap_to_string(&cs.flex.flex_wrap).to_string();
-    let justify_content = crate::bridge_gen::justify_content_to_string(&cs.flex.justify_content).to_string();
-    let align_items = crate::bridge_gen::align_items_to_string(&cs.flex.align_items).to_string();
-    let align_self = crate::bridge_gen::align_self_to_string(&cs.flex.align_self).to_string();
+    let flex_direction = cs.flex.flex_direction.to_string();
+    let flex_wrap = cs.flex.flex_wrap.to_string();
+    let justify_content = cs.flex.justify_content.to_string();
+    let align_items = cs.flex.align_items.to_string();
+    let align_self = cs.flex.align_self.to_string();
     let box_sizing = cs.box_sizing.unwrap_or_else(|| "content-box".to_string());
 
     FullStyle {
@@ -324,7 +331,7 @@ fn compute_full_style_inner(
             let r = cs.border_radius.unwrap_or(0.0);
             [r, r, r, r]
         },
-        position: crate::bridge_gen::position_to_string(&cs.position).to_string(),
+        position: cs.position.to_string(),
         inset_top: cs.top.unwrap_or(0.0),
         inset_right: cs.right.unwrap_or(0.0),
         inset_bottom: cs.bottom.unwrap_or(0.0),
@@ -446,7 +453,7 @@ pub fn extract_elements(
                     let href = elem.attributes.get("href").map(|v| decode_html_entities(v));
                     let text = get_all_text(node);
                     if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
-                    else { text_consumed = true; (text, true, href, 0, "a", false, false) }
+                    else { text_consumed = true; (text, true, href, 0, "", false, false) }
                 }
                 "h1" => {
                     let text = get_all_text(node);
@@ -577,7 +584,8 @@ pub fn extract_elements(
             let needs_skip_children = !text_content.is_empty() && recurse_into_children && !skip_element;
 
             let this_idx = if !skip_element {
-                let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
+                let tag_name = if tag_override.is_empty() { &tag } else { tag_override };
+                let mut el = make_element(tag_name, text_content, &fs, parent_idx, dom_path.clone());
                 el.is_link = is_link;
                 el.href = href;
                 el.indent_level = indent;
@@ -761,7 +769,7 @@ pub(crate) fn extract_elements_flat(
                 let h = node.attrs.get("href").map(|v| decode_html_entities(v));
                 let text = get_all_text_flat(nodes, node_id);
                 if text.is_empty() { (String::new(), false, None, 0, "", true, false) }
-                else { (text, true, h, 0, "a", false, false) }
+                else { (text, true, h, 0, "", false, false) }
             }
             "h1" => {
                 let text = get_all_text_flat(nodes, node_id);
@@ -843,7 +851,8 @@ pub(crate) fn extract_elements_flat(
         let needs_skip_children = !text_content.is_empty() && recurse_into_children && !skip_element;
 
         let this_idx = if !skip_element {
-            let mut el = make_element(tag_override, text_content, &fs, parent_idx, dom_path.clone());
+            let tag_name = if tag_override.is_empty() { tag } else { tag_override };
+            let mut el = make_element(tag_name, text_content, &fs, parent_idx, dom_path.clone());
             el.is_link = is_link;
             el.href = href;
             el.indent_level = indent;

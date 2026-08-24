@@ -6,6 +6,7 @@ use std::time::Instant;
 pub struct Tab {
     pub title: String,
     pub url: String,
+    pub workspace_id: usize,
     #[serde(skip)]
     pub created_at: Instant,
     #[serde(skip)]
@@ -16,7 +17,7 @@ pub struct Tab {
     pub hover_started: Option<Instant>,
 }
 
-// Custom deserialization to handle skipped Instant fields
+// Custom deserialization to handle skipped Instant fields and new workspace_id
 impl<'de> Deserialize<'de> for Tab {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -26,6 +27,8 @@ impl<'de> Deserialize<'de> for Tab {
         struct Helper {
             title: String,
             url: String,
+            #[serde(default)]
+            workspace_id: usize,
         }
         
         let helper = Helper::deserialize(deserializer)?;
@@ -34,6 +37,7 @@ impl<'de> Deserialize<'de> for Tab {
         Ok(Tab {
             title: helper.title,
             url: helper.url,
+            workspace_id: helper.workspace_id,
             created_at: now,
             last_accessed: now,
             is_hovered: false,
@@ -48,6 +52,7 @@ impl Default for Tab {
         Self {
             title: "New Tab".to_string(),
             url: "about:blank".to_string(),
+            workspace_id: 0,
             created_at: now,
             last_accessed: now,
             is_hovered: false,
@@ -57,11 +62,12 @@ impl Default for Tab {
 }
 
 impl Tab {
-    pub fn new(title: &str, url: &str) -> Self {
+    pub fn new(title: &str, url: &str, workspace_id: usize) -> Self {
         let now = Instant::now();
         Self {
             title: title.to_string(),
             url: url.to_string(),
+            workspace_id,
             created_at: now,
             last_accessed: now,
             is_hovered: false,
@@ -107,6 +113,33 @@ pub fn save_tabs(tabs: &[Tab]) {
             plog!("tabs", "Failed to serialize tabs: {}", e);
         }
     }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bookmark {
+    pub title: String,
+    pub url: String,
+}
+
+pub fn save_bookmarks(bookmarks: &[Bookmark]) {
+    match serde_json::to_string_pretty(bookmarks) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write("vayu_bookmarks.json", json) {
+                plog!("bookmarks", "Failed to save: {}", e);
+            }
+        }
+        Err(e) => {
+            plog!("bookmarks", "Failed to serialize: {}", e);
+        }
+    }
+}
+
+pub fn load_bookmarks() -> Vec<Bookmark> {
+    std::fs::read_to_string("vayu_bookmarks.json")
+        .ok()
+        .and_then(|s| serde_json::from_str::<Vec<Bookmark>>(&s).ok())
+        .unwrap_or_default()
 }
 
 pub fn load_tabs() -> Vec<Tab> {

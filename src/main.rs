@@ -1,9 +1,9 @@
 mod ui;
 pub mod engine;
 mod logging;
-mod bridge_gen;
 
 use ui::VayuApp;
+use ui::get_app_theme;
 use iced::{window, Size};
 
 pub fn main() -> iced::Result {
@@ -14,6 +14,6 @@ pub fn main() -> iced::Result {
             min_size: Some(Size::new(900.0, 600.0)),
             ..Default::default()
         })
-        .theme(|_| iced::Theme::Light)
+        .theme(|_| get_app_theme())
         .run()
 }

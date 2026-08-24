@@ -1,12 +1,20 @@
-
+﻿
 pub mod kor_renderer;
 pub mod screens;
 pub mod style;
 
-use iced::{Element, Task, Subscription, Event};
+use iced::{Element, Task, Subscription, Event, Theme};
 use screens::browser::{BrowserMessage, BrowserScreen};
 use screens::palette::{PaletteMessage, PaletteScreen};
 use screens::settings::{SettingsMessage, SettingsScreen};
+use std::sync::Mutex;
+
+static APP_THEME: Mutex<Theme> = Mutex::new(Theme::Light);
+
+pub fn get_app_theme() -> Theme {
+    APP_THEME.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -117,3 +125,4 @@ impl VayuApp {
         }
     }
 }
+

@@ -22,6 +22,10 @@ impl ElementData {
         ElementData { tag_name, attributes }
     }
 
+    pub fn with_attributes_ref(tag_name: String, attributes: &std::collections::HashMap<String, String>) -> Self {
+        ElementData { tag_name, attributes: attributes.clone() }
+    }
+
     pub fn has_class(&self, class: &str) -> bool {
         self.attributes.get("class")
             .map(|classes| classes.split_whitespace().any(|c| c == class))
@@ -131,7 +135,7 @@ pub fn match_rules<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::parser::parse;
+    use crate::parser::{self, Declaration, PropertyValue, Rule, Selector, SimpleSelector, Stylesheet};
 
     fn element_with_attrs(tag: &str, attrs: &[(&str, &str)]) -> ElementData {
         let mut attributes = std::collections::HashMap::new();
@@ -143,8 +147,21 @@ mod tests {
 
     #[test]
     fn test_tag_matching() {
-        let css = "div { color: red; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![parser::Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: Some("div".into()),
+                    id: None,
+                    class: vec![],
+                    attribute: None,
+                    pseudo_class: None,
+                })],
+                declarations: vec![parser::Declaration {
+                    name: "color".into(),
+                    value: PropertyValue::Keyword("red".into()),
+                }],
+            }],
+        };
         let element = element_with_attrs("div", &[]);
 
         let matched = match_element(&element, &stylesheet);
@@ -153,8 +170,16 @@ mod tests {
 
     #[test]
     fn test_class_matching() {
-        let css = ".card { background: white; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![parser::Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: None, id: None,
+                    class: vec!["card".into()],
+                    attribute: None, pseudo_class: None,
+                })],
+                declarations: vec![],
+            }],
+        };
         let element = element_with_attrs("div", &[("class", "card container")]);
 
         let matched = match_element(&element, &stylesheet);
@@ -163,8 +188,17 @@ mod tests {
 
     #[test]
     fn test_id_matching() {
-        let css = "#nav { display: flex; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![parser::Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: None,
+                    id: Some("nav".into()),
+                    class: vec![],
+                    attribute: None, pseudo_class: None,
+                })],
+                declarations: vec![],
+            }],
+        };
         let element = element_with_attrs("nav", &[("id", "nav")]);
 
         let matched = match_element(&element, &stylesheet);
@@ -173,8 +207,15 @@ mod tests {
 
     #[test]
     fn test_no_match() {
-        let css = "div { color: red; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![parser::Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: Some("div".into()), id: None, class: vec![],
+                    attribute: None, pseudo_class: None,
+                })],
+                declarations: vec![],
+            }],
+        };
         let element = element_with_attrs("span", &[]);
 
         let matched = match_element(&element, &stylesheet);
@@ -183,8 +224,31 @@ mod tests {
 
     #[test]
     fn test_specificity() {
-        let css = "#id { color: red; } .class { color: blue; } div { color: green; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![
+                parser::Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: None, id: Some("id".into()), class: vec![],
+                        attribute: None, pseudo_class: None,
+                    })],
+                    declarations: vec![],
+                },
+                parser::Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: None, id: None, class: vec!["class".into()],
+                        attribute: None, pseudo_class: None,
+                    })],
+                    declarations: vec![],
+                },
+                parser::Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("div".into()), id: None, class: vec![],
+                        attribute: None, pseudo_class: None,
+                    })],
+                    declarations: vec![],
+                },
+            ],
+        };
         let element = element_with_attrs("div", &[("id", "id"), ("class", "class")]);
 
         let matched = match_element(&element, &stylesheet);

@@ -639,6 +639,60 @@ fn test_get_child_nodes_includes_all() {
 }
 
 #[test]
+fn test_query_selector_attribute_selector() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("div");
+    let a = bridge.create_element("a");
+    let span = bridge.create_element("span");
+    bridge.append_child(root, a);
+    bridge.append_child(root, span);
+    bridge.set_attribute(a, "href", "https://example.com");
+    bridge.set_attribute(span, "href", "https://example.com");
+    assert_eq!(bridge.query_selector(root, "[href]"), Some(a));
+    assert_eq!(bridge.query_selector_all(root, "[href]").len(), 2);
+}
+
+#[test]
+fn test_query_selector_pseudo_class() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("ul");
+    let li1 = bridge.create_element("li");
+    let li2 = bridge.create_element("li");
+    bridge.append_child(root, li1);
+    bridge.append_child(root, li2);
+    assert_eq!(bridge.query_selector(root, "li:first-child"), Some(li1));
+    assert_eq!(bridge.query_selector(root, "li:last-child"), Some(li2));
+}
+
+#[test]
+fn test_query_selector_sibling_combinator() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("div");
+    let p = bridge.create_element("p");
+    let span = bridge.create_element("span");
+    let em = bridge.create_element("em");
+    bridge.append_child(root, p);
+    bridge.append_child(root, span);
+    bridge.append_child(root, em);
+    assert_eq!(bridge.query_selector(root, "p + span"), Some(span));
+    assert_eq!(bridge.query_selector(root, "p + em"), None);
+    assert_eq!(bridge.query_selector(root, "p ~ em"), Some(em));
+    assert_eq!(bridge.query_selector(root, "span ~ em"), Some(em));
+}
+
+#[test]
+fn test_query_selector_not() {
+    let mut bridge = JsBridge::new();
+    let root = bridge.create_element("div");
+    let p = bridge.create_element("p");
+    let span = bridge.create_element("span");
+    bridge.append_child(root, p);
+    bridge.append_child(root, span);
+    assert_eq!(bridge.query_selector(root, "div :not(p)"), Some(span));
+    assert_eq!(bridge.query_selector(root, ":not(span)"), Some(p));
+}
+
+#[test]
 fn test_load_dom_idempotent() {
     let original = make_dom();
     let bridge1 = JsBridge::load_dom(&original, "https://a.com");

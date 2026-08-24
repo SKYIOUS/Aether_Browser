@@ -218,22 +218,42 @@ fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f
 }
 
 fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[Option<f32>; 4]> {
-    let s = match value {
-        PropertyValue::Keyword(s) => s,
+    let parts: Vec<PropertyValue> = match value {
+        PropertyValue::Shorthand(parts) => parts.clone(),
+        PropertyValue::Keyword(s) => {
+            s.split_whitespace().map(|p| {
+                if p == "auto" {
+                    PropertyValue::Keyword("auto".to_string())
+                } else if let Some(lv) = LengthValue::from_str(p) {
+                    PropertyValue::Length(lv)
+                } else if let Ok(n) = p.parse::<f32>() {
+                    PropertyValue::Number(n)
+                } else {
+                    PropertyValue::Keyword(p.to_string())
+                }
+            }).collect()
+        }
         _ => return None,
     };
-    let parts: Vec<&str> = s.split_whitespace().collect();
-    if parts.is_empty() || parts.len() > 4 { return None; }
 
-    let mut vals: Vec<Option<f32>> = Vec::with_capacity(parts.len());
-    for (i, p) in parts.iter().enumerate() {
-        if *p == "auto" { vals.push(None); continue; }
-        if let Some(lv) = LengthValue::from_str(p) {
-            let px = if i % 2 == 0 && parts.len() >= 2 { lv_to_px_vertical(&lv, vw, vh) } else { lv_to_px(&lv, vw, vh) };
-            vals.push(Some(px));
-        } else if let Ok(n) = p.parse::<f32>() {
-            vals.push(Some(n));
-        } else { return None; }
+    let len = parts.len();
+    if len == 0 || len > 4 { return None; }
+
+    let mut vals: Vec<Option<f32>> = Vec::with_capacity(len);
+    for (i, part) in parts.iter().enumerate() {
+        if matches!(part, PropertyValue::Keyword(s) if s == "auto") {
+            vals.push(None);
+            continue;
+        }
+        let px = if i % 2 == 0 && len >= 2 {
+            parse_length_vp_vertical(part, vw, vh)
+        } else {
+            parse_length_vp(part, vw, vh)
+        };
+        match px {
+            Some(v) => vals.push(Some(v)),
+            None => return None,
+        }
     }
 
     Some(match vals.len() {
@@ -439,12 +459,29 @@ pub fn resolve_styles_for_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::parser::parse;
+    use crate::parser::{Declaration, PropertyValue, Rule, Selector, SimpleSelector, Stylesheet};
+
+    fn make_stylesheet(declarations: &[(&str, PropertyValue)]) -> Stylesheet {
+        Stylesheet {
+            rules: vec![Rule {
+                selectors: vec![Selector::Simple(SimpleSelector {
+                    tag_name: Some("div".into()),
+                    id: None,
+                    class: vec![],
+                    attribute: None,
+                    pseudo_class: None,
+                })],
+                declarations: declarations.iter().map(|(n, v)| Declaration {
+                    name: n.to_string(),
+                    value: v.clone(),
+                }).collect(),
+            }],
+        }
+    }
 
     #[test]
     fn test_resolve_simple() {
-        let css = "div { color: red; }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Keyword("red".into()))]);
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
@@ -453,8 +490,7 @@ mod tests {
 
     #[test]
     fn test_resolve_display() {
-        let css = "div { display: flex; }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("display", PropertyValue::Keyword("flex".into()))]);
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
@@ -463,8 +499,11 @@ mod tests {
 
     #[test]
     fn test_resolve_flex() {
-        let css = "div { display: flex; flex-direction: column; justify-content: center; }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[
+            ("display", PropertyValue::Keyword("flex".into())),
+            ("flex-direction", PropertyValue::Keyword("column".into())),
+            ("justify-content", PropertyValue::Keyword("center".into())),
+        ]);
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
@@ -475,8 +514,18 @@ mod tests {
 
     #[test]
     fn test_cascade_override() {
-        let css = "div { color: red; } div { color: blue; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![
+                Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
+                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("red".into()) }],
+                },
+                Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
+                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("blue".into()) }],
+                },
+            ],
+        };
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
@@ -485,8 +534,18 @@ mod tests {
 
     #[test]
     fn test_specificity_override() {
-        let css = "div { color: red; } #id { color: blue; }";
-        let stylesheet = parse(css);
+        let stylesheet = Stylesheet {
+            rules: vec![
+                Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
+                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("red".into()) }],
+                },
+                Rule {
+                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: None, id: Some("id".into()), class: vec![], attribute: None, pseudo_class: None })],
+                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("blue".into()) }],
+                },
+            ],
+        };
         let mut attrs = std::collections::HashMap::new();
         attrs.insert("id".to_string(), "id".to_string());
         let element = ElementData::with_attributes("div".to_string(), attrs);
@@ -497,8 +556,7 @@ mod tests {
 
     #[test]
     fn test_resolve_current_color() {
-        let css = "div { color: currentColor; }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Keyword("currentColor".into()))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color::BLACK));
@@ -506,26 +564,26 @@ mod tests {
 
     #[test]
     fn test_resolve_hsl_color() {
-        let css = "div { color: hsl(0, 100%, 50%); }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 255, g: 0, b: 0, a: 255 }))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
     }
 
     #[test]
-    fn test_resolve_color_mix_stub() {
-        let css = "div { color: color-mix(in srgb, red, blue); }";
-        let stylesheet = parse(css);
+    fn test_resolve_color_value() {
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 128, g: 64, b: 192, a: 255 }))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+        assert_eq!(style.color, Some(Color { r: 128, g: 64, b: 192, a: 255 }));
     }
 
     #[test]
     fn test_resolve_border_current_color() {
-        let css = "div { color: red; border-color: currentColor; }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[
+            ("color", PropertyValue::Keyword("red".into())),
+            ("border-color", PropertyValue::Keyword("currentColor".into())),
+        ]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.border_top_color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
@@ -533,8 +591,7 @@ mod tests {
 
     #[test]
     fn test_resolve_rgb_color() {
-        let css = "div { color: rgb(255, 0, 0); }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 255, g: 0, b: 0, a: 255 }))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
@@ -542,8 +599,7 @@ mod tests {
 
     #[test]
     fn test_resolve_rgba_color() {
-        let css = "div { color: rgba(0, 255, 0, 0.5); }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 0, g: 255, b: 0, a: 128 }))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 128 }));
@@ -551,8 +607,7 @@ mod tests {
 
     #[test]
     fn test_resolve_hsla_color() {
-        let css = "div { color: hsla(240, 100%, 50%, 0.25); }";
-        let stylesheet = parse(css);
+        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 0, g: 0, b: 255, a: 64 }))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 64 }));

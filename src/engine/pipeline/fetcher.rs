@@ -21,7 +21,8 @@ fn css_cache() -> &'static Mutex<LruCache<String, Stylesheet>> {
     CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
 }
 
-fn extract_styles(node: &Node, styles: &mut Vec<String>) {
+fn extract_styles(node: &Node, styles: &mut Vec<String>, depth: usize) {
+    if depth > 100 { return; }
     if let NodeType::Element(elem) = &node.node_type {
         if elem.tag_name.to_lowercase() == "style" {
             for child in &node.children {
@@ -31,12 +32,13 @@ fn extract_styles(node: &Node, styles: &mut Vec<String>) {
             }
         }
         for child in &node.children {
-            extract_styles(child, styles);
+            extract_styles(child, styles, depth + 1);
         }
     }
 }
 
-fn extract_links(node: &Node, links: &mut Vec<String>) {
+fn extract_links(node: &Node, links: &mut Vec<String>, depth: usize) {
+    if depth > 100 { return; }
     if let NodeType::Element(elem) = &node.node_type {
         if elem.tag_name.to_lowercase() == "link" {
             if let Some(rel) = elem.attributes.get("rel") {
@@ -48,7 +50,7 @@ fn extract_links(node: &Node, links: &mut Vec<String>) {
             }
         }
         for child in &node.children {
-            extract_links(child, links);
+            extract_links(child, links, depth + 1);
         }
     }
 }
@@ -58,7 +60,8 @@ enum ScriptSource {
     External(String),
 }
 
-fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>) {
+fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>, depth: usize) {
+    if depth > 100 { return; }
     if let NodeType::Element(elem) = &node.node_type {
         let tag = elem.tag_name.to_lowercase();
         if tag == "script" {
@@ -85,7 +88,7 @@ fn extract_scripts(node: &Node, scripts: &mut Vec<ScriptSource>) {
         }
     }
     for child in &node.children {
-        extract_scripts(child, scripts);
+        extract_scripts(child, scripts, depth + 1);
     }
 }
 
@@ -105,13 +108,106 @@ fn inject_js_output_flat(bridge: &mut crate::engine::js::JsBridge, text: &str) {
     }
 }
 
-fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+
+fn render_vayu_page(url: &str, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+    let page = match url {
+        "vayu://newtab" => newtab_page(content_width, viewport_h),
+        "vayu://history" => history_page(content_width, viewport_h),
+        "vayu://bookmarks" => bookmarks_page(content_width, viewport_h),
+        "vayu://settings" => settings_page(content_width, viewport_h),
+        _ => return (url.to_string(), error_page(url, "Unknown internal page", content_width, viewport_h, 0), None),
+    };
+    (url.to_string(), page, None)
+}
+
+fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
+        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
+        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
+        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+    };
+    vec![
+        se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
+        se("h1", "New Tab", 40.0, 40.0, content_width - 80.0, 48.0, iced::Color::from_rgb(0.1, 0.1, 0.1), 28.0, "bold", None),
+        se("p", "Welcome to Vayu Browser", 40.0, 100.0, content_width - 80.0, 24.0, iced::Color::from_rgb(0.4, 0.4, 0.4), 14.0, "normal", None),
+    ]
+}
+
+fn history_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
+        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
+        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
+        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+    };
+    vec![
+        se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
+        se("h1", "History", 40.0, 40.0, content_width - 80.0, 48.0, iced::Color::from_rgb(0.1, 0.1, 0.1), 28.0, "bold", None),
+    ]
+}
+
+fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
+        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
+        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
+        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+    };
+    vec![
+        se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
+        se("h1", "Bookmarks", 40.0, 40.0, content_width - 80.0, 48.0, iced::Color::from_rgb(0.1, 0.1, 0.1), 28.0, "bold", None),
+    ]
+}
+
+fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
+    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
+        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
+        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
+        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
+        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+    };
+    vec![
+        se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
+        se("h1", "Settings", 40.0, 40.0, content_width - 80.0, 48.0, iced::Color::from_rgb(0.1, 0.1, 0.1), 28.0, "bold", None),
+    ]
+}
+
+fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, status: u16) -> Vec<StyledElement> {
     let pad = 24.0;
-    let red = Color::from_rgb(0.88, 0.18, 0.18); // ponytail: simple accent, no palette import
+    let (red, title) = match status {
+        404 => (Color::from_rgb(0.88, 0.18, 0.18), format!("404 — Not Found")),
+        403 => (Color::from_rgb(0.88, 0.55, 0.18), format!("403 — Forbidden")),
+        500 => (Color::from_rgb(0.88, 0.18, 0.18), format!("500 — Server Error")),
+        _ => (Color::from_rgb(0.88, 0.18, 0.18), format!("{} — Error", status)),
+    };
     let bg = Color::from_rgb(0.13, 0.13, 0.13);
     let fg = Color::from_rgb(0.95, 0.95, 0.95);
     let muted = Color::from_rgb(0.65, 0.65, 0.65);
-    // ponytail: no Default derive, inline closure to keep it short
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: Color, size: f32, weight: &str, bg: Option<Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
         is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
@@ -126,9 +222,9 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32) -> V
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),
-        se("h1", &format!("⚠  {}", reason), pad, 60.0, content_width - pad * 2.0, 36.0, red, 22.0, "bold", None),
+        se("h1", &format!("⚠  {}", title), pad, 60.0, content_width - pad * 2.0, 36.0, red, 22.0, "bold", None),
         se("p", &format!("Could not load: {}", url), pad, 110.0, content_width - pad * 2.0, 24.0, muted, 14.0, "normal", None),
-        se("p", "Check the URL and try again.", pad, 145.0, content_width - pad * 2.0, 20.0, fg, 14.0, "normal", None),
+        se("p", &format!("{}", reason), pad, 145.0, content_width - pad * 2.0, 20.0, fg, 14.0, "normal", None),
     ]
 }
 
@@ -143,6 +239,11 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
 
 fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     plog!("FETCH", "URL={}", url);
+
+    if url.starts_with("vayu://") {
+        return render_vayu_page(&url, content_width, viewport_h);
+    }
+
     let response = match net::fetch_with_redirects(&url, 5, None) {
         Ok(resp) => {
             plog!("FETCH", "Status=OK len={}", resp.body.len());
@@ -150,8 +251,11 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
         }
         Err(e) => {
             plog!("FETCH", "Fetch error: {}", e);
-            let reason = format!("{}", e);
-            return (url.clone(), error_page(&url, &reason, content_width, viewport_h), None);
+            let (status, reason) = match e {
+                crate::engine::net::FetchError::Http(code, msg) => (code, msg),
+                _ => (0, format!("{}", e)),
+            };
+            return (url.clone(), error_page(&url, &reason, content_width, viewport_h, status), None);
         }
     };
     let net::Response { body: html, headers, final_url: page_url, .. } = response;
@@ -169,7 +273,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     plog!("PARSE", "DOM root has {} children", dom_node.children.len());
 
     let mut styles = Vec::new();
-    extract_styles(&dom_node, &mut styles);
+    extract_styles(&dom_node, &mut styles, 0);
     plog!("STYLE", "Found {} style blocks", styles.len());
 
     let inline_styles_ok = net::csp_allows_inline_style(&csp_policy);
@@ -193,7 +297,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
     plog!("CSS", "Parsed {} rules from inline styles", stylesheet.rules.len());
 
     let mut link_urls = Vec::new();
-    extract_links(&dom_node, &mut link_urls);
+    extract_links(&dom_node, &mut link_urls, 0);
     let link_limit = link_urls.len().min(50);
     plog!("CSS", "Found {} external CSS links, processing {}", link_urls.len(), link_limit);
     for link_url in link_urls.iter().take(link_limit) {
@@ -240,7 +344,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) 
 
     let js_enabled = super::is_js_enabled();
     let mut scripts = Vec::new();
-    extract_scripts(&dom_node, &mut scripts);
+    extract_scripts(&dom_node, &mut scripts, 0);
     plog!("JS", "Found {} script blocks (js_enabled={})", scripts.len(), js_enabled);
     let bridge = Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)));
     let mut js_engine = JSEngine::new();

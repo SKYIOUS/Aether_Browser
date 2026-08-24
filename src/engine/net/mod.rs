@@ -97,7 +97,17 @@ fn cache_set(url: &str, body: &str) {
 
 // ── Cookie jar ────────────────────────────────────────────────────────
 
-type CookieJar = HashMap<String, HashMap<String, String>>;
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CookieAttrs {
+    pub value: String,
+    #[serde(skip)]
+    pub expires: Option<std::time::Instant>,
+    pub http_only: bool,
+    pub secure: bool,
+    pub same_site: String,
+}
+
+type CookieJar = HashMap<String, HashMap<String, CookieAttrs>>;
 
 fn cookie_jar() -> &'static RwLock<CookieJar> {
     static JAR: OnceLock<RwLock<CookieJar>> = OnceLock::new();
@@ -174,27 +184,88 @@ pub fn set_cookie_from_response(url: &str, set_cookie_header: &str) {
     let trimmed = set_cookie_header.trim();
     if let Some(eq_pos) = trimmed.find('=') {
         let key = trimmed[..eq_pos].trim().to_string();
-        let value = trimmed[eq_pos + 1..].split(';').next().unwrap_or("").trim().to_string();
+        let value_end = trimmed[eq_pos + 1..].find(';').map(|p| eq_pos + 1 + p).unwrap_or(trimmed.len());
+        let value = trimmed[eq_pos + 1..value_end].trim().to_string();
         if !key.is_empty() && !value.is_empty() {
+            let mut http_only = false;
+            let mut secure = false;
+            let mut same_site = String::new();
+            for part in trimmed[value_end..].split(';') {
+                let part = part.trim().to_lowercase();
+                if part == "httponly" { http_only = true; }
+                else if part == "secure" { secure = true; }
+                else if let Some(ss) = part.strip_prefix("samesite=") {
+                    same_site = ss.to_string();
+                }
+            }
             if let Ok(mut jar) = cookie_jar().write() {
                 let origin = cookie_origin_key(url);
                 let total: usize = jar.values().map(|m| m.len()).sum();
                 let origin_has_room = jar.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
                 if !origin_has_room || total >= 500 { return; }
-                jar.entry(origin).or_default().insert(key, value);
+                let expires = parse_cookie_expiry_from_str(trimmed);
+                jar.entry(origin).or_default().insert(key, CookieAttrs {
+                    value,
+                    expires,
+                    http_only,
+                    secure,
+                    same_site,
+                });
                 save_cookies();
             }
         }
     }
 }
 
+fn parse_cookie_expiry_from_str(cookie_str: &str) -> Option<std::time::Instant> {
+    for part in cookie_str.split(';') {
+        let part = part.trim();
+        if let Some(val) = part.strip_prefix("Max-Age=").or_else(|| part.strip_prefix("max-age=")).or_else(|| part.strip_prefix("MAX-AGE=")) {
+            if let Ok(secs) = val.trim().parse::<u64>() {
+                return Some(std::time::Instant::now() + std::time::Duration::from_secs(secs));
+            }
+        }
+        if let Some(val) = part.strip_prefix("Expires=").or_else(|| part.strip_prefix("expires=")) {
+            if let Some(instant) = parse_rfc1123_date_local(val.trim()) {
+                return Some(instant);
+            }
+        }
+    }
+    None
+}
+
+fn parse_rfc1123_date_local(s: &str) -> Option<std::time::Instant> {
+    let s = s.strip_suffix(" GMT")?;
+    let (_wkday, rest) = s.split_once(", ")?;
+    let parts: Vec<&str> = rest.split_whitespace().collect();
+    if parts.len() != 3 { return None; }
+    let day = parts[0].parse::<u32>().ok()? as u64;
+    let month = match parts[1] {
+        "Jan" => 1, "Feb" => 2, "Mar" => 3, "Apr" => 4, "May" => 5, "Jun" => 6,
+        "Jul" => 7, "Aug" => 8, "Sep" => 9, "Oct" => 10, "Nov" => 11, "Dec" => 12,
+        _ => return None,
+    } as u64;
+    let year = parts[2].parse::<i64>().ok()?;
+    let days_before_month = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let mut days = days_before_month[(month - 1) as usize] + day - 1;
+    let leap = if month <= 2 { (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) } else { year % 4 == 0 && year % 100 != 0 };
+    if leap { days += 1; }
+    let year_diff = year - 1970;
+    let leap_years_before = year_diff / 4 - year_diff / 100 + year_diff / 400;
+    let days_since_epoch = year_diff * 365 + leap_years_before + (days as i64);
+    let secs = (days_since_epoch.max(0) as u64) * 86400;
+    Some(std::time::Instant::now() + std::time::Duration::from_secs(secs))
+}
+
 pub fn get_cookies_for_url(url: &str) -> String {
     let mut parts = Vec::new();
+    let is_https = url.starts_with("https://");
     if let Ok(jar) = cookie_jar().read() {
         let origin = cookie_origin_key(url);
         if let Some(cookies) = jar.get(&origin) {
-            for (key, value) in cookies {
-                parts.push(format!("{}={}", key, value));
+            for (key, attrs) in cookies {
+                if attrs.secure && !is_https { continue; }
+                parts.push(format!("{}={}", key, attrs.value));
             }
         }
     }
@@ -507,6 +578,34 @@ pub fn csp_allows_inline_style(policy: &CspPolicy) -> bool {
     policy.is_empty() || policy.allows_inline(&CspDirective::StyleSrc)
 }
 
+// ── Network Request Log ──────────────────────────────────────────────
+
+type NetworkLog = Vec<String>;
+
+fn network_log() -> &'static RwLock<NetworkLog> {
+    static LOG: OnceLock<RwLock<NetworkLog>> = OnceLock::new();
+    LOG.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+pub fn log_network_request(method: &str, url: &str, status: u16, duration_ms: u128) {
+    if let Ok(mut log) = network_log().write() {
+        let entry = format!("{} {} -> {} ({}ms)", method, url, status, duration_ms);
+        log.push(entry);
+        if log.len() > 500 {
+            let overflow = log.len() - 500;
+            log.drain(0..overflow);
+        }
+    }
+}
+
+pub fn take_network_log() -> Vec<String> {
+    network_log().write().map(|mut log| { log.drain(..).collect() }).unwrap_or_default()
+}
+
+pub fn get_network_log() -> Vec<String> {
+    network_log().read().map(|log| log.clone()).unwrap_or_default()
+}
+
 // ── URL Helpers ───────────────────────────────────────────────────────
 
 fn header_value<'a>(headers: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
@@ -634,6 +733,8 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
     plog!("net", "Got response, status: {}", status);
 
     if status >= 400 {
+        let _ = std::time::Instant::now();
+        log_network_request("GET", &final_url, status, 0);
         return Err(FetchError::Http(status, format!("HTTP error {}", status)));
     }
 
@@ -671,6 +772,7 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
     }
 
     if !check_csp(&final_url, &headers) {
+        log_network_request("GET", &final_url, 0, _start.elapsed().as_millis());
         return Err(FetchError::Network("Blocked by Content-Security-Policy".to_string()));
     }
 
@@ -688,6 +790,8 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
 
     let body = resp.text().map_err(|e| FetchError::Network(format!("Failed to read body: {}", e)))?;
     plog!("net", "Body length: {}", body.len());
+
+    log_network_request("GET", &final_url, status, _start.elapsed().as_millis());
 
     Ok(Response { body, status, headers, final_url })
 }

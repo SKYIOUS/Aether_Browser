@@ -305,11 +305,13 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
         let mut x = abs_x[i];
         let mut y = abs_y[i];
         let mut current = elements[i].parent_index;
+        let mut steps = 0;
         while let Some(pidx) = current {
-            if pidx < n && pidx != i {
+            if pidx < n && pidx != i && steps < n {
                 x += abs_x[pidx];
                 y += abs_y[pidx];
                 current = elements[pidx].parent_index;
+                steps += 1;
             } else {
                 break;
             }
