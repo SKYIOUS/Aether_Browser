@@ -19,6 +19,9 @@ pub enum FetchError {
     Http(u16, String),
     Network(String),
     Timeout,
+    /// TLS/certificate failure, separated from generic connect errors so the
+    /// error page can say "certificate problem" without dumping internals.
+    Tls(String),
     EmptyBody,
     CrossOrigin { target: String, origin: String },
 }
@@ -29,6 +32,7 @@ impl fmt::Display for FetchError {
             Self::Http(code, msg) => write!(f, "HTTP {}: {}", code, msg),
             Self::Network(msg) => write!(f, "Network: {}", msg),
             Self::Timeout => write!(f, "Request timed out"),
+            Self::Tls(msg) => write!(f, "Secure connection failed: {}", msg),
             Self::EmptyBody => write!(f, "Empty response body"),
             Self::CrossOrigin { target, origin } => {
                 write!(f, "Cross-origin fetch blocked: '{}' ≠ origin '{}'", target, origin)
@@ -37,10 +41,34 @@ impl fmt::Display for FetchError {
     }
 }
 
+/// Walks the error source chain to the deepest message - reqwest's own
+/// to_string() hides whether a connect failure was really a certificate problem.
+fn deepest_cause(e: &reqwest::Error) -> String {
+    let mut msg = e.to_string();
+    let mut current: Option<&dyn std::error::Error> = Some(e);
+    while let Some(src) = current.and_then(std::error::Error::source) {
+        msg = src.to_string();
+        current = Some(src);
+    }
+    msg
+}
+
 impl From<reqwest::Error> for FetchError {
     fn from(e: reqwest::Error) -> Self {
         if e.is_timeout() {
             FetchError::Timeout
+        } else if e.is_connect() {
+            let cause = deepest_cause(&e);
+            let lower = cause.to_lowercase();
+            if lower.contains("certificat")
+                || lower.contains("tls")
+                || lower.contains("ssl")
+                || lower.contains("handshake")
+            {
+                FetchError::Tls(cause)
+            } else {
+                FetchError::Network(cause)
+            }
         } else if let Some(status) = e.status() {
             FetchError::Http(status.as_u16(), e.to_string())
         } else {
@@ -50,15 +78,24 @@ impl From<reqwest::Error> for FetchError {
 }
 
 static CLIENT: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
+
+/// Single construction point for HTTP clients (rustls + webpki roots, strict
+/// cert validation, redirects owned by our fetch loop).
+pub fn build_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("Vayu/0.2.0 (Rust; +https://vayu-browser.dev)")
+        .danger_accept_invalid_certs(false)
+        // Redirects are followed by fetch_inner, never by the client:
+        // per-hop cookies/CSP/CORS checks and the scheme-downgrade guard
+        // only exist at that layer (C1).
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| format!("reqwest client: {}", e))
+}
+
 fn client() -> Option<&'static reqwest::blocking::Client> {
-    let entry = CLIENT.get_or_init(|| {
-        reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(15))
-            .user_agent("Vayu/0.2.0 (Rust; +https://vayu-browser.dev)")
-            .danger_accept_invalid_certs(false)
-            .build()
-            .map_err(|e| format!("reqwest client: {}", e))
-    });
+    let entry = CLIENT.get_or_init(build_client);
     match entry {
         Ok(c) => Some(c),
         Err(e) => {
@@ -198,6 +235,7 @@ pub fn set_cookie_from_response(url: &str, set_cookie_header: &str) {
                     same_site = ss.to_string();
                 }
             }
+            let mut inserted = false;
             if let Ok(mut jar) = cookie_jar().write() {
                 let origin = cookie_origin_key(url);
                 let total: usize = jar.values().map(|m| m.len()).sum();
@@ -211,6 +249,11 @@ pub fn set_cookie_from_response(url: &str, set_cookie_header: &str) {
                     secure,
                     same_site,
                 });
+                inserted = true;
+            }
+            // save_cookies takes a READ lock on the same jar - it must run
+            // after the write guard is gone or the thread self-deadlocks.
+            if inserted {
                 save_cookies();
             }
         }
@@ -696,7 +739,26 @@ pub fn fetch_with_cors(url: &str, origin: &str) -> Result<(String, u16), FetchEr
 
 /// Fetches content with automatic redirect handling.
 pub fn fetch_with_redirects(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
-    fetch_inner(url, max_redirects, origin)
+    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    fetch_inner(cl, url, max_redirects, origin)
+}
+
+/// Test-only entry: same chain logic against a caller-owned client so the
+/// client's internal runtime thread drops (and joins) with the test.
+#[doc(hidden)]
+pub fn fetch_redirects_with_client(
+    cl: &reqwest::blocking::Client,
+    url: &str,
+    max_redirects: usize,
+    origin: Option<&str>,
+) -> Result<Response, FetchError> {
+    fetch_inner(cl, url, max_redirects, origin)
+}
+
+/// Test-only construction point matching production policy exactly.
+#[doc(hidden)]
+pub fn build_http_client() -> Result<reqwest::blocking::Client, String> {
+    build_client()
 }
 
 fn is_scheme_downgrade(original_url: &str, redirect_url: &str) -> bool {
@@ -709,13 +771,23 @@ fn is_scheme_downgrade(original_url: &str, redirect_url: &str) -> bool {
     false
 }
 
-fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
+// The single redirect gate: resolve Location against the current URL and
+// refuse scheme downgrades BEFORE any second request could be issued.
+pub fn redirect_target(original: &str, location: &str) -> Option<String> {
+    let next = resolve_url(location, original);
+    if is_scheme_downgrade(original, &next) {
+        None
+    } else {
+        Some(next)
+    }
+}
+
+fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
     let final_url = normalize_url(url);
     plog!("net", "Fetching: {}", final_url);
 
     let _start = std::time::Instant::now();
 
-    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
     let cookies = get_cookies_for_url(&final_url);
     let mut req = cl.get(&final_url);
     if !cookies.is_empty() {
@@ -749,7 +821,6 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
             }
         }
     }
-
     // CORS check: if origin is provided and request is cross-origin, require ACAO
     if let Some(origin) = origin {
         let normalized_origin = normalize_url(origin);
@@ -778,12 +849,17 @@ fn fetch_inner(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<
 
     if resp.status().is_redirection() && max_redirects > 0 {
         if let Some(location) = headers.get("location") {
-            plog!("net", "Redirect to: {}", location);
-            let next = resolve_url(location, &final_url);
-            if is_scheme_downgrade(&final_url, &next) {
-                plog!("net", "HTTPS→HTTP downgrade blocked, returning current response");
-            } else {
-                return fetch_inner(&next, max_redirects - 1, origin);
+            match redirect_target(&final_url, location) {
+                Some(next) => {
+                    plog!("net", "Redirect to: {}", next);
+                    // Drain the body so the connection is released cleanly
+                    // before the next hop opens.
+                    let _ = resp.text();
+                    return fetch_inner(cl, &next, max_redirects - 1, origin);
+                }
+                None => {
+                    plog!("net", "HTTPS→HTTP downgrade blocked; returning current response");
+                }
             }
         }
     }
@@ -848,8 +924,17 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
         if resp.status().is_redirection() {
             let headers = resp.headers().clone();
             if let Some(location) = headers.get("location").and_then(|v| v.to_str().ok()) {
-                current_url = resolve_url(location, &current_url);
-                continue;
+                match redirect_target(&current_url, location) {
+                    Some(next) => {
+                        current_url = next;
+                        continue;
+                    }
+                    None => {
+                        return Err(FetchError::Network(
+                            "Blocked HTTPS→HTTP redirect for binary resource".to_string(),
+                        ));
+                    }
+                }
             }
         }
         let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();

@@ -130,8 +130,10 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 528 tests green; CI
+- Status baseline (verified 2026-08-24, Windows local): 532 tests green; CI
   gates fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
+  532/0 is the reference baseline for every subsequent phase - report focused
+  and full-workspace counts per phase.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
@@ -156,7 +158,7 @@ Engine stack:
 - Text (CURRENT): cosmic-text measurement/shaping (`src/engine/text.rs`), LRU-cached
 - JS (INTERIM): rquickjs 0.12 (`src/engine/js/`, JsBridge flat DOM behind `Arc<Mutex<>>`) until the aether-js swap gate
 - JS engine (TARGET): `crates/aether-js` per ADR-0003 + js-engine-plan.md rungs
-- Net (INTERIM transport): blocking reqwest confined to `tokio::task::spawn_blocking` workers (`src/engine/pipeline/fetcher.rs`), cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`); async replacement is PLAN D
+- Net (INTERIM transport): blocking reqwest confined to `tokio::task::spawn_blocking` workers (`src/engine/pipeline/fetcher.rs`), rustls-tls + webpki roots, cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`); redirects are followed ONLY by the manual loop in `fetch_inner` (client policy is `Policy::none`) - async replacement is PLAN D
 - Korlang (CURRENT): embedded UI DSL VM driving sidebar/chrome; never page-reachable except through binding policy (Non-negotiable #8)
 
 Module map:

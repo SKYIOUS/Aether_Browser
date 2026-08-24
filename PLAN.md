@@ -128,11 +128,19 @@ Wire what's half-built instead of adding new surface:
 
 ## Phase C — Hardening
 
-- TLS: switch reqwest `native-tls` → `rustls-tls`.
-- Cookie jar: SameSite enforcement on cross-site sends (parsing exists,
-  enforcement doesn't); per-cookie size limit.
-- CSP: extend checks to stylesheets loaded via `<link>` (currently checked for inline/scripts only).
-- HTML parser fuzzing (cargo-fuzz over `parse_html`).
+- **C1 TLS + redirect authority — DONE 2026-08-24** (`net/mod.rs`,
+  `Cargo.toml`, `tests/net_security.rs`): reqwest moved to `rustls-tls`
+  (webpki roots) with `danger_accept_invalid_certs(false)` explicit;
+  `.redirect(Policy::none())` restores the manual loop as the single
+  authority - per-hop cookies/CSP/CORS and the HTTPS→HTTP downgrade guard
+  were dead code under client auto-following. New `FetchError::Tls`
+  separates certificate failures from generic connect errors.
+- **C2 Cookie security** - SameSite enforcement on cross-site sends,
+  domain/path matching, insecure-context guards on Secure cookies.
+- **C3 CSP for `<link>`** - stylesheet fetches must consult the page policy
+  like scripts do.
+- **C4 Fuzzing** - cargo-fuzz targets for HTML parse/TreeSink, CSS input
+  boundaries, URL resolution, A1 budget helpers.
 - Sandboxing decision ADR: QuickJS capability policy choke point is documented
   in CONTEXT.md; decide process-isolation later, don't build now.
 

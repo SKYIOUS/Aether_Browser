@@ -11,7 +11,7 @@ path = "src/lib.rs"
 iced = { version = "0.13", features = ["canvas", "image", "tiny-skia", "wgpu", "tokio"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 rquickjs = "0.12"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "native-tls", "gzip", "brotli"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "http2", "rustls-tls", "gzip", "brotli"] }
 image = "0.25"
 korlang = { path = "./korlang" }
 strum = { version = "0.26", features = ["derive"] }
