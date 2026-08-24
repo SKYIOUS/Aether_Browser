@@ -14,26 +14,15 @@ pub use aether_css::{
 
 use cssparser::{BasicParseErrorKind, Delimiter, Parser, ParserInput, ParseError, Token};
 
-const MAX_INPUT_LENGTH: usize = 30_000;
-const MAX_ITERATIONS: usize = 50_000;
-
 pub fn parse(css: &str) -> Stylesheet {
-    let input_str = if css.len() > MAX_INPUT_LENGTH {
-        &css[..MAX_INPUT_LENGTH]
-    } else {
-        css
-    };
-
-    let mut input = ParserInput::new(input_str);
+    let mut input = ParserInput::new(css);
     let mut parser = Parser::new(&mut input);
     let mut stylesheet = Stylesheet::new();
 
-    let mut iterations: usize = 0;
+    // Every branch below consumes at least one byte on failure, so the loop
+    // always makes progress and terminates with the parser. Input-size caps
+    // live upstream (fetcher per-source/cumulative budgets), not here.
     while !parser.is_exhausted() {
-        iterations += 1;
-        if iterations > MAX_ITERATIONS {
-            break;
-        }
         parser.skip_whitespace();
         if parser.is_exhausted() {
             break;

@@ -330,3 +330,18 @@ fn test_inline_child_text_inherited() {
     let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
     assert_eq!(a.text, "link");
 }
+
+
+// PLAN A1 raised fetcher-side CSS budgets (500KB/source), but stratus::parse
+// silently re-clamped input at 30KB - rules past that byte were dropped
+// before parsing ever saw them. This pins the parser-level fix.
+#[test]
+fn parses_stylesheets_larger_than_30kb() {
+    let mut css = String::new();
+    for i in 0..2500 {
+        css.push_str(&format!(".c{i}{{color:red}}"));
+    }
+    assert!(css.len() > 30_000, "fixture must exceed the old clamp");
+    let sheet = vayu_browser::engine::stratus::parse(&css);
+    assert_eq!(sheet.rules.len(), 2500, "rules past 30KB must survive parse");
+}
