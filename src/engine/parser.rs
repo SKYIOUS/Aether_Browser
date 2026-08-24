@@ -72,7 +72,7 @@ impl TreeSink for DomSink {
         Rc::new(RefCell::new(Node::new_comment(text.to_string())))
     }
     
-    fn append(&self, parent: &Self::Handle, child: html5ever::tree_builder::NodeOrText<Self::Handle>) {
+    fn append(&self, parent: &Self::Handle, child: html5ever::tree_builder::NodeOrText<Self::Handle>) { crate::plog!("SINK", "append");
         match child {
             html5ever::tree_builder::NodeOrText::AppendNode(node) => {
                 self.add_child(parent, node);
@@ -84,16 +84,63 @@ impl TreeSink for DomSink {
         }
     }
     
-    fn append_based_on_parent_node(&self, parent: &Self::Handle, _: &Self::Handle, child: html5ever::tree_builder::NodeOrText<Self::Handle>) {
-        self.append(parent, child);
+    fn append_based_on_parent_node(&self, element: &Self::Handle, prev_element: &Self::Handle, child: html5ever::tree_builder::NodeOrText<Self::Handle>) {
+        // Mirrors html5ever's reference sink: a placed `element` means "insert
+        // before it" (the foster-parenting path); an unplaced one falls back
+        // to appending under prev_element.
+        let element_ptr = element.as_ref() as *const _;
+        let placed = self.children.borrow().values().any(|siblings| {
+            siblings.iter().any(|c| Rc::as_ptr(c) == element_ptr)
+        });
+        if placed {
+            self.append_before_sibling(element, child);
+        } else {
+            self.append(prev_element, child);
+        }
     }
     fn append_doctype_to_document(&self, _: html5ever::tendril::StrTendril, _: html5ever::tendril::StrTendril, _: html5ever::tendril::StrTendril) {}
     fn get_template_contents(&self, _: &Self::Handle) -> Self::Handle { self.document.clone() }
     fn same_node(&self, a: &Self::Handle, b: &Self::Handle) -> bool { Rc::ptr_eq(a, b) }
-    fn append_before_sibling(&self, _: &Self::Handle, _: html5ever::tree_builder::NodeOrText<Self::Handle>) {}
+    fn append_before_sibling(&self, sibling: &Self::Handle, child: html5ever::tree_builder::NodeOrText<Self::Handle>) {
+        let node = match child {
+            html5ever::tree_builder::NodeOrText::AppendNode(n) => n,
+            html5ever::tree_builder::NodeOrText::AppendText(text) => {
+                Rc::new(RefCell::new(Node::new_text(text.to_string())))
+            }
+        };
+        let sibling_ptr = sibling.as_ref() as *const _;
+        let mut children = self.children.borrow_mut();
+        for siblings in children.values_mut() {
+            if let Some(pos) = siblings.iter().position(|c| Rc::as_ptr(c) == sibling_ptr) {
+                siblings.insert(pos, node);
+                return;
+            }
+        }
+        drop(children);
+        crate::plog!("PARSE", "append_before_sibling: sibling not found in any parent; dropped");
+    }
     fn add_attrs_if_missing(&self, _: &Self::Handle, _: Vec<html5ever::tree_builder::Attribute>) {}
-    fn remove_from_parent(&self, _: &Self::Handle) {}
-    fn reparent_children(&self, _: &Self::Handle, _: &Self::Handle) {}
+    fn remove_from_parent(&self, child: &Self::Handle) {
+        let child_ptr = child.as_ref() as *const _;
+        let mut children = self.children.borrow_mut();
+        for siblings in children.values_mut() {
+            // First hit only: a well-formed map holds each child once.
+            if let Some(pos) = siblings.iter().position(|c| Rc::as_ptr(c) == child_ptr) {
+                siblings.remove(pos);
+                return;
+            }
+        }
+    }
+    fn reparent_children(&self, node: &Self::Handle, new_parent: &Self::Handle) {
+        let old_ptr = node.as_ref() as *const _;
+        let new_ptr = new_parent.as_ref() as *const _;
+        if old_ptr == new_ptr { return; }
+        let mut children = self.children.borrow_mut();
+        // take() empties the old vector so the moved nodes cannot linger in
+        // two parent lists after the transition.
+        let moved = children.get_mut(&old_ptr).map(std::mem::take).unwrap_or_default();
+        children.entry(new_ptr).or_default().extend(moved);
+    }
     
     fn create_pi(&self, _: html5ever::tendril::StrTendril, _: html5ever::tendril::StrTendril) -> Self::Handle {
         Rc::new(RefCell::new(Node::new_comment(String::new())))

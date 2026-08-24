@@ -87,11 +87,17 @@ elements):
      equivalence, explicit-css_height, and re-layout staleness guards added;
      workspace suite green (491/0).
 
-5. **Finish the TreeSink stubs** (`src/engine/parser.rs`)
-   - `reparent_children`, `append_before_sibling`, `remove_from_parent` are
-     no-ops → foster-parenting and misnested-tag recovery silently produce
-     wrong trees. Implement them against the children-map (the info is already
-     tracked); add table/misnested-tag regression tests.
+5. **Finish the TreeSink stubs — DONE 2026-08-24**
+   (`src/engine/parser.rs`)
+   - Shipped: `remove_from_parent` (first-pointer-hit removal),
+     `append_before_sibling` (locate sibling's parent, insert at index),
+     `reparent_children` (drain old vec, append to new), and the real
+     `append_based_on_parent_node` foster-parenting semantics mirrored from
+     html5ever's reference sink (placed element -> insert before it).
+   - Evidence: `tests/html5_compliance.rs::treesink_tests` - foster-parented
+     text was lost entirely before the fix; adoption-agency input now yields
+     the browser-shaped tree `body{b{1}, p{b{2}, 3}}` with every fragment
+     exactly once. Workspace suite green (494/0).
 
 **Out of scope for A:** web fonts (`@font-face`), animations, async network.
 
