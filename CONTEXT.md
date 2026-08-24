@@ -3,6 +3,7 @@
 Living vocabulary. Keep names exact; architecture discussions use these terms.
 
 ## Doctrine
+- **Goal**: daily-usable browser; page fidelity outranks new features until real pages render completely (PLAN.md Phase A).
 - **Product independence**: no Blink/Gecko/WebKit code anywhere. External Rust components are allowed; they must sit behind seams we own. (ADR-0001)
 - **Seam**: a module boundary we own where an external component could be swapped without touching callers (e.g. layout facade).
 
