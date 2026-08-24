@@ -135,8 +135,14 @@ Wire what's half-built instead of adding new surface:
   authority - per-hop cookies/CSP/CORS and the HTTPS→HTTP downgrade guard
   were dead code under client auto-following. New `FetchError::Tls`
   separates certificate failures from generic connect errors.
-- **C2 Cookie security** - SameSite enforcement on cross-site sends,
-  domain/path matching, insecure-context guards on Secure cookies.
+- **C2 Cookie security — DONE 2026-08-24** (`net/cookies.rs`): full lifecycle
+  moved to a pure-policy module - Domain validation (host-only flag,
+  parent-domain sharing, bare-TLD rejection), RFC default-path + directory
+  boundary matching, SameSite enforced at send time via schemeful-site
+  comparison with initiator context (unspecified defaults to Lax;
+  None-without-Secure rejected at set), expiry filtered at read, port
+  stripped from storage keys with legacy-jar migration, 4096-byte line cap.
+  Images now send cookies per the same rules (previously sent none).
 - **C3 CSP for `<link>`** - stylesheet fetches must consult the page policy
   like scripts do.
 - **C4 Fuzzing** - cargo-fuzz targets for HTML parse/TreeSink, CSS input

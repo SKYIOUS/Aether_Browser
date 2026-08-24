@@ -320,7 +320,9 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
         return render_vayu_page(&url, content_width, viewport_h, &session_history);
     }
 
-    let response = match net::fetch_with_redirects(&url, 5, None) {
+    // Top-level document navigation: no initiator site (SameSite=Lax may
+    // cross sites; Strict cookies still require same-site).
+    let response = match net::fetch_with_redirects(&url, 5, None, None, true) {
         Ok(resp) => {
             plog!("FETCH", "Status=OK len={}", resp.body.len());
             resp
@@ -402,7 +404,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
             }
         }
         plog!("CSS", "Fetching external CSS from {}", resolved);
-        match net::fetch(&resolved) {
+        match net::fetch(&resolved, Some(&url)) {
             Ok((css_content, css_status)) => {
                 if css_status >= 400 {
                     plog!("CSS", "External CSS HTTP error {} for {}", css_status, resolved);
@@ -461,7 +463,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
                         continue;
                     }
                     plog!("JS", "Fetching external script from {}", resolved);
-                    match net::fetch(&resolved) {
+                    match net::fetch(&resolved, Some(&url)) {
                         Ok((fetched, _status)) => fetched,
                         Err(e) => {
                             plog!("JS", "Failed to fetch external script: {}", e);
@@ -511,7 +513,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
                 el.image_handle = Some(hnd);
                 continue;
             }
-            let bytes = match net::fetch_bytes(&resolved) {
+            let bytes = match net::fetch_bytes(&resolved, Some(&url)) {
                 Ok(b) => b,
                 Err(e) => {
                     plog!("IMAGES", "Failed to fetch image: {}", e);

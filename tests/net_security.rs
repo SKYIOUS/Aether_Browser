@@ -110,7 +110,7 @@ fn c1_redirect_cap_returns_terminal_302_and_stops_the_chain() {
         ("/end", 200, vec![], "done"),
     ]);
     let cl = net::build_http_client().expect("client");
-    let resp = net::fetch_redirects_with_client(&cl, &server.url("/start"), 1, None)
+    let resp = net::fetch_redirects_with_client(&cl, &server.url("/start"), 1, None, None, false)
         .expect("capped chain must terminate with the in-flight 3xx");
     assert_eq!(resp.status, 302);
     assert!(resp.final_url.ends_with("/mid"), "terminal url should be /mid, got {}", resp.final_url);
@@ -125,7 +125,7 @@ fn c1_full_chain_follows_to_completion() {
         ("/end", 200, vec![], "done"),
     ]);
     let cl = net::build_http_client().expect("client");
-    let resp = net::fetch_redirects_with_client(&cl, &server.url("/start"), 5, None)
+    let resp = net::fetch_redirects_with_client(&cl, &server.url("/start"), 5, None, None, true)
         .expect("chain within cap must succeed");
     assert_eq!(resp.status, 200);
     assert_eq!(resp.body, "done");
@@ -142,7 +142,8 @@ fn c1_cookies_are_reattached_on_every_redirect_hop() {
         ("/a", 302, vec![("Location", "/b"), ("Set-Cookie", "sid=1")], ""),
         ("/b", 200, vec![], "ok"),
     ]);
-    let resp = net::fetch_with_redirects(&server.url("/a"), 5, None).expect("hop chain succeeds");
+    let resp = net::fetch_with_redirects(&server.url("/a"), 5, None, None, false)
+        .expect("hop chain succeeds");
     assert_eq!(resp.status, 200);
     assert_eq!(server.count(), 2);
     let hop_b = server.request_headers(1);
@@ -171,4 +172,73 @@ fn c1_https_to_http_downgrade_rejected_at_decision_point() {
         Some("https://example.com/b".to_string()),
         "upgrades are allowed"
     );
+}
+
+// ?? C2 cookie security (loopback) ??????????????????????????????????????????
+
+fn header_of(server: &Server, n: usize) -> String {
+    server.request_headers(n)
+}
+
+#[test]
+fn c2_domain_mismatch_cookie_is_never_sent() {
+    let cl = net::build_http_client().expect("client");
+    let server = spawn_server(vec![
+        ("/set", 200, vec![("Set-Cookie", "sid=9; Domain=localhost")], ""),
+        ("/check", 200, vec![], "ok"),
+    ]);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/check"), 0, None, None, false);
+    let sent = header_of(&server, 1);
+    assert!(
+        !sent.to_lowercase().contains("sid=9"),
+        "cookie with mismatched Domain must not be stored or sent; got:\n{sent}"
+    );
+}
+
+#[test]
+fn c2_secure_cookie_never_sent_over_http() {
+    let cl = net::build_http_client().expect("client");
+    let server = spawn_server(vec![
+        ("/set", 200, vec![("Set-Cookie", "sec=1; Secure")], ""),
+        ("/check", 200, vec![], "ok"),
+    ]);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/check"), 0, None, None, false);
+    let sent = header_of(&server, 1);
+    assert!(
+        !sent.to_lowercase().contains("sec=1"),
+        "Secure cookie must not travel over http; got:\n{sent}"
+    );
+}
+
+#[test]
+fn c2_oversized_set_cookie_is_dropped() {
+    let cl = net::build_http_client().expect("client");
+    let big: &'static str = Box::leak(format!("big={}; Path=/", "x".repeat(4200)).into_boxed_str());
+    let server = spawn_server(vec![
+        ("/set", 200, vec![("Set-Cookie", big)], ""),
+        ("/check", 200, vec![], "ok"),
+    ]);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/check"), 0, None, None, false);
+    let sent = header_of(&server, 1);
+    assert!(!sent.contains("big="), "oversized cookie must be dropped");
+}
+
+#[test]
+fn c2_path_boundary_foo_matches_bar_not_foobar() {
+    let cl = net::build_http_client().expect("client");
+    let server = spawn_server(vec![
+        ("/foo/set", 200, vec![("Set-Cookie", "p=1; Path=/foo")], ""),
+        ("/foo/bar", 200, vec![], "in-path"),
+        ("/foobar", 200, vec![], "outside"),
+    ]);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/foo/set"), 0, None, None, false);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/foo/bar"), 0, None, None, false);
+    let _ = net::fetch_redirects_with_client(&cl, &server.url("/foobar"), 0, None, None, false);
+    let in_scope = header_of(&server, 1);
+    let out_scope = header_of(&server, 2);
+    assert!(in_scope.contains("p=1"), "Path=/foo must cover /foo/bar");
+    assert!(!out_scope.contains("p=1"), "Path=/foo must not cover /foobar");
 }

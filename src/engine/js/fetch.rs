@@ -12,7 +12,7 @@ impl JsBridge {
             return format!("__STATUS_0__Error: CSP blocked connect to {}", resolved);
         }
         if crate::engine::net::is_same_origin(&resolved, origin) {
-            match crate::engine::net::fetch(&resolved) {
+            match crate::engine::net::fetch(&resolved, Some(origin)) {
                 Ok((body, status)) => format!("__STATUS_{}__{}", status, body),
                 Err(e) => format!("__STATUS_0__Error: {}", e),
             }

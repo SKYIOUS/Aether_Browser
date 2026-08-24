@@ -3,12 +3,10 @@ pub mod mock;
 
 use std::collections::HashMap;
 use std::sync::RwLock;
-use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
 use std::fmt;
-use std::path::PathBuf;
 
 use crate::plog;
 
@@ -133,189 +131,9 @@ fn cache_set(url: &str, body: &str) {
 }
 
 // ── Cookie jar ────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CookieAttrs {
-    pub value: String,
-    #[serde(skip)]
-    pub expires: Option<std::time::Instant>,
-    pub http_only: bool,
-    pub secure: bool,
-    pub same_site: String,
-}
-
-type CookieJar = HashMap<String, HashMap<String, CookieAttrs>>;
-
-fn cookie_jar() -> &'static RwLock<CookieJar> {
-    static JAR: OnceLock<RwLock<CookieJar>> = OnceLock::new();
-    JAR.get_or_init(|| RwLock::new(load_cookies().unwrap_or_default()))
-}
-
-fn cookie_file() -> Option<PathBuf> {
-        std::env::current_dir().ok().map(|p| p.join("vayu_cookies.json"))
-}
-
-fn load_cookies() -> Option<CookieJar> {
-    let path = cookie_file()?;
-    let data = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&data).ok()
-}
-
-fn save_cookies() {
-    if let Ok(jar) = cookie_jar().read() {
-        if let Some(path) = cookie_file() {
-            if let Ok(json) = serde_json::to_string(&*jar) {
-                if let Err(e) = std::fs::write(&path, json) {
-                    plog!("COOKIE", "save_cookies write failed: {}", e);
-                }
-            }
-        }
-    }
-}
-
-fn maybe_save_cookies() {
-    static LAST_SAVE: OnceLock<Mutex<Instant>> = OnceLock::new();
-    let last = LAST_SAVE.get_or_init(|| Mutex::new(Instant::now()));
-    let mut last = last.lock().expect("Mutex poisoned");
-    if last.elapsed() > Duration::from_secs(30) {
-        save_cookies();
-        *last = Instant::now();
-    }
-}
-
-fn cookie_origin_key(url: &str) -> String {
-    let s = url.trim();
-    let (protocol, rest) = if let Some(pos) = s.find("://") {
-        (s[..pos + 1].to_string(), &s[pos + 3..])
-    } else {
-        ("https:".to_string(), s)
-    };
-    let host_and_port = rest.split('/').next().unwrap_or(rest);
-    if host_and_port.is_empty() {
-        return "null".to_string();
-    }
-    let (hostname, port) = if host_and_port.starts_with('[') {
-        if let Some(br) = host_and_port.find(']') {
-            let h = &host_and_port[..=br];
-            if br + 1 < host_and_port.len() && host_and_port.as_bytes()[br + 1] == b':' {
-                (h.to_string(), host_and_port[br + 2..].to_string())
-            } else {
-                (h.to_string(), String::new())
-            }
-        } else {
-            (host_and_port.to_string(), String::new())
-        }
-    } else if let Some(pos) = host_and_port.find(':') {
-        (host_and_port[..pos].to_string(), host_and_port[pos + 1..].to_string())
-    } else {
-        (host_and_port.to_string(), String::new())
-    };
-    if port.is_empty() {
-        format!("{}//{}", protocol, hostname)
-    } else {
-        format!("{}//{}:{}", protocol, hostname, port)
-    }
-}
-
-pub fn set_cookie_from_response(url: &str, set_cookie_header: &str) {
-    let trimmed = set_cookie_header.trim();
-    if let Some(eq_pos) = trimmed.find('=') {
-        let key = trimmed[..eq_pos].trim().to_string();
-        let value_end = trimmed[eq_pos + 1..].find(';').map(|p| eq_pos + 1 + p).unwrap_or(trimmed.len());
-        let value = trimmed[eq_pos + 1..value_end].trim().to_string();
-        if !key.is_empty() && !value.is_empty() {
-            let mut http_only = false;
-            let mut secure = false;
-            let mut same_site = String::new();
-            for part in trimmed[value_end..].split(';') {
-                let part = part.trim().to_lowercase();
-                if part == "httponly" { http_only = true; }
-                else if part == "secure" { secure = true; }
-                else if let Some(ss) = part.strip_prefix("samesite=") {
-                    same_site = ss.to_string();
-                }
-            }
-            let mut inserted = false;
-            if let Ok(mut jar) = cookie_jar().write() {
-                let origin = cookie_origin_key(url);
-                let total: usize = jar.values().map(|m| m.len()).sum();
-                let origin_has_room = jar.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
-                if !origin_has_room || total >= 500 { return; }
-                let expires = parse_cookie_expiry_from_str(trimmed);
-                jar.entry(origin).or_default().insert(key, CookieAttrs {
-                    value,
-                    expires,
-                    http_only,
-                    secure,
-                    same_site,
-                });
-                inserted = true;
-            }
-            // save_cookies takes a READ lock on the same jar - it must run
-            // after the write guard is gone or the thread self-deadlocks.
-            if inserted {
-                save_cookies();
-            }
-        }
-    }
-}
-
-fn parse_cookie_expiry_from_str(cookie_str: &str) -> Option<std::time::Instant> {
-    for part in cookie_str.split(';') {
-        let part = part.trim();
-        if let Some(val) = part.strip_prefix("Max-Age=").or_else(|| part.strip_prefix("max-age=")).or_else(|| part.strip_prefix("MAX-AGE=")) {
-            if let Ok(secs) = val.trim().parse::<u64>() {
-                return Some(std::time::Instant::now() + std::time::Duration::from_secs(secs));
-            }
-        }
-        if let Some(val) = part.strip_prefix("Expires=").or_else(|| part.strip_prefix("expires=")) {
-            if let Some(instant) = parse_rfc1123_date_local(val.trim()) {
-                return Some(instant);
-            }
-        }
-    }
-    None
-}
-
-fn parse_rfc1123_date_local(s: &str) -> Option<std::time::Instant> {
-    let s = s.strip_suffix(" GMT")?;
-    let (_wkday, rest) = s.split_once(", ")?;
-    let parts: Vec<&str> = rest.split_whitespace().collect();
-    if parts.len() != 3 { return None; }
-    let day = parts[0].parse::<u32>().ok()? as u64;
-    let month = match parts[1] {
-        "Jan" => 1, "Feb" => 2, "Mar" => 3, "Apr" => 4, "May" => 5, "Jun" => 6,
-        "Jul" => 7, "Aug" => 8, "Sep" => 9, "Oct" => 10, "Nov" => 11, "Dec" => 12,
-        _ => return None,
-    } as u64;
-    let year = parts[2].parse::<i64>().ok()?;
-    let days_before_month = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    let mut days = days_before_month[(month - 1) as usize] + day - 1;
-    let leap = if month <= 2 { (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) } else { year % 4 == 0 && year % 100 != 0 };
-    if leap { days += 1; }
-    let year_diff = year - 1970;
-    let leap_years_before = year_diff / 4 - year_diff / 100 + year_diff / 400;
-    let days_since_epoch = year_diff * 365 + leap_years_before + (days as i64);
-    let secs = (days_since_epoch.max(0) as u64) * 86400;
-    Some(std::time::Instant::now() + std::time::Duration::from_secs(secs))
-}
-
-pub fn get_cookies_for_url(url: &str) -> String {
-    let mut parts = Vec::new();
-    let is_https = url.starts_with("https://");
-    if let Ok(jar) = cookie_jar().read() {
-        let origin = cookie_origin_key(url);
-        if let Some(cookies) = jar.get(&origin) {
-            for (key, attrs) in cookies {
-                if attrs.secure && !is_https { continue; }
-                parts.push(format!("{}={}", key, attrs.value));
-            }
-        }
-    }
-    maybe_save_cookies();
-    parts.join("; ")
-}
-
+// Cookie lifecycle lives in net::cookies (PLAN C2).
+pub mod cookies;
+use cookies::{get_cookies_for_request, set_cookie_from_response};
 // ── CSP Types ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -699,7 +517,7 @@ impl Response {
 
 /// Fetches content from the given URL, returning body + HTTP status code.
 // ponytail: cache uses raw URL, not normalized — may cause miss/hit mismatch
-pub fn fetch(url: &str) -> Result<(String, u16), FetchError> {
+pub fn fetch(url: &str, initiator: Option<&str>) -> Result<(String, u16), FetchError> {
     if let Some(cached) = cache_get(url) {
         plog!("cache", "HIT: {}", url);
         return Ok((cached, 200));
@@ -712,7 +530,8 @@ pub fn fetch(url: &str) -> Result<(String, u16), FetchError> {
         plog!("mock", "Serving CSS for {}", url);
         return Ok((body, 200));
     }
-    match fetch_with_redirects(url, 5, None) {
+    // Subresource fetches are never top-level navigations.
+    match fetch_with_redirects(url, 5, None, initiator, false) {
         Ok(resp) => {
             if resp.body.is_empty() {
                 return Err(FetchError::EmptyBody);
@@ -726,7 +545,7 @@ pub fn fetch(url: &str) -> Result<(String, u16), FetchError> {
 
 /// Fetches with CORS origin header + ACAO response checking.
 pub fn fetch_with_cors(url: &str, origin: &str) -> Result<(String, u16), FetchError> {
-    match fetch_with_redirects(url, 5, Some(origin)) {
+    match fetch_with_redirects(url, 5, Some(origin), Some(origin), false) {
         Ok(resp) => {
             if resp.body.is_empty() {
                 return Err(FetchError::EmptyBody);
@@ -738,9 +557,15 @@ pub fn fetch_with_cors(url: &str, origin: &str) -> Result<(String, u16), FetchEr
 }
 
 /// Fetches content with automatic redirect handling.
-pub fn fetch_with_redirects(url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
+pub fn fetch_with_redirects(
+    url: &str,
+    max_redirects: usize,
+    origin: Option<&str>,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
+) -> Result<Response, FetchError> {
     let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
-    fetch_inner(cl, url, max_redirects, origin)
+    fetch_inner(cl, url, max_redirects, origin, initiator, top_level_navigation)
 }
 
 /// Test-only entry: same chain logic against a caller-owned client so the
@@ -751,8 +576,10 @@ pub fn fetch_redirects_with_client(
     url: &str,
     max_redirects: usize,
     origin: Option<&str>,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
-    fetch_inner(cl, url, max_redirects, origin)
+    fetch_inner(cl, url, max_redirects, origin, initiator, top_level_navigation)
 }
 
 /// Test-only construction point matching production policy exactly.
@@ -782,13 +609,13 @@ pub fn redirect_target(original: &str, location: &str) -> Option<String> {
     }
 }
 
-fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, origin: Option<&str>) -> Result<Response, FetchError> {
+fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, origin: Option<&str>, initiator: Option<&str>, top_level_navigation: bool) -> Result<Response, FetchError> {
     let final_url = normalize_url(url);
     plog!("net", "Fetching: {}", final_url);
 
     let _start = std::time::Instant::now();
 
-    let cookies = get_cookies_for_url(&final_url);
+    let cookies = get_cookies_for_request(&final_url, initiator, top_level_navigation);
     let mut req = cl.get(&final_url);
     if !cookies.is_empty() {
         req = req.header("Cookie", &cookies);
@@ -855,7 +682,7 @@ fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, 
                     // Drain the body so the connection is released cleanly
                     // before the next hop opens.
                     let _ = resp.text();
-                    return fetch_inner(cl, &next, max_redirects - 1, origin);
+                    return fetch_inner(cl, &next, max_redirects - 1, origin, initiator, top_level_navigation);
                 }
                 None => {
                     plog!("net", "HTTPS→HTTP downgrade blocked; returning current response");
@@ -894,7 +721,7 @@ fn image_cache() -> &'static RwLock<ImageCache> {
 
 /// Fetches binary content (images, etc.) from the given URL.
 // ponytail: simple image cache with 60s TTL, capped at 100 entries
-pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
+pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchError> {
     if let Some(bytes) = mock::resolve_binary(url) {
         plog!("mock", "Serving binary for {}", url);
         return Ok(bytes);
@@ -912,7 +739,14 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>, FetchError> {
 
     for _ in 0..5 {
         let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
-        let resp = match cl.get(&current_url).send() {
+        // Images are subresources: cookies follow SameSite/Secure rules with
+        // the page as initiator (they were never sent at all pre-C2).
+        let cookies = get_cookies_for_request(&current_url, initiator, false);
+        let mut req = cl.get(&current_url);
+        if !cookies.is_empty() {
+            req = req.header("Cookie", &cookies);
+        }
+        let resp = match req.send() {
             Ok(r) => r,
             Err(e) => return Err(FetchError::from(e)),
         };
