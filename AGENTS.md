@@ -132,7 +132,7 @@ invalidates a statement in these docs updates them in the same commit.
 - Tests: `cargo test` · single: `cargo test <name>`
 - Status baseline (verified 2026-08-24): 444 tests green; CI gates
   fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
-  Refresh this figure whenever the suite changes materially.
+  Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
   change ship in the same commit (Doc discipline above). Branches: short-lived
@@ -155,7 +155,7 @@ Engine stack:
 - Text (CURRENT): cosmic-text measurement/shaping (`src/engine/text.rs`), LRU-cached
 - JS (INTERIM): rquickjs 0.12 (`src/engine/js/`, JsBridge flat DOM behind `Arc<Mutex<>>`) until the aether-js swap gate
 - JS engine (TARGET): `crates/aether-js` per ADR-0003 + js-engine-plan.md rungs
-- Net (INTERIM transport): blocking reqwest via `run_blocking()`, cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`); async replacement is PLAN D
+- Net (INTERIM transport): blocking reqwest confined to `tokio::task::spawn_blocking` workers (`src/engine/pipeline/fetcher.rs`), cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`); async replacement is PLAN D
 - Korlang (CURRENT): embedded UI DSL VM driving sidebar/chrome; never page-reachable except through binding policy (Non-negotiable #8)
 
 Module map:
@@ -177,12 +177,12 @@ fetch_page_content() (async on Iced thread)
 
 ## Conventions & gotchas
 - URL helpers: `resolve_url()`/`normalize_url()` (`net/mod.rs`); `normalize_nav_url()` (`navigator.rs`)
-- Global statics: `OnceLock<Mutex/RwLock<…>>` for client, caches, cookies, storage — blocks multi-window; reuse where already established, but new global mutable state requires an ADR. Don't spread the pattern
+- Global statics: `OnceLock<Mutex/RwLock<…>>` for client, caches, cookies, storage — blocks multi-window; reuse where already established, but new global mutable state requires an ADR. Adding fields/routes to existing global statics counts as new global state. Don't spread the pattern
 - Runtime data files (gitignored): `vayu_settings.json`, `vayu_tabs.json`, `vayu_local_storage.json`, `vayu_cookies.json`
 - Linker is `rust-lld` (`.cargo/config.toml`); don't switch to lld-link unless installed
 - Iced 0.13: `Task::perform(future, mapper)`; there is no `iced::Command`
 - Element caps live: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML (removal planned, PLAN A1)
-- Blocking reqwest everywhere via `run_blocking()` — interim transport bridge; don't expand beyond existing network boundaries (async replacement: PLAN D)
+- Blocking reqwest confined to `tokio::task::spawn_blocking` workers — never on the Iced UI thread; don't expand beyond existing network boundaries (async replacement: PLAN D)
 - Browser submodules read `BrowserScreen` private fields directly (child-module access)
 - `Tab::new(title, url, workspace_id)` — three args
 - CSP: check `net::csp_blocks_scripts()` / `csp_blocks_styles()` before processing
