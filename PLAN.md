@@ -54,13 +54,16 @@ elements):
    - Evidence: `tests/extraction_budget_tests.rs` asserts counts past the old
      caps; hard-stop semantics pinned by `depth_budget_is_hard_stop_but_past_old_cap`.
 
-2. **Viewport culling in paint + hit-test**
+2. **Viewport culling in paint + hit-test — DONE 2026-08-24**
    (`src/ui/screens/browser/canvas.rs`)
-   - Elements are y-sortable after layout: binary-search the visible range,
-     draw only those; hit-test iterates the same slice. Scrollbar math uses
-     max(y+h) which we already compute.
-   - Acceptance: 50k-element page paints in <16ms/frame; click targets stay
-     exact (existing hit tests).
+   - Shipped: scroll offset via `scrollable::on_scroll` → `PageScrolled`;
+     `CullIndex` (y-sorted + prefix-max ends) bounds both paint and hit-test
+     to one window filtered by a single shared `in_band` predicate; canvas
+     cache cleared only when the band actually moves.
+   - Evidence: 10 invariant tests (`cull_tests`) pin boundary semantics
+     (half-open band, tall containers, ties, zero-height, non-finite);
+     full suite green. Per-frame work is O(visible) by construction —
+     the <16ms/frame target still needs interactive profiling (separate step).
 
 3. **StyledElement slimming** (`extractor.rs`) — prerequisite for 2x element
    counts staying cheap
