@@ -122,9 +122,9 @@ impl BrowserScreen {
 Component StatusBar {
     Row(spacing: 8) {
         Text(size: 10, text: status_left)
-        Text(size: 10, text: " ┬╖ ")
+        Text(size: 10, text: " · ")
         Text(size: 10, text: status_mid)
-        Text(size: 10, text: " ┬╖ ")
+        Text(size: 10, text: " · ")
         Text(size: 10, text: status_right)
     }
 }
@@ -137,8 +137,8 @@ Component StatusBar {
         let sidebar_src = r#"
 Component SidebarBottom {
     Column(spacing: 8) {
-        Button(text: "ΓÅ▒ History", on_click: "back")
-        Button(text: "ΓÜÖ Settings", on_click: "settings")
+        Button(text: "⏱ History", on_click: "back")
+        Button(text: "⚙ Settings", on_click: "settings")
     }
 }
 "#;
@@ -151,12 +151,12 @@ Component SidebarBottom {
 Component SidebarWS {
     Column(spacing: 8) {
         Text(text: "WORKSPACES", size: 11)
-        Button(text: "Γ¼í Design Studio", on_click: "ws0")
-        Button(text: "Γ¼í Research Lab", on_click: "ws1")
-        Button(text: "Γ¼í Deep Work", on_click: "ws2")
+        Button(text: "⬡ Design Studio", on_click: "ws0")
+        Button(text: "⬡ Research Lab", on_click: "ws1")
+        Button(text: "⬡ Deep Work", on_click: "ws2")
         Text(text: "COLLECTIONS", size: 11)
-        Button(text: "Γûñ Vayu UI", on_click: "ws0")
-        Button(text: "Γûñ Rust / Iced Docs", on_click: "ws1")
+        Button(text: "▤ Vayu UI", on_click: "ws0")
+        Button(text: "▤ Rust / Iced Docs", on_click: "ws1")
     }
 }
 "#;
@@ -537,10 +537,18 @@ Component SidebarWS {
             BrowserMessage::ToggleInspect => {
                 self.inspect_mode = !self.inspect_mode;
                 self.inspect_element = None;
+                if let Some(pc) = self.page_canvas.as_mut() {
+                    pc.focused_index = None;
+                    pc.cache.clear();
+                }
                 Task::none()
             }
             BrowserMessage::InspectElement(idx) => {
                 self.inspect_element = Some(idx);
+                if let Some(pc) = self.page_canvas.as_mut() {
+                    pc.focused_index = Some(idx);
+                    pc.cache.clear();
+                }
                 Task::none()
             }
             BrowserMessage::FormElementClicked(idx) => {

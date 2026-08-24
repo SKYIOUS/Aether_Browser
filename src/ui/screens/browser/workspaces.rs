@@ -14,7 +14,7 @@ pub fn sidebar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
         vm.execute(screen.sidebar_ws_bytecode.clone());
     }
     let logo = row![
-        container(text("â¬¡").size(18).color(C::ACCENT))
+        container(text("\u{26A1}").size(18).color(C::ACCENT))
             .width(28).height(28)
             .center_x(Length::Fixed(28.0)).center_y(Length::Fixed(28.0))
             .style(|_| container::Style {

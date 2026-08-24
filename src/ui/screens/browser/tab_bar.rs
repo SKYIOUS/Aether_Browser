@@ -16,7 +16,7 @@ pub fn tab_bar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
         let title_color = if is_active { C::ACCENT } else if is_hovered { C::FG } else { C::MUTED };
         let title = text(&tab.title).size(12).color(title_color);
         let tab_elem: Element<'_, super::BrowserMessage> = if screen.tabs.len() > 1 {
-            let close = button(text("Ã—").size(12).color(if is_hovered { C::ACCENT } else { C::DIM }))
+            let close = button(text("\u{00D7}").size(12).color(if is_hovered { C::ACCENT } else { C::DIM }))
                 .padding([2, 6])
                 .style(move |_, _| button::Style {
                     background: Some(Background::Color(if is_hovered { C::ACCENT } else { C::TRANSPARENT })),
