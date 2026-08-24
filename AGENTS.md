@@ -130,7 +130,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 520 tests green; CI
+- Status baseline (verified 2026-08-24, Windows local): 528 tests green; CI
   gates fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
@@ -142,7 +142,8 @@ invalidates a statement in these docs updates them in the same commit.
 Rust, edition 2021. Entry: `src/main.rs` → `src/lib.rs` → `src/ui/mod.rs`
 (`VayuApp`). Workspace: `korlang`, `crates/aether-dom`, `crates/aether-css`,
 plus planned `crates/aether-js` (ADR-0003). UI is Iced 0.13 (canvas/image/
-tiny-skia/wgpu/tokio), theme forced Light.
+tiny-skia/wgpu/tokio), theme runtime-switchable via the global palette
+(ADR-0004; `set_palette` at startup + settings actions).
 
 Architecture status legend: **CURRENT** = exists, authoritative ·
 **INTERIM** = use only within existing boundaries, replacement planned ·

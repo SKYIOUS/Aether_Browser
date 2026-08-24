@@ -82,13 +82,13 @@ impl PaletteScreen {
         // Search row
         let search = container(
             row![
-                text("⌕").size(24).color(C::ACCENT),
+                text("⌕").size(24).color(C::accent()),
                 text_input("What is the mission?", &self.query)
                     .on_input(PaletteMessage::QueryChanged)
                     .on_submit(PaletteMessage::ActionSelected(0))
                     .size(20)
                     .style(palette_input_style()),
-                button(text("Esc").size(11).color(C::MUTED)
+                button(text("Esc").size(11).color(C::muted())
                     .font(iced::Font {
                         family: iced::font::Family::Monospace,
                         ..Default::default()
@@ -98,8 +98,8 @@ impl PaletteScreen {
                         background: Some(iced::Background::Color(
                             iced::Color::from_rgba(1.0, 1.0, 1.0, 0.05)
                         )),
-                        border: iced::Border { color: C::BORDER_MID, width: 1.0, radius: 8.0.into() },
-                        text_color: C::MUTED,
+                        border: iced::Border { color: C::border_mid(), width: 1.0, radius: 8.0.into() },
+                        text_color: C::muted(),
                         ..Default::default()
                     })
                     .on_press(PaletteMessage::Close),
@@ -110,7 +110,7 @@ impl PaletteScreen {
         )
         .width(Length::Fill)
         .style(|_| container::Style {
-            border: iced::Border { color: C::BORDER, width: 0.0, radius: 0.0.into() },
+            border: iced::Border { color: C::border(), width: 0.0, radius: 0.0.into() },
             ..Default::default()
         });
 
@@ -119,19 +119,19 @@ impl PaletteScreen {
             .width(Length::Fill)
             .height(Length::Fixed(1.0))
             .style(|_| container::Style {
-                background: Some(iced::Background::Color(C::BORDER)),
+                background: Some(iced::Background::Color(C::border())),
                 ..Default::default()
             });
 
         // Suggested actions
-        let suggested_label = text("Suggested Actions").size(10).color(C::DIM)
+        let suggested_label = text("Suggested Actions").size(10).color(C::dim())
             .font(iced::Font { weight: iced::font::Weight::Bold, ..Default::default() });
 
         let suggested_items = column(
             SUGGESTED.iter().enumerate().map(|(i, (icon, title, subtitle))| {
                 button(
                     row![
-                        container(text(*icon).size(18).color(C::ACCENT))
+                        container(text(*icon).size(18).color(C::accent()))
                             .width(40).height(40)
                             .center_x(Length::Fixed(40.0))
                             .center_y(Length::Fixed(40.0))
@@ -143,10 +143,10 @@ impl PaletteScreen {
                                 ..Default::default()
                             }),
                         column![
-                            text(*title).size(13).color(C::FG)
+                            text(*title).size(13).color(C::fg())
                                 .font(iced::Font { weight: iced::font::Weight::Medium, ..Default::default() }),
                             Space::with_height(2),
-                            text(*subtitle).size(11).color(C::MUTED),
+                            text(*subtitle).size(11).color(C::muted()),
                         ]
                         .spacing(0),
                     ]
@@ -158,14 +158,14 @@ impl PaletteScreen {
                 .style(|_, status| {
                     let bg = match status {
                         iced::widget::button::Status::Hovered => {
-                            Some(iced::Background::Color(C::ACCENT_DIM))
+                            Some(iced::Background::Color(C::accent_dim()))
                         }
                         _ => None,
                     };
                     iced::widget::button::Style {
                         background: bg,
                         border: iced::Border { radius: 16.0.into(), ..Default::default() },
-                        text_color: C::FG,
+                        text_color: C::fg(),
                         ..Default::default()
                     }
                 })
@@ -181,19 +181,19 @@ impl PaletteScreen {
             .width(Length::Fill)
             .height(Length::Fixed(1.0))
             .style(|_| container::Style {
-                background: Some(iced::Background::Color(C::BORDER)),
+                background: Some(iced::Background::Color(C::border())),
                 ..Default::default()
             });
 
-        let history_label = text("History").size(10).color(C::DIM)
+        let history_label = text("History").size(10).color(C::dim())
             .font(iced::Font { weight: iced::font::Weight::Bold, ..Default::default() });
 
         let history_items = column(
             HISTORY.iter().enumerate().map(|(i, entry)| {
                 button(
                     row![
-                        text("⏱").size(16).color(C::DIM),
-                        text(*entry).size(13).color(C::MUTED),
+                        text("⏱").size(16).color(C::dim()),
+                        text(*entry).size(13).color(C::muted()),
                     ]
                     .spacing(16)
                     .align_y(Alignment::Center)
@@ -203,14 +203,14 @@ impl PaletteScreen {
                 .style(|_, status| {
                     let bg = match status {
                         iced::widget::button::Status::Hovered => {
-                            Some(iced::Background::Color(C::ACCENT_DIM))
+                            Some(iced::Background::Color(C::accent_dim()))
                         }
                         _ => None,
                     };
                     iced::widget::button::Style {
                         background: bg,
                         border: iced::Border { radius: 12.0.into(), ..Default::default() },
-                        text_color: C::FG,
+                        text_color: C::fg(),
                         ..Default::default()
                     }
                 })
@@ -245,8 +245,8 @@ impl PaletteScreen {
         let footer = container(
             row![
                 row![
-                    text("↕").size(14).color(C::DIM),
-                    text("Navigate").size(10).color(C::MUTED)
+                    text("↕").size(14).color(C::dim()),
+                    text("Navigate").size(10).color(C::muted())
                         .font(iced::Font {
                             family: iced::font::Family::Monospace,
                             weight: iced::font::Weight::Bold,
@@ -256,8 +256,8 @@ impl PaletteScreen {
                 .spacing(6)
                 .align_y(Alignment::Center),
                 row![
-                    text("↵").size(14).color(C::DIM),
-                    text("Select").size(10).color(C::MUTED)
+                    text("↵").size(14).color(C::dim()),
+                    text("Select").size(10).color(C::muted())
                         .font(iced::Font {
                             family: iced::font::Family::Monospace,
                             weight: iced::font::Weight::Bold,
@@ -271,11 +271,11 @@ impl PaletteScreen {
                     container(Space::with_width(6.0))
                         .width(6).height(6)
                         .style(|_| container::Style {
-                            background: Some(iced::Background::Color(C::ACCENT)),
+                            background: Some(iced::Background::Color(C::accent())),
                             border: iced::Border { radius: 999.0.into(), ..Default::default() },
                             ..Default::default()
                         }),
-                    text("AI Agent Ready").size(10).color(C::MUTED)
+                    text("AI Agent Ready").size(10).color(C::muted())
                         .font(iced::Font {
                             family: iced::font::Family::Monospace,
                             weight: iced::font::Weight::Bold,
@@ -294,7 +294,7 @@ impl PaletteScreen {
             background: Some(iced::Background::Color(
                 iced::Color::from_rgba(1.0, 1.0, 1.0, 0.02)
             )),
-            border: iced::Border { color: C::BORDER, width: 1.0, radius: 0.0.into() },
+            border: iced::Border { color: C::border(), width: 1.0, radius: 0.0.into() },
             ..Default::default()
         });
 

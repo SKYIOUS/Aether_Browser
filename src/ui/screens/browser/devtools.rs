@@ -1,4 +1,4 @@
-﻿use iced::widget::{button, column, container, row, scrollable, text, Space};
+use iced::widget::{button, column, container, row, scrollable, text, Space};
 use iced::{Alignment, Color, Element, Length};
 use crate::ui::style::*;
 
@@ -25,7 +25,7 @@ pub fn dev_console_overlay(screen: &super::BrowserScreen) -> Element<'_, super::
                     else { format!("<{}>", el.tag) };
                 let indent = "  ".repeat(el.indent_level);
                 let is_highlighted = inspect_el == Some(i);
-                let highlight = if is_highlighted { C::ACCENT } else { Color::from_rgba(1.0, 1.0, 1.0, 0.8) };
+                let highlight = if is_highlighted { C::accent() } else { Color::from_rgba(1.0, 1.0, 1.0, 0.8) };
                 let btn = button(text(format!("{}{}", indent, tag_display)).size(11).color(highlight))
                     .padding([2, 8]).width(Length::Fill).style(move |_, _| iced::widget::button::Style {
                         background: if is_highlighted { Some(iced::Background::Color(Color::from_rgba(0.25, 0.5, 0.9, 0.2))) } else { None },
@@ -57,7 +57,7 @@ pub fn dev_console_overlay(screen: &super::BrowserScreen) -> Element<'_, super::
 pub fn dev_console_tabs(current: &DevToolsTab) -> Element<'_, super::BrowserMessage> {
     let make = |label: &'static str, tab: DevToolsTab| {
         let active = *current == tab;
-        let fg = if active { C::ACCENT } else { Color::from_rgba(1.0, 1.0, 1.0, 0.5) };
+        let fg = if active { C::accent() } else { Color::from_rgba(1.0, 1.0, 1.0, 0.5) };
         button(text(label).size(12).color(fg))
             .padding([6, 14])
             .style(move |_, status| {

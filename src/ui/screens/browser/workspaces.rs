@@ -1,4 +1,4 @@
-﻿use iced::widget::{container, row, text, Space};
+use iced::widget::{container, row, text, Space};
 use iced::{Alignment, Color, Element, Length};
 use crate::ui::style::*;
 
@@ -14,7 +14,7 @@ pub fn sidebar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
         vm.execute(screen.sidebar_ws_bytecode.clone());
     }
     let logo = row![
-        container(text("\u{26A1}").size(18).color(C::ACCENT))
+        container(text("\u{26A1}").size(18).color(C::accent()))
             .width(28).height(28)
             .center_x(Length::Fixed(28.0)).center_y(Length::Fixed(28.0))
             .style(|_| container::Style {
@@ -22,7 +22,7 @@ pub fn sidebar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
                 border: iced::Border { radius: 8.0.into(), ..Default::default() },
                 ..Default::default()
             }),
-        text("AETHER").size(16).color(C::FG)
+        text("AETHER").size(16).color(C::fg())
             .font(iced::Font { weight: iced::font::Weight::Semibold, ..Default::default() }),
     ].spacing(10).align_y(Alignment::Center);
     let bottom = crate::ui::kor_renderer::render_kor_vm(&screen.sidebar_kor_vm.borrow());

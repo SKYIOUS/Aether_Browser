@@ -319,7 +319,12 @@ fn compute_full_style_inner(
             crate::engine::stratus::resolve_style_vp(&element, ss, vw, vh)
         }
     };
-    let mut color = cs.color.as_ref().map(stratus_color).unwrap_or(C::PAGE_TEXT);
+    // Match (not unwrap_or): the palette read must stay lazy so elements with
+    // an explicit CSS color never touch the global at all.
+    let mut color = match cs.color.as_ref() {
+        Some(c) => stratus_color(c),
+        None => C::page_text(),
+    };
     if tag == "a" && cs.color.is_none() {
         color = Color::from_rgb(0.0, 0.0, 0.93);
     }

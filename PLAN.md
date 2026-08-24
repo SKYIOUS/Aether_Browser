@@ -109,8 +109,12 @@ Wire what's half-built instead of adding new surface:
   via pure `toggle_bookmark` (URL-keyed, order-preserving); clicks navigate
   through the existing link path. Persistence reuses `save_bookmarks`.
 - Bookmarks bar management page (remove/edit) - not scheduled yet.
-- Dark mode + accent color: settings UI picks an index but never persists to
-  `VayuSettings` nor calls theme/style layer.
+- **Dark mode + accent color — DONE 2026-08-24** (`ui/style.rs`,
+  `settings.rs`, ADR-0004): runtime palette global replaces the frozen `C`
+  constants (163 call sites migrated to accessors); light palette pinned
+  byte-for-byte to pre-B2 values; dark inverts chrome only; accent swatches
+  and dark-mode toggle persist through VayuSettings and apply via
+  set_palette at startup and on change.
 - **History UI — DONE 2026-08-24** (`fetcher.rs`): `vayu://history` renders
   session `url_history` as link elements (most-recent first, consecutive
   duplicates collapsed, display trimmed / href full); clicks navigate via the

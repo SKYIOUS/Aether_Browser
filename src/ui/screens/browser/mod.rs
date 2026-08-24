@@ -187,6 +187,8 @@ Component SidebarWS {
         };
         let settings = VayuSettings::load();
         crate::engine::pipeline::set_js_enabled(settings.js_enabled);
+        // Palette must be live before the first frame renders (ADR-0004).
+        crate::ui::style::set_palette(settings.dark_mode, &settings.accent_color);
         // Sentinel goes up only after tabs/history are fully reconstructed,
         // so creating it can never re-flag THIS startup as a crash.
         mark_session_started();
@@ -773,14 +775,14 @@ Component SidebarWS {
         let body: Element<'_, BrowserMessage> = if self.loading {
             container(
                 column![
-                    text("Loading...").size(20).color(C::PAGE_MUTED),
-                    text("Fetching page content").size(13).color(C::DIM),
+                    text("Loading...").size(20).color(C::page_muted()),
+                    text("Fetching page content").size(13).color(C::dim()),
                 ]
                 .align_x(Alignment::Center).spacing(8)
             )
             .width(Length::Fill).height(Length::Fill)
             .center_x(Length::Fill).center_y(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::PAGE_BG)), ..Default::default() })
+            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
             .into()
         } else if self.page_canvas.is_some() {
             let pc = self.page_canvas.as_ref().expect("Expected Some value, found None");
@@ -800,17 +802,17 @@ Component SidebarWS {
                     .on_scroll(|vp| BrowserMessage::PageScrolled(vp.absolute_offset().y))
             )
             .width(Length::Fill).height(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::PAGE_BG)), ..Default::default() })
+            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
             .into()
         } else {
             container(
                 scrollable(
-                    column(vec![text(&self.content).size(14).color(C::PAGE_TEXT).into()]).padding(40).max_width(800)
+                    column(vec![text(&self.content).size(14).color(C::page_text()).into()]).padding(40).max_width(800)
                 )
                 .width(Length::Fill).height(Length::Fill)
             )
             .width(Length::Fill).height(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::PAGE_BG)), ..Default::default() })
+            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
             .into()
         };
         let tabs = tab_bar::tab_bar(self);
@@ -832,20 +834,20 @@ Component SidebarWS {
         let secure_icon = text(secure_indicator(&self.url)).size(14);
 
         let back_btn: Element<'_, BrowserMessage> = if can_go_back {
-            button(text("\u{2190}").size(18).color(C::MUTED))
+            button(text("\u{2190}").size(18).color(C::muted()))
                 .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::NavBack).into()
         } else {
-            button(text("\u{2190}").size(18).color(C::DIM))
+            button(text("\u{2190}").size(18).color(C::dim()))
                 .padding([6, 8]).style(nav_icon_button_style()).into()
         };
         let fwd_btn: Element<'_, BrowserMessage> = if can_go_forward {
-            button(text("\u{2192}").size(18).color(C::MUTED))
+            button(text("\u{2192}").size(18).color(C::muted()))
                 .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::NavForward).into()
         } else {
-            button(text("\u{2192}").size(18).color(C::DIM))
+            button(text("\u{2192}").size(18).color(C::dim()))
                 .padding([6, 8]).style(nav_icon_button_style()).into()
         };
-        let refresh_btn = button(text("\u{21BB}").size(18).color(C::MUTED))
+        let refresh_btn = button(text("\u{21BB}").size(18).color(C::muted()))
             .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::Refresh);
         let url_input_widget = text_input("Search or navigate", &self.url_input)
             .on_input(BrowserMessage::UrlInputChanged)
@@ -858,19 +860,19 @@ Component SidebarWS {
             row![secure_icon, url_input_widget]
                 .spacing(8).align_y(Alignment::Center).padding([0, 12])
         ).style(|_| container::Style {
-            background: Some(Background::Color(C::SURFACE)),
-            border: iced::Border { color: C::BORDER, width: 1.0, radius: 999.0.into() },
+            background: Some(Background::Color(C::surface())),
+            border: iced::Border { color: C::border(), width: 1.0, radius: 999.0.into() },
             ..Default::default()
         }).width(Length::Fill);
 
-        let bookmark_btn = button(text("\u{2606}").size(16).color(C::MUTED))
+        let bookmark_btn = button(text("\u{2606}").size(16).color(C::muted()))
             .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::Bookmark);
-        let palette_btn = button(text("\u{229E}").size(16).color(C::MUTED))
+        let palette_btn = button(text("\u{229E}").size(16).color(C::muted()))
             .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::OpenPalette);
         let inspect_icon = if self.inspect_mode { "\u{25C9}" } else { "\u{25CB}" };
-        let inspect_btn = button(text(inspect_icon).size(14).color(if self.inspect_mode { C::ACCENT } else { C::MUTED }))
+        let inspect_btn = button(text(inspect_icon).size(14).color(if self.inspect_mode { C::accent() } else { C::muted() }))
             .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::ToggleInspect);
-        let kor_btn = button(text("\u{26A1}").size(14).color(C::ACCENT))
+        let kor_btn = button(text("\u{26A1}").size(14).color(C::accent()))
             .padding([6, 8]).style(nav_icon_button_style())
             .on_press(BrowserMessage::RunKorOnPage);
 
@@ -885,8 +887,8 @@ Component SidebarWS {
         } else {
             let items: Vec<Element<'_, BrowserMessage>> = matches.iter().enumerate().map(|(i, h)| {
                 let selected = i == matched_index;
-                let bg_color = if selected { C::ACCENT_DIM } else { Color::TRANSPARENT };
-                let item = container(text(h.as_str()).size(12).color(C::FG))
+                let bg_color = if selected { C::accent_dim() } else { Color::TRANSPARENT };
+                let item = container(text(h.as_str()).size(12).color(C::fg()))
                     .width(Length::Fill).padding([6, 12])
                     .style(move |_| container::Style {
                         background: Some(Background::Color(bg_color)),
@@ -894,7 +896,7 @@ Component SidebarWS {
                         ..Default::default()
                     });
                 button(item).width(Length::Fill).padding(0)
-                    .style(|_, _| iced::widget::button::Style { background: None, text_color: C::FG, border: iced::Border { radius: 4.0.into(), ..Default::default() }, ..Default::default() })
+                    .style(|_, _| iced::widget::button::Style { background: None, text_color: C::fg(), border: iced::Border { radius: 4.0.into(), ..Default::default() }, ..Default::default() })
                     .on_press(BrowserMessage::AutocompleteSelected(i)).into()
             }).collect();
 
@@ -920,7 +922,7 @@ Component SidebarWS {
         container(column![
             bar,
             container(Space::with_height(1.0)).width(Length::Fill)
-                .style(|_| container::Style { background: Some(Background::Color(C::BORDER)), ..Default::default() }),
+                .style(|_| container::Style { background: Some(Background::Color(C::border())), ..Default::default() }),
         ]).width(Length::Fill).into()
     }
 
@@ -942,18 +944,18 @@ Component SidebarWS {
         if !self.crashed_last_session {
             return None;
         }
-        let dismiss = button(text("Keep tabs").size(12).color(C::MUTED))
+        let dismiss = button(text("Keep tabs").size(12).color(C::muted()))
             .padding([4, 8])
             .style(nav_icon_button_style())
             .on_press(BrowserMessage::DismissCrashBanner);
-        let fresh = button(text("Start fresh").size(12).color(C::ACCENT))
+        let fresh = button(text("Start fresh").size(12).color(C::accent()))
             .padding([4, 8])
             .style(nav_icon_button_style())
             .on_press(BrowserMessage::StartFreshSession);
         Some(
             container(
                 row![
-                    text("Browser didn't shut down cleanly last time.").size(12).color(C::FG),
+                    text("Browser didn't shut down cleanly last time.").size(12).color(C::fg()),
                     Space::with_width(Length::Fill),
                     dismiss,
                     fresh,
@@ -982,7 +984,7 @@ Component SidebarWS {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                button(text(&b.title).size(12).color(C::MUTED))
+                button(text(&b.title).size(12).color(C::muted()))
                     .padding([4, 8])
                     .style(nav_icon_button_style())
                     .on_press(BrowserMessage::BookmarkClicked(i))
@@ -993,7 +995,7 @@ Component SidebarWS {
             container(scrollable(row(items).spacing(2).padding([2, 4])).width(Length::Fill))
             .width(Length::Fill)
             .style(|_| container::Style {
-                background: Some(Background::Color(C::SURFACE)),
+                background: Some(Background::Color(C::surface())),
                 border: iced::Border { radius: 0.0.into(), ..Default::default() },
                 ..Default::default()
             })
