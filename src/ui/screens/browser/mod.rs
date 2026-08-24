@@ -1,4 +1,4 @@
-﻿use iced::widget::{button, canvas as iced_canvas, column, container, row, scrollable, text, text_input, Space};
+use iced::widget::{button, canvas as iced_canvas, column, container, row, scrollable, text, text_input, Space};
 use iced::keyboard;
 use iced::{Alignment, Background, Color, Element, Length, Task};
 
@@ -16,7 +16,7 @@ use crate::engine::korlang::register_default_callbacks;
 use crate::ui::kor_renderer::render_kor_vm;
 use crate::engine::js::{JsBridge, JSEngine};
 use crate::engine::pipeline::{fetch_page_content, apply_taffy_layout, StyledElement, normalize_nav_url, 
-save_tabs, load_tabs, Tab};
+save_tabs, load_tabs, load_bookmarks, save_bookmarks, Bookmark, Tab};
 
 mod canvas;
 mod devtools;
@@ -39,6 +39,7 @@ pub enum BrowserMessage {
     OpenSettings,
     OpenPalette,
     Bookmark,
+    BookmarkClicked(usize),
     LinkClicked(String),
     PageLoaded(String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>),
     TimerTick,
@@ -93,6 +94,8 @@ pub struct BrowserScreen {
     show_dev_console: bool,
     pub url_input: String,
     pub url_history: Vec<String>,
+    pub bookmarks: Vec<Bookmark>,
+    pub show_bookmarks_bar: bool,
     pub show_autocomplete: bool,
     pub autocomplete_index: usize,
     pub dev_tools_tab: DevToolsTab,
@@ -122,9 +125,9 @@ impl BrowserScreen {
 Component StatusBar {
     Row(spacing: 8) {
         Text(size: 10, text: status_left)
-        Text(size: 10, text: " · ")
+        Text(size: 10, text: " � ")
         Text(size: 10, text: status_mid)
-        Text(size: 10, text: " · ")
+        Text(size: 10, text: " � ")
         Text(size: 10, text: status_right)
     }
 }
@@ -137,8 +140,8 @@ Component StatusBar {
         let sidebar_src = r#"
 Component SidebarBottom {
     Column(spacing: 8) {
-        Button(text: "⏱ History", on_click: "back")
-        Button(text: "⚙ Settings", on_click: "settings")
+        Button(text: "? History", on_click: "back")
+        Button(text: "? Settings", on_click: "settings")
     }
 }
 "#;
@@ -151,12 +154,12 @@ Component SidebarBottom {
 Component SidebarWS {
     Column(spacing: 8) {
         Text(text: "WORKSPACES", size: 11)
-        Button(text: "⬡ Design Studio", on_click: "ws0")
-        Button(text: "⬡ Research Lab", on_click: "ws1")
-        Button(text: "⬡ Deep Work", on_click: "ws2")
+        Button(text: "? Design Studio", on_click: "ws0")
+        Button(text: "? Research Lab", on_click: "ws1")
+        Button(text: "? Deep Work", on_click: "ws2")
         Text(text: "COLLECTIONS", size: 11)
-        Button(text: "▤ Vayu UI", on_click: "ws0")
-        Button(text: "▤ Rust / Iced Docs", on_click: "ws1")
+        Button(text: "? Vayu UI", on_click: "ws0")
+        Button(text: "? Rust / Iced Docs", on_click: "ws1")
     }
 }
 "#;
@@ -203,6 +206,8 @@ Component SidebarWS {
             show_dev_console: false,
             url_input: url_val.clone(),
             url_history,
+            bookmarks: load_bookmarks(),
+            show_bookmarks_bar: settings.show_bookmarks_bar,
             show_autocomplete: false,
             autocomplete_index: 0,
             dev_tools_tab: DevToolsTab::Console,
@@ -462,7 +467,26 @@ Component SidebarWS {
                 }
                 Task::none()
             }
-            BrowserMessage::Bookmark => Task::none(),
+            BrowserMessage::Bookmark => {
+                let title = self
+                    .tabs
+                    .get(self.active_tab)
+                    .map(|t| t.title.clone())
+                    .unwrap_or_else(|| self.url.clone());
+                self.bookmarks =
+                    toggle_bookmark(std::mem::take(&mut self.bookmarks), &self.url, &title);
+                save_bookmarks(&self.bookmarks);
+                Task::none()
+            }
+            BrowserMessage::BookmarkClicked(i) => {
+                match self.bookmarks.get(i) {
+                    Some(b) => {
+                        let url = b.url.clone();
+                        self.navigate_to(&url)
+                    }
+                    None => Task::none(),
+                }
+            }
             BrowserMessage::WorkspaceSelected(i) => { self.active_workspace = i; Task::none() }
             BrowserMessage::TabSelected(i) => {
                 if i < self.tabs.len() {
@@ -729,7 +753,12 @@ Component SidebarWS {
             .into()
         };
         let tabs = tab_bar::tab_bar(self);
-        container(column![tabs, top, body, status])
+        let mut main_col = column![tabs, top];
+        if let Some(bar) = self.bookmarks_bar() {
+            main_col = main_col.push(bar);
+        }
+        let main_col = main_col.push(body).push(status);
+        container(main_col)
             .width(Length::Fill).height(Length::Fill).style(main_area_style()).into()
     }
 
@@ -843,6 +872,36 @@ Component SidebarWS {
             .style(status_bar_style()).into()
     }
 
+    // Compact strip between top bar and page: one small button per bookmark.
+    // Hidden entirely when the setting is off or nothing is bookmarked yet.
+    fn bookmarks_bar(&self) -> Option<Element<'_, BrowserMessage>> {
+        if !self.show_bookmarks_bar || self.bookmarks.is_empty() {
+            return None;
+        }
+        let items: Vec<Element<'_, BrowserMessage>> = self
+            .bookmarks
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                button(text(&b.title).size(12).color(C::MUTED))
+                    .padding([4, 8])
+                    .style(nav_icon_button_style())
+                    .on_press(BrowserMessage::BookmarkClicked(i))
+                    .into()
+            })
+            .collect();
+        Some(
+            container(scrollable(row(items).spacing(2).padding([2, 4])).width(Length::Fill))
+            .width(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(C::SURFACE)),
+                border: iced::Border { radius: 0.0.into(), ..Default::default() },
+                ..Default::default()
+            })
+            .into(),
+        )
+    }
+
     fn navigate_to(&mut self, input: &str) -> Task<BrowserMessage> {
         let input = input.trim();
         if input.is_empty() { return Task::none(); }
@@ -867,6 +926,18 @@ Component SidebarWS {
 
 }
 
+// B1: pure toggle - remove by exact URL match, else append preserving order.
+// Title is only used on the add path; disk I/O stays with the UI handler.
+fn toggle_bookmark(bookmarks: Vec<Bookmark>, url: &str, title: &str) -> Vec<Bookmark> {
+    if bookmarks.iter().any(|b| b.url == url) {
+        bookmarks.into_iter().filter(|b| b.url != url).collect()
+    } else {
+        let mut next = bookmarks;
+        next.push(Bookmark { url: url.to_string(), title: title.to_string() });
+        next
+    }
+}
+
 fn secure_indicator(url: &str) -> String {
     if url.starts_with("https://") { "\u{1F512}".to_string() }
     else if url.starts_with("http://") { "\u{26A0}".to_string() }
@@ -877,7 +948,7 @@ fn secure_indicator(url: &str) -> String {
 mod tests {
     use super::*;
     use iced::Color;
-    use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url};
+    use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url, Bookmark};
     use crate::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
     use crate::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
 
@@ -1044,6 +1115,40 @@ mod tests {
         assert_eq!(screen.tabs[1].title, "C");
         assert_eq!(screen.active_tab, 1, "active_tab should shift left after closing tab before it");
     }
+
+    // ?? B1 bookmarks bar ????????????????????????????????????????????????
+    fn bm(url: &str, title: &str) -> Bookmark {
+        Bookmark { url: url.to_string(), title: title.to_string() }
+    }
+
+    #[test]
+    fn b1_toggle_adds_to_empty() {
+        let b = toggle_bookmark(vec![], "https://x.dev", "X");
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].url, "https://x.dev");
+        assert_eq!(b[0].title, "X");
+    }
+
+    #[test]
+    fn b1_toggle_appends_preserving_order() {
+        let start = vec![bm("https://a", "A"), bm("https://c", "C")];
+        let b = toggle_bookmark(start, "https://b", "B");
+        let urls: Vec<&str> = b.iter().map(|x| x.url.as_str()).collect();
+        assert_eq!(urls, ["https://a", "https://c", "https://b"]);
+    }
+
+    #[test]
+    fn b1_toggle_removes_existing_by_url_ignoring_title() {
+        let start = vec![bm("https://a", "A"), bm("https://b", "B"), bm("https://c", "C")];
+        let b = toggle_bookmark(start, "https://b", "some other title");
+        let urls: Vec<&str> = b.iter().map(|x| x.url.as_str()).collect();
+        assert_eq!(urls, ["https://a", "https://c"]);
+    }
+
+    #[test]
+    fn b1_toggle_never_duplicates_same_url() {
+        let added = toggle_bookmark(vec![], "https://d", "D1");
+        let removed = toggle_bookmark(added, "https://d", "D2-different-title");
+        assert!(removed.is_empty());
+    }
 }
-
-

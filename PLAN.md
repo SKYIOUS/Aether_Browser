@@ -104,8 +104,11 @@ elements):
 ## Phase B — UX Completion
 
 Wire what's half-built instead of adding new surface:
-- Bookmarks bar (`show_bookmarks_bar` setting exists; `load_bookmarks`/
-  `save_bookmarks` exist in navigator.rs; nothing renders them).
+- **Bookmarks bar — DONE 2026-08-24** (`src/ui/screens/browser/mod.rs`):
+  renders when `show_bookmarks_bar` is on and bookmarks exist; star toggles
+  via pure `toggle_bookmark` (URL-keyed, order-preserving); clicks navigate
+  through the existing link path. Persistence reuses `save_bookmarks`.
+- Bookmarks bar management page (remove/edit) - not scheduled yet.
 - Dark mode + accent color: settings UI picks an index but never persists to
   `VayuSettings` nor calls theme/style layer.
 - History UI (back/forward works; no history list view).
