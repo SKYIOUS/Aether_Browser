@@ -83,10 +83,10 @@ Thumbs.db
 # (root-anchored: bare names once matched live source dirs — `screens/`
 # silently swallowed all of src/ui/screens/)
 # (docs/ is NOT ignored: it holds PLAN/ADR/ledger authority docs — AGENTS.md docs map)
-examples/
+/examples/
 /screens/
-skyious-report/
-current/
+/skyious-report/
+/current/
 aether_tabs.json
 vayu_tabs.json
 vayu_cookies.json
