@@ -130,7 +130,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 486 tests green; CI
+- Status baseline (verified 2026-08-24, Windows local): 491 tests green; CI
   gates fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/

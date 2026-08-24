@@ -75,9 +75,17 @@ elements):
      heap allocations per element), pinned by `styled_element_stays_slim`;
      full suite green; no new clippy lints.
 
-4. **Wrap text once** (`src/engine/pipeline/layout.rs`)
-   - `wrap_text` runs during height estimation AND again post-layout. Make
-     wrapping happen once, feed wrapped line count into taffy heights.
+4. **Wrap text once — DONE 2026-08-24**
+   (`src/engine/pipeline/layout.rs`)
+   - Shipped: single wrap in the pre-pass stores `wrapped_lines` AND feeds
+     `css_height`; the post-layout second pass (`apply_text_wrapping`) is
+     deleted. Height and paint can no longer disagree; narrowed flex items
+     may paint estimate-width lines (ponytail-marked; second taffy pass is a
+     measured follow-up only).
+   - Evidence: `a4_flex_narrowing_keeps_height_and_lines_consistent` watched
+     RED pre-fix (height 67 vs painted 22.4 x 1), green post-fix; block-flow
+     equivalence, explicit-css_height, and re-layout staleness guards added;
+     workspace suite green (491/0).
 
 5. **Finish the TreeSink stubs** (`src/engine/parser.rs`)
    - `reparent_children`, `append_before_sibling`, `remove_from_parent` are

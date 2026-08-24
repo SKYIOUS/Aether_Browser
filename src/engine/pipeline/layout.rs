@@ -63,17 +63,6 @@ fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
     lines
 }
 
-fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
-    let page_w = container_width;
-    for el in elements.iter_mut() {
-        let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
-        let content_w = el.width - el.padding[1] - el.padding[3] - el.border_widths[1] - el.border_widths[3];
-        let available = if content_w.is_finite() && content_w > 0.0 { content_w } else { page_w };
-        let lines = wrap_text(&el.text, available, fs);
-        el.wrapped_lines = lines;
-    }
-}
-
 fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
     if el.display == css::Display::None { return None; }
     
@@ -200,18 +189,22 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
     if valid_count == 0 { return; }
 
     for el in elements.iter_mut() {
-        if el.css_height.is_none() && el.display != css::Display::None && !el.text.is_empty() {
-            let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
-            let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
-            let available_width = el.css_width.unwrap_or(container_width) - pb;
-            let available = if available_width.is_finite() && available_width > 0.0 { available_width } else { container_width };
-            let lines = wrap_text(&el.text, available, fs);
+        if el.display == css::Display::None || el.text.is_empty() { continue; }
+        let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
+        // ponytail: this is the ONLY wrap — its lines feed both taffy heights
+        // and the painter, so they can never disagree. Narrowed flex items may
+        // paint estimate-width lines; a second taffy pass is the measured
+        // follow-up if that fidelity ever matters (PLAN A4).
+        let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
+        let available_width = el.css_width.unwrap_or(container_width) - pb;
+        let available = if available_width.is_finite() && available_width > 0.0 { available_width } else { container_width };
+        let lines = wrap_text(&el.text, available, fs);
+        if el.css_height.is_none() {
             el.css_height = Some(fs * el.line_height.max(1.0) * lines.len() as f32);
         }
-        if el.display == css::Display::Inline && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
-            let fs = el.font_size.clamp(6.0, 200.0);
+        el.wrapped_lines = lines;
+        if el.display == css::Display::Inline && el.min_width.is_none() && el.css_width.is_none() {
             let text_w = measure_text_width(&el.text, fs);
-            let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
             el.min_width = Some(text_w + pb);
         }
     }
@@ -345,8 +338,6 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
             cumulative += child_w;
         }
     }
-
-    apply_text_wrapping(elements, container_width);
 
     for (i, el) in elements.iter().enumerate().take(20) {
         let tag = if el.tag.len() > 15 { &el.tag[..15] } else { &el.tag };

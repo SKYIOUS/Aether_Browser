@@ -1075,3 +1075,89 @@ fn test_inline_link_has_text_width() {
     assert!(a.width < 1440.0, "inline a should have text width, not container width, got {}", a.width);
     assert!(a.width > 0.0, "inline a should have positive width");
 }
+
+// -- PLAN A4: wrap-once invariants -------------------------------------------
+
+const A4_LONG_TEXT: &str =
+    "the quick brown fox jumps over the lazy dog again and again until the \
+     line surely wraps somewhere around here and then it keeps going well \
+     past the first wrap so that even a wide container must break it into \
+     several distinct painted lines for sure";
+
+fn a4_wrap_unit(fs: f32) -> f32 {
+    fs * 1.4
+}
+
+// Flex narrowing must not allow height/paint disagreement: the height fed to
+// taffy and the lines the painter renders come from ONE wrapping computation,
+// so lines.len() * fs * line_height must equal the allocated height within
+// taffy's pixel rounding. Deterministic divergence pre-A4: an inline span's
+// width is rewritten to its measured text width AFTER height estimation, so
+// the two passes wrapped at different widths.
+#[test]
+fn a4_flex_narrowing_keeps_height_and_lines_consistent() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        make_test("span", A4_LONG_TEXT, "inline", Some(0)),
+    ];
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
+    let el = &elements[1];
+    let unit = a4_wrap_unit(el.font_size);
+    // Estimate pass wraps at container width; fixture must produce >1 line there.
+    assert!(el.height / unit >= 1.5, "fixture: estimate pass must see a multi-line span");
+    let from_lines = unit * el.wrapped_lines.len() as f32;
+    assert!(
+        (el.height - from_lines).abs() <= 1.0,
+        "height {} disagrees with painted lines {} ({} x {}) - two wrap passes diverged",
+        el.height, el.wrapped_lines.len(), unit, el.wrapped_lines.len()
+    );
+}
+
+// Non-flex path: estimated width equals final width, so geometry must be
+// exactly the wrap-at-container-width result - no drift from removing the
+// second pass.
+#[test]
+fn a4_block_flow_wraps_at_container_width() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        make_test("p", A4_LONG_TEXT, "block", Some(0)),
+    ];
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
+    let el = &elements[1];
+    let unit = a4_wrap_unit(el.font_size);
+    assert!((el.height - unit * el.wrapped_lines.len() as f32).abs() <= 1.0);
+    assert!(el.wrapped_lines.len() >= 2, "fixture must actually wrap");
+    for line in &el.wrapped_lines {
+        assert!(
+            vayu_browser::engine::text::measure_text_width(line, el.font_size) <= 802.0,
+            "line escapes the container content width"
+        );
+    }
+}
+
+// Explicit css_height stays authoritative, but the painter still gets lines.
+#[test]
+fn a4_explicit_height_still_gets_wrapped_lines() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        make_test("p", A4_LONG_TEXT, "block", Some(0)),
+    ];
+    elements[1].css_height = Some(50.0);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
+    assert!((elements[1].height - 50.0).abs() <= 1.0);
+    assert!(elements[1].wrapped_lines.len() >= 2, "declared height must not skip wrapping");
+}
+
+// Re-layout replaces lines wholesale - no stale lines survive a width change.
+#[test]
+fn a4_relayout_replaces_stale_lines() {
+    let mut elements = vec![
+        make_test("div", "", "block", None),
+        make_test("p", A4_LONG_TEXT, "block", Some(0)),
+    ];
+    apply_taffy_layout(&mut elements, 1200.0, 600.0);
+    let wide = elements[1].wrapped_lines.clone();
+    apply_taffy_layout(&mut elements, 300.0, 600.0);
+    let narrow = elements[1].wrapped_lines.clone();
+    assert!(narrow.len() > wide.len(), "narrower container must produce more lines");
+}
