@@ -22,6 +22,7 @@ pub enum Message {
     Settings(SettingsMessage),
     Palette(PaletteMessage),
     Event(iced::Event),
+    Noop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -52,6 +53,7 @@ impl Default for VayuApp {
 impl VayuApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Noop => Task::none(),
             Message::Browser(msg) => {
                 match msg {
                     BrowserMessage::OpenSettings => {
@@ -92,6 +94,22 @@ impl VayuApp {
                 if let Event::Window(iced::window::Event::Resized(size)) = event {
                     self.browser.bounds = (size.width, size.height);
                     return self.browser.update(crate::ui::screens::browser::BrowserMessage::WindowResized(size.width, size.height)).map(Message::Browser);
+                }
+                // Clean-exit hook: sentinel cleanup must run BEFORE the close
+                // task, so a crash mid-shutdown still leaves the lock behind.
+                // CloseRequested carries no id in iced 0.13; get_latest()
+                // resolves the active window instead.
+                if let Event::Window(iced::window::Event::CloseRequested) = event {
+                    let cleanup = self
+                        .browser
+                        .update(crate::ui::screens::browser::BrowserMessage::SessionEnding)
+                        .map(|_| Message::Noop);
+                    return cleanup.chain(
+                        iced::window::get_latest().then(|id| match id {
+                            Some(id) => iced::window::close::<Message>(id),
+                            None => iced::Task::none(),
+                        }),
+                    );
                 }
                 Task::none()
             }

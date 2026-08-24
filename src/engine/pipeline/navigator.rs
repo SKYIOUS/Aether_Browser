@@ -142,6 +142,26 @@ pub fn load_bookmarks() -> Vec<Bookmark> {
         .unwrap_or_default()
 }
 
+// Crash-recovery sentinel: present while a session runs; a startup that finds
+// it means the previous run never reached clean-exit. Deliberately tiny -
+// fixed path, best-effort I/O, cleanup failure must not block shutdown.
+const SESSION_LOCK_FILE: &str = "vayu_session.lock";
+
+pub fn session_was_unclean() -> bool {
+    std::path::Path::new(SESSION_LOCK_FILE).exists()
+}
+
+pub fn mark_session_started() {
+    if let Err(e) = std::fs::write(SESSION_LOCK_FILE, "alive") {
+        plog!("session", "Failed to write lock: {}", e);
+    }
+}
+
+pub fn mark_session_clean_exit() {
+    // Best effort: a leftover sentinel only causes one spurious banner.
+    let _ = std::fs::remove_file(SESSION_LOCK_FILE);
+}
+
 pub fn load_tabs() -> Vec<Tab> {
     std::fs::read_to_string("vayu_tabs.json")
         .ok()

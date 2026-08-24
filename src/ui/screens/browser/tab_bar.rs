@@ -48,11 +48,21 @@ pub fn tab_bar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
         tab_elem
     }).collect();
 
+    let active = screen.active_tab;
+    // ASCII labels only: this codebase has a history of glyph-font trouble.
     row![
         container(row(tabs).spacing(2)).width(Length::Fill),
         button(text("+").size(14).color(C::ACCENT))
             .padding([6, 10])
             .style(ghost_button_style())
             .on_press(super::BrowserMessage::NewTab),
+        button(text("Dup").size(11).color(C::MUTED))
+            .padding([5, 7])
+            .style(ghost_button_style())
+            .on_press(super::BrowserMessage::DuplicateTab(active)),
+        button(text("Close others").size(11).color(C::MUTED))
+            .padding([5, 7])
+            .style(ghost_button_style())
+            .on_press(super::BrowserMessage::CloseOtherTabs(active)),
     ].align_y(Alignment::Center).into()
 }

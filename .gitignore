@@ -1,4 +1,4 @@
-﻿# Dependencies and build artifacts
+# Dependencies and build artifacts
 target/
 **/target/
 
@@ -80,9 +80,9 @@ Thumbs.db
 **/target/wasm32-unknown-emscripten/
 
 # Vayu Browser - stale scratch and report dirs
-# (root-anchored: bare names once matched live source dirs — `screens/`
+# (root-anchored: bare names once matched live source dirs - `screens/`
 # silently swallowed all of src/ui/screens/)
-# (docs/ is NOT ignored: it holds PLAN/ADR/ledger authority docs — AGENTS.md docs map)
+# (docs/ is NOT ignored: it holds PLAN/ADR/ledger authority docs - AGENTS.md docs map)
 /examples/
 /screens/
 /skyious-report/
@@ -102,4 +102,5 @@ ROADMAP.md
 .kilo/
 vayu_settings.json
 vayu_local_storage.json
+vayu_session.lock
 vayu_cookies.json

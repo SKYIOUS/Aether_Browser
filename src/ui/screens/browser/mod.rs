@@ -16,7 +16,7 @@ use crate::engine::korlang::register_default_callbacks;
 use crate::ui::kor_renderer::render_kor_vm;
 use crate::engine::js::{JsBridge, JSEngine};
 use crate::engine::pipeline::{fetch_page_content, apply_taffy_layout, StyledElement, normalize_nav_url, 
-save_tabs, load_tabs, load_bookmarks, save_bookmarks, Bookmark, Tab};
+save_tabs, load_tabs, load_bookmarks, save_bookmarks, Bookmark, session_was_unclean, mark_session_started, mark_session_clean_exit, Tab};
 
 mod canvas;
 mod devtools;
@@ -40,6 +40,11 @@ pub enum BrowserMessage {
     OpenPalette,
     Bookmark,
     BookmarkClicked(usize),
+    DuplicateTab(usize),
+    CloseOtherTabs(usize),
+    StartFreshSession,
+    DismissCrashBanner,
+    SessionEnding,
     LinkClicked(String),
     PageLoaded(String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>),
     TimerTick,
@@ -96,6 +101,7 @@ pub struct BrowserScreen {
     pub url_history: Vec<String>,
     pub bookmarks: Vec<Bookmark>,
     pub show_bookmarks_bar: bool,
+    pub crashed_last_session: bool,
     pub show_autocomplete: bool,
     pub autocomplete_index: usize,
     pub dev_tools_tab: DevToolsTab,
@@ -181,6 +187,9 @@ Component SidebarWS {
         };
         let settings = VayuSettings::load();
         crate::engine::pipeline::set_js_enabled(settings.js_enabled);
+        // Sentinel goes up only after tabs/history are fully reconstructed,
+        // so creating it can never re-flag THIS startup as a crash.
+        mark_session_started();
         Self {
             url: url_val.clone(),
             active_workspace: 0,
@@ -208,6 +217,10 @@ Component SidebarWS {
             url_history,
             bookmarks: load_bookmarks(),
             show_bookmarks_bar: settings.show_bookmarks_bar,
+            // Sentinel check happens only after tabs/history above are fully
+            // reconstructed; creating the new lock here cannot re-flag THIS
+            // startup as a crash.
+            crashed_last_session: session_was_unclean(),
             show_autocomplete: false,
             autocomplete_index: 0,
             dev_tools_tab: DevToolsTab::Console,
@@ -487,6 +500,54 @@ Component SidebarWS {
                     None => Task::none(),
                 }
             }
+            BrowserMessage::DuplicateTab(i) => {
+                if i < self.tabs.len() {
+                    let tab = self.tabs[i].clone();
+                    let history = self.tab_history[i].clone();
+                    self.tabs.insert(i + 1, tab);
+                    self.tab_history.insert(i + 1, history);
+                    self.active_tab = i + 1;
+                    save_tabs(&self.tabs);
+                }
+                Task::none()
+            }
+            BrowserMessage::CloseOtherTabs(keep) => {
+                // Single-tab (or stale index): nothing to close.
+                if keep < self.tabs.len() && self.tabs.len() > 1 {
+                    let history = self.tab_history[keep].clone();
+                    let kept = self.tabs[keep].clone();
+                    self.tabs = vec![kept];
+                    self.tab_history = vec![history];
+                    self.active_tab = 0;
+                    if let Some(active_tab) = self.tabs.get_mut(0) {
+                        active_tab.update_accessed();
+                    }
+                    save_tabs(&self.tabs);
+                }
+                Task::none()
+            }
+            BrowserMessage::StartFreshSession => {
+                self.tabs = vec![Tab::new("New Tab", "about:blank", self.active_workspace)];
+                self.tab_history = vec![(vec!["about:blank".to_string()], 0)];
+                self.active_tab = 0;
+                self.url = "about:blank".to_string();
+                self.url_input = "about:blank".to_string();
+                self.content = "New session".to_string();
+                self.styled_elements = Arc::new(vec![]);
+                self.page_canvas = None;
+                self.bridge = None;
+                self.crashed_last_session = false;
+                save_tabs(&self.tabs);
+                Task::none()
+            }
+            BrowserMessage::DismissCrashBanner => {
+                self.crashed_last_session = false;
+                Task::none()
+            }
+            BrowserMessage::SessionEnding => {
+                mark_session_clean_exit();
+                Task::none()
+            }
             BrowserMessage::WorkspaceSelected(i) => { self.active_workspace = i; Task::none() }
             BrowserMessage::TabSelected(i) => {
                 if i < self.tabs.len() {
@@ -754,6 +815,9 @@ Component SidebarWS {
         };
         let tabs = tab_bar::tab_bar(self);
         let mut main_col = column![tabs, top];
+        if let Some(banner) = self.crash_banner() {
+            main_col = main_col.push(banner);
+        }
         if let Some(bar) = self.bookmarks_bar() {
             main_col = main_col.push(bar);
         }
@@ -870,6 +934,41 @@ Component SidebarWS {
             .height(Length::Fixed(40.0)).width(Length::Fill)
             .center_x(Length::Fill).center_y(Length::Fixed(40.0))
             .style(status_bar_style()).into()
+    }
+
+    // Thin warning strip shown only when the previous run never reached a
+    // clean exit. Keep-tabs dismisses; start-fresh resets to one New Tab.
+    fn crash_banner(&self) -> Option<Element<'_, BrowserMessage>> {
+        if !self.crashed_last_session {
+            return None;
+        }
+        let dismiss = button(text("Keep tabs").size(12).color(C::MUTED))
+            .padding([4, 8])
+            .style(nav_icon_button_style())
+            .on_press(BrowserMessage::DismissCrashBanner);
+        let fresh = button(text("Start fresh").size(12).color(C::ACCENT))
+            .padding([4, 8])
+            .style(nav_icon_button_style())
+            .on_press(BrowserMessage::StartFreshSession);
+        Some(
+            container(
+                row![
+                    text("Browser didn't shut down cleanly last time.").size(12).color(C::FG),
+                    Space::with_width(Length::Fill),
+                    dismiss,
+                    fresh,
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center)
+                .padding([4, 8]),
+            )
+            .width(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(Color::from_rgb(0.30, 0.18, 0.05))),
+                ..Default::default()
+            })
+            .into(),
+        )
     }
 
     // Compact strip between top bar and page: one small button per bookmark.
@@ -1099,6 +1198,9 @@ mod tests {
 
     #[test]
     fn test_close_tab_before_active_adjusts_index() {
+        // Serializes against the B4 tests: this handler persists tabs to the
+        // shared vayu_tabs.json, and parallel writes would race its readers.
+        let _g = B4_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut screen = BrowserScreen::default();
         screen.tabs = vec![
             Tab::new("A", "https://a.com", 0),
@@ -1116,7 +1218,7 @@ mod tests {
         assert_eq!(screen.active_tab, 1, "active_tab should shift left after closing tab before it");
     }
 
-    // ?? B1 bookmarks bar ????????????????????????????????????????????????
+    // -- B1 bookmarks bar --
     fn bm(url: &str, title: &str) -> Bookmark {
         Bookmark { url: url.to_string(), title: title.to_string() }
     }
@@ -1150,5 +1252,80 @@ mod tests {
         let added = toggle_bookmark(vec![], "https://d", "D1");
         let removed = toggle_bookmark(added, "https://d", "D2-different-title");
         assert!(removed.is_empty());
+    }
+
+    // ?? B4 tab restore polish ???????????????????????????????????????????
+    static B4_FS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn b4_screen() -> BrowserScreen {
+        let mut s = BrowserScreen::default();
+        s.tabs = vec![
+            Tab::new("A", "https://a.com", 0),
+            Tab::new("B", "https://b.com", 0),
+            Tab::new("C", "https://c.com", 0),
+        ];
+        s.tab_history = vec![
+            (vec!["https://a.com".to_string()], 0),
+            (vec!["https://b.com".to_string()], 0),
+            (vec!["https://c.com".to_string()], 0),
+        ];
+        s.crashed_last_session = false;
+        s
+    }
+
+    #[test]
+    fn b4_duplicate_tab_inserts_copy_after_and_activates_it() {
+        let _g = B4_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = b4_screen();
+        let _ = s.update(BrowserMessage::DuplicateTab(0));
+        assert_eq!(s.tabs.len(), 4);
+        assert_eq!(s.tabs[1].title, "A");
+        assert_eq!(s.tabs[1].url, "https://a.com");
+        assert_eq!(s.active_tab, 1);
+        assert_eq!(s.tab_history.len(), 4);
+        assert_eq!(load_tabs().len(), 4, "duplicate must persist");
+    }
+
+    #[test]
+    fn b4_close_others_keeps_target_and_persists() {
+        let _g = B4_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = b4_screen();
+        s.active_tab = 2;
+        let _ = s.update(BrowserMessage::CloseOtherTabs(1));
+        assert_eq!(s.tabs.len(), 1);
+        assert_eq!(s.tabs[0].title, "B");
+        assert_eq!(s.active_tab, 0);
+        assert_eq!(load_tabs().len(), 1, "close-others must persist");
+    }
+
+    #[test]
+    fn b4_stale_indices_are_noops() {
+        let mut s = b4_screen();
+        let _ = s.update(BrowserMessage::DuplicateTab(9));
+        let _ = s.update(BrowserMessage::CloseOtherTabs(9));
+        assert_eq!(s.tabs.len(), 3);
+        assert_eq!(s.active_tab, 0);
+    }
+
+    #[test]
+    fn b4_start_fresh_resets_and_clears_crash_flag() {
+        let _g = B4_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = b4_screen();
+        s.crashed_last_session = true;
+        let _ = s.update(BrowserMessage::StartFreshSession);
+        assert_eq!(s.tabs.len(), 1);
+        assert_eq!(s.tabs[0].title, "New Tab");
+        assert!(!s.crashed_last_session);
+        assert_eq!(s.tab_history.len(), 1);
+        assert_eq!(load_tabs().len(), 1, "start-fresh must persist");
+    }
+
+    #[test]
+    fn b4_keep_tabs_only_dismisses_banner() {
+        let mut s = b4_screen();
+        s.crashed_last_session = true;
+        let _ = s.update(BrowserMessage::DismissCrashBanner);
+        assert!(!s.crashed_last_session);
+        assert_eq!(s.tabs.len(), 3, "keep-tabs must not alter restored tabs");
     }
 }

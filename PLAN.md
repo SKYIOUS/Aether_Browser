@@ -112,7 +112,11 @@ Wire what's half-built instead of adding new surface:
 - Dark mode + accent color: settings UI picks an index but never persists to
   `VayuSettings` nor calls theme/style layer.
 - History UI (back/forward works; no history list view).
-- Tab restore polish: crash recovery banner, duplicate-tab, close-others.
+- **Tab restore polish — DONE 2026-08-24** (`browser/mod.rs`, `tab_bar.rs`,
+  `navigator.rs`, `ui/mod.rs`): sentinel-file crash detection with banner
+  (Keep tabs / Start fresh), Duplicate-tab and Close-others on the active
+  tab, all persisting via save_tabs; clean-exit hook runs sentinel cleanup
+  before window close.
 - Multi-window correctness check (global statics make this fragile — see debt).
 
 ## Phase C — Hardening
