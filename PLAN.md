@@ -26,6 +26,19 @@ Both dead crates are deleted; build is green (~444 tests); linker is `rust-lld`.
 **Daily-usable browser.** Chosen direction: page fidelity first — real pages
 should render completely and scroll smoothly before adding features.
 
+## Track 2 — Native JS engine (`aether-js`, parallel)
+
+Decision: [ADR-0003](docs/adr/0003-native-javascript-engine.md) — build our own
+ECMAScript engine in Rust; detailed plan:
+[docs/architecture/js-engine-plan.md](docs/architecture/js-engine-plan.md).
+
+- Runs **parallel** to Phases A–D; it gates nothing in them.
+- QuickJS stays the live runtime until the swap gate (R4/R5 pass rates +
+  real-page smoke suite). JsBridge is the only swap point — capability modules
+  survive the swap.
+- Debt items #1 and #3 in [issues.md](docs/architecture/issues.md) are design
+  inputs to the host layer, not interim work.
+
 ---
 
 ## Phase A — Page Fidelity (NEXT)
@@ -98,6 +111,10 @@ Wire what's half-built instead of adding new surface:
 - Revisit `url` crate for RFC-correct resolution if edge cases bite.
 
 ## Known debt (do not fix opportunistically; schedule it)
+
+> Architecture-level ledger with file/line references lives in
+> [docs/architecture/issues.md](docs/architecture/issues.md). The items below
+> are the phase-specific slice.
 
 - `OnceLock<Mutex<..>>` global state across net/js/fetcher blocks multi-instance
   and cross-test isolation (ISSUE 15 in `.kilo/plans`). Fix when it bites, not before.

@@ -80,7 +80,7 @@ Thumbs.db
 **/target/wasm32-unknown-emscripten/
 
 # Vayu Browser - stale scratch and report dirs
-docs/
+# (docs/ is NOT ignored: it holds PLAN/ADR/ledger authority docs — AGENTS.md docs map)
 examples/
 screens/
 skyious-report/

@@ -1,0 +1,48 @@
+# Architecture Debt Ledger — Vayu Browser
+
+> Canonical list of **open** architecture debt. Every entry was verified against
+> the code on 2026-08-24. If an entry no longer matches the code, fix this file
+> in the same change — a stale ledger is worse than none.
+>
+> Division of labor: `PLAN.md` says *what's next and when*; this file says
+> *where the debt lives and why it matters*. Phase-specific work items live in
+> PLAN.md only; do not duplicate them here.
+
+## Open items
+
+| # | Debt | Where | Why it matters | Tracked by |
+|---|------|-------|----------------|------------|
+| 1 | `Arc<Mutex<JsBridge>>` shared across threads while rquickjs is single-thread | `src/engine/js/js_bridge.rs` | Deadlock/data-race surface; limits callback design | Interim: thread confinement; terminal: aether-js realm model (ADR-0003) |
+| 2 | HTTP cache is an unbounded `HashMap`; TTL checked on read, expired entries never evicted, no byte/entry cap | `src/engine/net/mod.rs:73-96` | Unbounded growth over long sessions (`lru` dep already available) | Unscheduled |
+| 3 | Timer/event callbacks stored as source strings and re-evaluated per tick; no `Event` objects, no bubbling/capture phase | `src/engine/js/events.rs`, `timers.rs` | Interactive pages break; closure state impossible | Design input to aether-js host layer (ADR-0003) |
+| 4 | DOM API surface minimal (limited standard properties/methods over `aether-dom`) | `crates/aether-dom`, bridge modules | Page JS fails on missing APIs | Ongoing fidelity work (PLAN Phase A/B) |
+| 5 | CSS custom properties (`--var`) and `calc()` unsupported (no matches in `aether-css`) | `crates/aether-css` | Ubiquitous on modern sites | Unscheduled |
+| 6 | No float or table layout (taffy covers flex/grid/block+inline only) | `src/engine/pipeline/layout.rs` | Legacy and data-heavy pages misrender | PLAN Phase D territory |
+| 7 | No byte-budget or memory-pressure handling for decoded images / DOM / caches (entry counts only) | `src/engine/pipeline/fetcher.rs`, extractor | OOM risk on heavy pages | Overlaps PLAN A1 budgets |
+| 8 | Hand-rolled logging (`plog!`), no levels/filtering/structure | `src/logging.rs`, call sites | Poor diagnosability | Unscheduled; candidate: `tracing` |
+| 9 | Residual `String`-typed errors in net paths despite thiserror adoption elsewhere | `src/engine/net/mod.rs` | Lost error context/kind matching | Unscheduled |
+
+Already scheduled in PLAN.md — see there, not here: cap removal + budgets (A1),
+viewport culling (A2), TreeSink stubs (A5), TLS/cookies-enforcement/CSP-for-`<link>`
+(C), async fetch + `@font-face` (D), global-statics/multi-window fragility,
+dual extraction paths, `browser/mod.rs` size pressure, `parse_fragment`
+divergence (Known Debt).
+
+## Resolved since the last audit (kept for history)
+
+| Old issue | Resolution |
+|---|---|
+| Hand-written HTML parser | html5ever 0.39 + custom TreeSink |
+| Character-heuristic text wrapping, no fallback fonts | cosmic-text glyph measurement + fallback, LRU-cached |
+| No SVG | resvg/usvg decode path |
+| Caelum flat block-list layout, inline post-processing | taffy 0.12 tree layout + inline formatting context |
+| Stratus ad-hoc tokenizer | Servo cssparser 0.37 |
+| Selector matching hand-rolled in js_bridge | Servo `selectors` crate |
+| Hand-written URL resolution | `url` crate promoted to direct dependency |
+| Cookies without attributes | HttpOnly/Secure/SameSite parsed + enforced against JS (`CookieAttrs`, `net/mod.rs:101`) |
+| CSP source-expressions only | Nonce/hash sources + report-uri/upgrade-insecure directives parsed; per-destination allow fns |
+| Image cache O(n) sweep on access | LRU caches (CSS 100 entries, images 50) |
+| build.rs codegen + css-caelum-bridge.json | Deleted with Caelum |
+
+Former analysis docs `rendering-layout-fixes.md` and pre-migration sections of
+this file are superseded by the table above plus PLAN.md.

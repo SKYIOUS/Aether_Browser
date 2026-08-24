@@ -15,7 +15,8 @@ Living vocabulary. Keep names exact; architecture discussions use these terms.
 - **Layout seam**: `compute_layout(elements, viewport)` — planned deep module hiding taffy + cosmic-text measurement + inline flow (today: `apply_taffy_layout`).
 - **Text**: cosmic-text measurement/shaping (`src/engine/text.rs`); LRU-cached.
 - **JsBridge / Bridge façade**: rquickjs (QuickJS) bindings; being decomposed into capability modules (dom/timers/events/net/storage/console) behind one binding policy choke point.
-- **Pipeline stages**: Fetch → Parse → Style (Stratus+selectors) → Script (QuickJS) → Layout (seam) → Paint (PageCanvas).
+- **aether-js** (`crates/aether-js`, planned): native Rust ECMAScript engine replacing QuickJS — lexer → parser → bytecode VM over an arena/handle heap with mark-sweep GC. Conformance climbs a test262-gated rung ladder (R0 skeleton → R1 ES5 → R2 ES2015 → …). QuickJS stays live until the swap gate. (ADR-0003, plan: docs/architecture/js-engine-plan.md)
+- **Pipeline stages**: Fetch → Parse → Style (Stratus+selectors) → Script (QuickJS → aether-js after swap gate) → Layout (seam) → Paint (PageCanvas).
 - **PageCanvas**: iced canvas program that paints positioned boxes and hit-tests clicks.
 - **Korlang**: embedded UI DSL VM (korlang/) driving sidebar/chrome; NOT a page scripting language. Page-reachable access must go through binding policy.
 

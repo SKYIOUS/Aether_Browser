@@ -1,34 +1,38 @@
 # Vayu Browser
 
-An experimental/prototype web browser engine written in Rust.
+An experimental web browser engine written in Rust. No Blink/Gecko/WebKit code;
+external components sit behind seams we own (see `CONTEXT.md`).
 
 ## What Works
-- HTML parsing with basic DOM tree construction
-- CSS parsing and style resolution (via Stratus/aether-css)
-- Layout via Caelum (embedded Taffy-derived engine for flexbox, grid, block)
-- JavaScript runtime via QuickJS (rquickjs) with basic DOM API shim
-- Page rendering via Iced 0.13 canvas (text, images, interactive forms, and basic SVG)
-- Tab management (multiple tabs with per-tab history)
-- Korlang UI scripting language (v0.2.0: full arithmetic, functions, lists, and iteration support)
-- Settings and command palette screens
+- HTML parsing via html5ever (WHATWG tokenizer/tree builder) into `aether-dom`
+- CSS: cssparser-based tokenizer (Stratus) + Servo `selectors` matching, cascade in `aether-css`
+- Layout: taffy 0.12 (block/inline/flex/grid) with an inline formatting context
+- Text: cosmic-text glyph measurement/shaping with fallback fonts, LRU-cached (CJK/non-Latin works)
+- JavaScript: QuickJS (rquickjs 0.12) behind the JsBridge seam; native replacement (`aether-js`) planned — see `docs/adr/0003`
+- SVG rendering via resvg/usvg; raster images via `image`
+- Tabs with per-tab history, workspaces sidebar (Korlang VM), bookmarks storage
+- Cookies with HttpOnly/Secure/SameSite attributes; CSP directive checks for scripts/styles/images/connects
+- Settings and command palette screens; Iced 0.13 canvas painting
 
 ## Architecture
-- src/engine/ — Core engine modules (DOM, CSS parser, JS bridge, networking)
-- src/ui/ — Iced-based shell (browser screen, settings, palette)
-- crates/ — Workspace crates (aether-dom, aether-html, aether-css, aether-caelum)
-- korlang/ — Korlang language compiler and VM
+- `src/engine/` — pipeline stages: fetcher → parser → stratus/selectors → js bridge → layout → paint support
+- `src/ui/` — Iced shell: browser screen + canvas, tab bar, devtools overlay, settings, palette
+- `crates/aether-dom`, `crates/aether-css` — workspace crates (DOM tree, CSS values/cascade)
+- `korlang/` — embedded UI DSL compiler + stack VM driving sidebar/chrome
+- Docs: `PLAN.md` (what's next) · `CONTEXT.md` (vocabulary/doctrine) · `docs/architecture/issues.md` (debt ledger) · `docs/adr/` (decisions)
 
 ## Build & Run
+```
 cargo build
 cargo run
 cargo test
+```
 
 ## Limitations
-This is a prototype, not a production browser.
-- No security sandbox or process isolation
-- CSP is only partially enforced for page scripts and styles
-- Advanced CSS features like animations and transitions are not yet supported
-- Single-process, blocking I/O for network requests
-- Maximum 2000 DOM elements per page, 50 style blocks, 500KB CSS limit
-- Audio/video playback not implemented
-- HTML5/CSS3 compliance is partial at best
+Prototype — not a production browser.
+- No process isolation or sandbox; single-process with blocking network I/O
+- Page caps: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML, ≤50 style blocks
+- No CSS animations/transitions, custom properties, calc(), float/table layout
+- No audio/video; no @font-face yet; Intl absent
+- Event system is minimal (no bubbling/capture); JS callbacks re-parsed per tick
+- Live debt list: `docs/architecture/issues.md`

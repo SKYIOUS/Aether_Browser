@@ -1,83 +1,97 @@
-# AGENTS.md - Vayu Browser
+# AGENTS.md — Vayu Browser (operating contract)
 
-## Quick Commands
-- **Build:** `cargo build`
-- **Run:** `cargo run`
-- **Test (all):** `cargo test`
-- **Single test:** `cargo test <test_name>`
-- **Status:** Compiles clean, all tests pass (~444 across workspace + integration).
+Rules here bind every agent and human change. Violations = the change is wrong
+even if tests pass.
+
+## Docs map (authority order)
+| Doc | Role |
+|---|---|
+| `AGENTS.md` | Operating contract (this file) |
+| `PLAN.md` | Single source of truth for what's next; Track 2 = native JS engine |
+| `CONTEXT.md` | Domain vocabulary + doctrine. Use its terms exactly |
+| `docs/adr/` | Decisions. New decision → new ADR; conflicts reopen via ADR only |
+| `docs/architecture/issues.md` | Verified open-debt ledger |
+| `docs/architecture/future-crates.md` | Crate evaluation; new dependency needs an entry here first |
+| `docs/architecture/js-engine-plan.md` | aether-js engine plan (ADR-0003) |
+
+**Doc discipline:** a doc that contradicts the code is a bug. Any change that
+invalidates a statement in these docs updates them in the same commit.
+
+## Non-negotiables
+1. **Evidence before claims.** Run `cargo test`; run `cargo fmt --check` +
+   `cargo clippy -- -D warnings` when touching code CI covers. Cite output.
+   Never report success from intent.
+2. **Scope discipline.** Touch only what the task names. No drive-by refactors,
+   no comment churn, no reformatting of untouched lines.
+3. **Root cause, not symptom.** Before editing a function, find every caller.
+   Fix at the shared choke point once — not per-caller guards.
+4. **Files stay under 1000 lines.** Growing one means extract a submodule
+   instead (`browser/mod.rs` is the repeat offender).
+5. **No new dependency** without a `future-crates.md` row + rationale. Leaf
+   crates only; nothing platform-level inside `crates/aether-js`.
+6. **Decisions get recorded.** Non-obvious choice → ADR. Naming/concepts →
+   `CONTEXT.md`. No second vocabulary.
+7. **Comments carry why, not what.** Deliberate ceilings get a
+   `ponytail:` marker naming the ceiling and upgrade path.
+
+## Commands
+- Build: `cargo build` · Run: `cargo run`
+- Tests: `cargo test` · single: `cargo test <name>`
+- Status (verified 2026-08-24): 444 tests green; CI gates fmt/clippy/test on
+  Linux+Windows+macOS (`.github/workflows/ci.yml`)
 
 ## Architecture
-- **Language:** Rust (edition 2021)
-- **UI:** Iced 0.13 (`canvas`, `image`, `tiny-skia`, `wgpu`, `tokio`), theme forced Light
-- **Entry point:** `src/main.rs` → `src/lib.rs` → `src/ui/mod.rs` (`VayuApp`)
-- **Workspace members:** `korlang`, `crates/aether-dom`, `crates/aether-css`
-- **HTML parsing:** `html5ever` 0.39 via custom `TreeSink` in `src/engine/parser.rs` → produces `aether_dom::Node`
-- **CSS parsing:** `cssparser` 0.37 in `src/engine/stratus.rs`; selector matching via `selectors` crate in `src/engine/js/selector_engine.rs`
-- **Layout:** `taffy` 0.12 — `apply_taffy_layout()` in `src/engine/pipeline/layout.rs`
-- **Text measurement:** `cosmic-text` (fontdb + rustybuzz) in `src/engine/text.rs`, LRU-cached; no more char-width heuristic
-- **JS engine:** `rquickjs` 0.12 — `src/engine/js/` (`JsBridge` flat DOM behind `Arc<Mutex<>>`)
-- **Korlang:** embedded scripting VM (`korlang/`) driving sidebar + status bar UI
+Rust, edition 2021. Entry: `src/main.rs` → `src/lib.rs` → `src/ui/mod.rs`
+(`VayuApp`). Workspace: `korlang`, `crates/aether-dom`, `crates/aether-css`,
+plus planned `crates/aether-js` (ADR-0003). UI is Iced 0.13 (canvas/image/
+tiny-skia/wgpu/tokio), theme forced Light.
 
-## Module map (src/engine/)
-- `parser.rs` — html5ever → aether_dom
-- `stratus.rs` — CSS tokenizer/parser/resolver (cssparser)
-- `text.rs` — glyph-accurate text measurement (cosmic-text)
-- `style.rs` — thin wrapper: Node → ElementData → stratus resolve
-- `net/` — blocking reqwest client, cookies, cache, CSP checks, URL utils
-- `js/` — JsBridge, timers, events, fetch/XHR, storage, selectors (selectors crate)
-- `pipeline/` — orchestrates one page load:
-  - `fetcher.rs` — fetch HTML (max 1MB), collect `<style>` + external CSS (max 50 each), parse CSS
-  - `extractor.rs` — walk DOM → `Vec<StyledElement>` with computed styles (max depth 50, max 2000 elements)
-  - `layout.rs` — `apply_taffy_layout()` computes x/y/w/h incl. inline formatting context
-  - `navigator.rs` — Tab model, URL normalization, tab/bookmark persistence
+Engine stack:
+- HTML: html5ever 0.39 + custom TreeSink (`src/engine/parser.rs`) → `aether_dom::Node`
+- CSS: cssparser 0.37 tokenizer in Stratus (`src/engine/stratus.rs`), values/cascade in `aether-css`; selectors crate matching in `src/engine/js/selector_engine.rs`
+- Layout seam: `apply_taffy_layout()` (taffy 0.12) in `src/engine/pipeline/layout.rs`, incl. inline formatting context
+- Text: cosmic-text measurement/shaping (`src/engine/text.rs`), LRU-cached
+- JS: rquickjs 0.12 (`src/engine/js/`, JsBridge flat DOM behind `Arc<Mutex<>>`) — interim until aether-js swap gate
+- Net: blocking reqwest, cookie jar w/ attributes, HTTP cache, CSP checks (`src/engine/net/mod.rs`)
+- Korlang: embedded UI DSL VM driving sidebar/chrome; never page-reachable except through binding policy
 
-## UI structure (src/ui/)
-- `mod.rs` — VayuApp: screen routing (Browser / Settings / Palette)
-- `screens/browser/`
-  - `mod.rs` — BrowserScreen state machine: update(), view(), navigation, history, tabs, JS dispatch
-  - `canvas.rs` — PageCanvas (iced canvas Program): draws elements, handles click hit-testing, focus ring
-  - `tab_bar.rs` — tab strip rendering
-  - `workspaces.rs` — sidebar (workspaces/collections via korlang VM)
-  - `devtools.rs` — console/elements/network overlay
-- `screens/settings.rs` — settings screen + VayuSettings persistence
-- `screens/palette.rs` — command palette
-- `style.rs` — shared style helpers/colors
-
-## Rendering Pipeline
+Module map:
 ```
-fetch_page_content() (fetcher.rs, async on Iced thread)
-  1. fetch HTML (reqwest blocking, max 1MB)
-  2. parse_html() → html5ever → aether_dom::Node tree
-  3. extract <style> blocks and <link rel=stylesheet> URLs (≤50 each, ≤500KB per source)
-  4. parse CSS through Stratus (cssparser-based, no input-length truncation)
-  5. extract scripts; JsBridge executes them against flat DOM; bridge.to_dom()
-  6. extract_elements() → Vec<StyledElement> (computed styles, images decoded to Handle::from_rgba)
-  7. apply_taffy_layout() → positions/sizes per element (block + inline contexts)
-  8. PageCanvas draws elements at computed positions; click hit-testing maps back to messages
+src/engine/{parser,stratus,text,style}.rs  net/  js/{js_bridge,timers,events,fetch,storage,selector*}
+src/engine/pipeline/{fetcher,extractor,layout,navigator}.rs
+src/ui/screens/browser/{mod,canvas,tab_bar,workspaces,devtools}.rs
+src/ui/screens/{settings,palette}.rs       src/ui/style.rs
 ```
 
-## Key Conventions
-- `resolve_url()`/`normalize_url()` in `net/mod.rs`; `normalize_nav_url()` in `navigator.rs`
+## Rendering pipeline
+```
+fetch_page_content() (async on Iced thread)
+1. fetch HTML (reqwest blocking, max 1MB)          5. scripts → JsBridge vs flat DOM → to_dom()
+2. parse_html() → aether_dom tree                  6. extract_elements() → StyledElements (+image decode)
+3. collect <style> + <link> CSS (≤50, ≤500KB ea)   7. apply_taffy_layout() → x/y/w/h per element
+4. Stratus parses CSS (no truncation)              8. PageCanvas paints; click hit-testing → messages
+```
+
+## Conventions & gotchas
+- URL helpers: `resolve_url()`/`normalize_url()` (`net/mod.rs`); `normalize_nav_url()` (`navigator.rs`)
+- Global statics: `OnceLock<Mutex/RwLock<…>>` for client, caches, cookies, storage — blocks multi-window; scheduled debt, don't spread the pattern
 - Runtime data files (gitignored): `vayu_settings.json`, `vayu_tabs.json`, `vayu_local_storage.json`, `vayu_cookies.json`
-- Global state: `OnceLock<Mutex<...>>` statics for HTTP client, caches, cookie jar, localStorage
-- `.cargo/config.toml` uses `rust-lld` as linker (ships with every toolchain; do not switch to lld-link unless installed)
-
-## Important Gotchas
-- **Iced 0.13 API:** `Task::perform(future, mapper)` — there is no `iced::Command`
-- **Element caps** still exist: 2000 elements, depth 50, text 5000 chars, 1MB HTML — large pages get truncated
-- **Blocking reqwest** everywhere via `run_blocking()` thread spawn
-- **Child modules can access parent private fields** — browser submodules read BrowserScreen fields directly
-- **Tab::new(title, url, workspace_id)** takes 3 args
-- **CSP support:** `net::csp_blocks_scripts()` / `net::csp_blocks_styles()` checked before processing
-- **wgpu 0.19** (via iced) has future-incompat warnings — harmless today, revisit when iced upgrades wgpu
+- Linker is `rust-lld` (`.cargo/config.toml`); don't switch to lld-link unless installed
+- Iced 0.13: `Task::perform(future, mapper)`; there is no `iced::Command`
+- Element caps live: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML (removal planned, PLAN A1)
+- Blocking reqwest everywhere via `run_blocking()`
+- Browser submodules read `BrowserScreen` private fields directly (child-module access)
+- `Tab::new(title, url, workspace_id)` — three args
+- CSP: check `net::csp_blocks_scripts()` / `csp_blocks_styles()` before processing
+- wgpu 0.19 future-incompat warnings are harmless until iced upgrades
 
 ## Testing
-- ~444 tests total: integration tests in `tests/`, unit tests inline under `#[cfg(test)]`
-- Layout tests use `apply_taffy_layout(&mut elements, width, height)` directly — no network needed
+- Integration tests in `tests/`, unit tests inline under `#[cfg(test)]` (~444 total)
+- Layout tests call `apply_taffy_layout(&mut elements, width, height)` directly — no network
 - No mock network layer; `BrowserScreen::navigate()` does real HTTP
+- aether-js (future): test262 is its conformance harness — see js-engine-plan.md §3
 
 ## Removed (do not reintroduce)
-- `crates/aether-html` (replaced by html5ever), `crates/aether-caelum` (replaced by taffy)
+- `crates/aether-html` (→ html5ever), `crates/aether-caelum` (→ taffy)
 - `build.rs` + `css-caelum-bridge.json` codegen bridge
-- `MAX_INPUT_LENGTH`/`MAX_ITERATIONS` CSS truncation, `CHAR_W_SCALE` heuristic
+- CSS input-length truncation (`MAX_INPUT_LENGTH`/`MAX_ITERATIONS`), `CHAR_W_SCALE` heuristic
