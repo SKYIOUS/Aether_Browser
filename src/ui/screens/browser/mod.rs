@@ -302,7 +302,7 @@ Component SidebarWS {
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
-                    return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
             }
@@ -323,7 +323,7 @@ Component SidebarWS {
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
-                    return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                 }
                 Task::none()
             }
@@ -417,7 +417,7 @@ Component SidebarWS {
                         self.loading = true;
                         self.bridge = None;
                         let (bw, bh) = self.bounds;
-                        return Task::perform(fetch_page_content(self.url.clone(), bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                        return Task::perform(fetch_page_content(self.url.clone(), bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                     }
                     let hist_delta = {
                         let mut b = bridge.lock().unwrap_or_else(|e| e.into_inner());
@@ -442,7 +442,7 @@ Component SidebarWS {
                             self.kor_vm.borrow_mut().update_state("status_right", korlang::vm::Value::String(url.clone()));
                             self.bridge = None;
                             let (bw, bh) = self.bounds;
-                            return Task::perform(fetch_page_content(url, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                            return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
                         }
                     }
                 }
@@ -1020,7 +1020,7 @@ Component SidebarWS {
         self.bridge = None;
         self.is_history_nav = false;
         let (bw, bh) = self.bounds;
-        Task::perform(fetch_page_content(target, bw, bh), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
+        Task::perform(fetch_page_content(target, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
     }
 
 }

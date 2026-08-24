@@ -111,7 +111,10 @@ Wire what's half-built instead of adding new surface:
 - Bookmarks bar management page (remove/edit) - not scheduled yet.
 - Dark mode + accent color: settings UI picks an index but never persists to
   `VayuSettings` nor calls theme/style layer.
-- History UI (back/forward works; no history list view).
+- **History UI — DONE 2026-08-24** (`fetcher.rs`): `vayu://history` renders
+  session `url_history` as link elements (most-recent first, consecutive
+  duplicates collapsed, display trimmed / href full); clicks navigate via the
+  ordinary LinkClicked path. Session-scoped - no persistence yet.
 - **Tab restore polish — DONE 2026-08-24** (`browser/mod.rs`, `tab_bar.rs`,
   `navigator.rs`, `ui/mod.rs`): sentinel-file crash detection with banner
   (Keep tabs / Start fresh), Duplicate-tab and Close-others on the active

@@ -155,10 +155,10 @@ fn inject_js_output_flat(bridge: &mut crate::engine::js::JsBridge, text: &str) {
 }
 
 
-fn render_vayu_page(url: &str, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+fn render_vayu_page(url: &str, content_width: f32, viewport_h: f32, session_history: &[String]) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     let page = match url {
         "vayu://newtab" => newtab_page(content_width, viewport_h),
-        "vayu://history" => history_page(content_width, viewport_h),
+        "vayu://history" => history_page(content_width, viewport_h, session_history.to_vec()),
         "vayu://bookmarks" => bookmarks_page(content_width, viewport_h),
         "vayu://settings" => settings_page(content_width, viewport_h),
         _ => return (url.to_string(), error_page(url, "Unknown internal page", content_width, viewport_h, 0), None),
@@ -186,23 +186,53 @@ fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
     ]
 }
 
-fn history_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
-    let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
-        tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
-        background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+fn history_page(content_width: f32, _viewport_h: f32, session_history: Vec<String>) -> Vec<StyledElement> {
+    let pad = 24.0;
+    let fg = Color::from_rgb(0.13, 0.13, 0.13);
+    let muted = Color::from_rgb(0.45, 0.45, 0.45);
+    let link_color = Color::from_rgb(0.0, 0.0, 0.93);
+    let se = |text: &str, y: f32, color: Color, size: f32, weight: &str, is_link: bool, href: Option<String>| StyledElement {
+        tag: if is_link { "a".into() } else { "p".into() },
+        text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+        is_link, href, indent_level: 0, color, font_size: size,
+        font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
+        background_color: None, border_widths: [0.0; 4], border_color: None,
+        image_handle: None, image_url: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4],
+        display: Display::Block,
         flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
-        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
-        css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
-        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
+        flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        css_width: Some(content_width - pad * 2.0), css_height: None, parent_index: Some(0),
+        min_width: None, max_width: None, min_height: None, max_height: None,
+        x: 0.0, y, width: 0.0, height: 0.0, line_height: 1.4,
+        text_decoration: TextDecor::default(), border_radius: [0.0; 4],
+        input_type: String::new(), input_value: String::new(), input_placeholder: String::new(),
+        checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0,
+        inset_bottom: 0.0, inset_left: 0.0,
     };
-    vec![
-        se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
-        se("h1", "History", 40.0, 40.0, content_width - 80.0, 48.0, iced::Color::from_rgb(0.1, 0.1, 0.1), 28.0, "bold", None),
-    ]
+    let mut out = vec![
+        se("History", 60.0, fg, 22.0, "bold", false, None),
+    ];
+    if session_history.is_empty() {
+        out.push(se("No pages visited yet.", 110.0, muted, 14.0, "normal", false, None));
+        return out;
+    }
+    // Most recent first; collapse CONSECUTIVE repeats only - revisiting a page
+    // after other pages keeps both entries.
+    let mut last_emitted: Option<&String> = None;
+    for (i, url) in session_history.iter().rev().enumerate() {
+        if last_emitted == Some(url) { continue; }
+        last_emitted = Some(url);
+        let display = if url.chars().count() > 60 {
+            let trimmed: String = url.chars().take(57).collect();
+            format!("{}...", trimmed)
+        } else {
+            url.clone()
+        };
+        out.push(se(&display, 110.0 + i as f32 * 28.0, link_color, 14.0, "normal", true, Some(url.clone())));
+    }
+    out
 }
 
 fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
@@ -274,8 +304,8 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, stat
     ]
 }
 
-pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
-    tokio::task::spawn_blocking(move || do_fetch_page_content_sync(url, content_width, viewport_h))
+pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32, session_history: Vec<String>) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+    tokio::task::spawn_blocking(move || do_fetch_page_content_sync(url, content_width, viewport_h, session_history))
         .await
         .unwrap_or_else(|e| {
             plog!("FETCH", "spawn_blocking join error: {}", e);
@@ -283,11 +313,11 @@ pub async fn fetch_page_content(url: String, content_width: f32, viewport_h: f32
         })
 }
 
-fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
+fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, session_history: Vec<String>) -> (String, Vec<StyledElement>, Option<Arc<Mutex<JsBridge>>>) {
     plog!("FETCH", "URL={}", url);
 
     if url.starts_with("vayu://") {
-        return render_vayu_page(&url, content_width, viewport_h);
+        return render_vayu_page(&url, content_width, viewport_h, &session_history);
     }
 
     let response = match net::fetch_with_redirects(&url, 5, None) {
@@ -724,5 +754,75 @@ mod budget_tests {
         let (kept, total) = css_sources_within_total_budget(&[big.as_str()], 0, 10);
         assert!(kept.is_empty(), "source larger than the whole budget must be skipped");
         assert_eq!(total, 0);
+    }
+}
+// ?? B3 history UI ??????????????????????????????????????????????????????
+
+#[cfg(test)]
+mod b3_history_tests {
+    use super::{do_fetch_page_content_sync, history_page};
+    use super::super::extractor::StyledElement;
+
+    fn link_hrefs(elements: &[StyledElement]) -> Vec<String> {
+        elements
+            .iter()
+            .filter(|e| e.is_link)
+            .filter_map(|e| e.href.clone())
+            .collect()
+    }
+
+    #[test]
+    fn b3_lists_most_recent_first_collapsing_consecutive_only() {
+        let page = history_page(
+            800.0,
+            600.0,
+            vec![
+                "https://a".to_string(),
+                "https://b".to_string(),
+                "https://b".to_string(),
+                "https://c".to_string(),
+            ],
+        );
+        assert_eq!(
+            link_hrefs(&page),
+            vec!["https://c", "https://b", "https://a"],
+            "most recent first; consecutive dupes collapse, distinct repeats stay"
+        );
+    }
+
+    #[test]
+    fn b3_display_trimmed_but_href_full() {
+        let long = format!("https://example.dev/{}", "x".repeat(120));
+        let page = history_page(800.0, 600.0, vec![long.clone()]);
+        assert_eq!(link_hrefs(&page), vec![long], "href must keep the full URL");
+        let entry = page.iter().find(|e| e.is_link).expect("link element");
+        assert!(entry.text.len() <= 64, "display text should be trimmed, got {}", entry.text.len());
+    }
+
+    #[test]
+    fn b3_empty_state_is_not_a_link() {
+        let page = history_page(800.0, 600.0, vec![]);
+        assert!(link_hrefs(&page).is_empty());
+        assert!(
+            page.iter().any(|e| e.text.contains("No pages visited yet")),
+            "empty state message missing"
+        );
+    }
+
+    #[test]
+    fn b3_end_to_end_sync_pipeline_renders_session_history() {
+        let (url, elements, bridge) = do_fetch_page_content_sync(
+            "vayu://history".to_string(),
+            800.0,
+            600.0,
+            vec!["https://one".to_string(), "https://two".to_string()],
+        );
+        assert_eq!(url, "vayu://history");
+        assert!(bridge.is_none(), "internal pages have no JS bridge");
+        assert_eq!(
+            link_hrefs(&elements),
+            vec!["https://two", "https://one"],
+            "session history must actually reach the vayu renderer"
+        );
     }
 }
