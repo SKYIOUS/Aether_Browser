@@ -19,16 +19,25 @@ invalidates a statement in these docs updates them in the same commit.
 
 ## Non-negotiables
 1. **Evidence before claims.** Run `cargo test`; run `cargo fmt --check` +
-   `cargo clippy -- -D warnings` when touching code CI covers. Cite output.
-   Never report success from intent. An unverified claim is a false claim.
+   `cargo clippy -- -D warnings` when touching code CI covers. Cite output
+   stating the exact commands and what they covered — "tests pass" without
+   scope is not evidence. `-D warnings` is deliberate: every warning
+   (including rustc's) is treated as an error. Never report success from
+   intent. An unverified claim is a false claim.
 2. **Scope discipline.** Touch only what the task names. No drive-by refactors,
-   no comment churn, no reformatting of untouched lines.
+   no comment churn, no reformatting of untouched lines. Exception: deleting
+   what your own change made redundant is in scope (Operating protocol §3) —
+   anything else outside the named task is drift.
 3. **Root cause, not symptom.** Before editing a function, find every caller.
    Fix at the shared choke point once — not per-caller guards.
-4. **Files stay under 1000 lines.** Growing one means extract a submodule
-   instead (`browser/mod.rs` is the repeat offender).
-5. **No new dependency** without a `future-crates.md` row + rationale. Leaf
-   crates only; nothing platform-level inside `crates/aether-js`.
+4. **Files normally stay under 1000 lines.** Crossing means extract a
+   submodule — unless extraction would worsen cohesion, which requires a
+   documented reason naming why (commit message or ADR).
+   (`browser/mod.rs` is the repeat offender.)
+5. **No new dependency** without a `future-crates.md` row + rationale.
+   *Leaf crate* = may depend on foundational libraries but must not own
+   browser-wide orchestration, UI policy, platform integration, or
+   cross-subsystem state. Nothing platform-level inside `crates/aether-js`.
 6. **Decisions get recorded.** Non-obvious choice → ADR. Naming/concepts →
    `CONTEXT.md`. No second vocabulary.
 7. **Comments carry why, not what.** Deliberate ceilings get a
@@ -36,20 +45,31 @@ invalidates a statement in these docs updates them in the same commit.
 
 ## Operating protocol (how every task runs)
 1. **Skills before action.** Invoke matching skills BEFORE responding,
-   exploring, or asking clarifying questions. Process skills first
-   (brainstorming / systematic-debugging / grill-\*), implementation skills
-   second. If a skill proves wrong mid-task, say so and drop it explicitly.
-2. **Codebase Memory MCP always.** The graph is the map of record:
+   exploring, or asking clarifying questions — when available in the
+   environment. Process skills first (brainstorming / systematic-debugging /
+   grill-\*), implementation skills second. If a skill proves wrong mid-task,
+   say so and drop it explicitly. No matching skill exists → proceed under
+   this contract and note that.
+2. **Codebase Memory MCP always, with a fallback.** The graph is the map of
+   record:
    - Before editing any symbol → `search_graph` / `get_code_snippet` it.
    - Before changing a function → `trace_path` every caller.
    - Before optimizing anything → `query_graph` complexity/hot-path fields;
      measure, never guess.
    - After structural changes → re-index so the graph stays truthful.
-3. **Exhaustive effort is the default, not a mode.** Every task ends with
-   **prove → prune → re-check**:
+   - **Fallback:** if MCP is unavailable, stale, or out of scope for the
+     change, use direct repository tracing (grep/rg, compiler diagnostics,
+     `cargo check`) and state that fallback in the final evidence. Never
+     block on tooling; never silently skip verification either.
+3. **Exhaustive effort is the default, not a mode.**
+   **Implementation-changing tasks** end with **prove → prune → re-check**;
+   investigation/review/doc-only tasks end with **prove → re-check** (do not
+   invent cleanup to satisfy the ritual):
    - **Prove:** evidence attached (command output, test names, file:line refs).
-   - **Prune:** same-change deletion of everything the work made redundant —
-     code, docs, deps. Leaving dead weight behind is an incomplete task.
+   - **Prune:** same-change deletion of exactly what your work made redundant —
+     code, docs, deps — even in files the task didn't name. That deletion is
+     not scope drift; anything beyond it is. Leaving dead weight behind is an
+     incomplete task.
    - **Re-check:** fresh read of the final diff; adversarial pass over risky
      logic; every touched doc re-checked against reality.
 4. **Subagents over solo guessing.** Dispatch them instead of hand-waving:
@@ -57,7 +77,9 @@ invalidates a statement in these docs updates them in the same commit.
    - Non-trivial diff → fresh-context reviewer (code-review / adversarial /
      test-gap finder) before claiming done; reviewers get no stake in the
      outcome, so their findings outrank self-assessment.
-   - Independent subtasks run as parallel subagent dispatches.
+   - Independent subtasks run as parallel subagent dispatches — each with
+     disjoint file scopes stated upfront; overlapping scopes serialize.
+     Reviewers are read-only: they report findings, they do not edit.
 5. **The loop never stops.** Every task runs PLAN → DO → CHECK in continuous
    cycles: plan the slice (todo list), implement it, run its tests, feed the
    results into the next slice's plan. Stopping between loops is how half-done
@@ -65,14 +87,18 @@ invalidates a statement in these docs updates them in the same commit.
    evidence and prove/prune/re-check complete.
 
 ## Test-first mandate
-1. **Failing test first** for any feature or bugfix: red → green → refactor.
-   Implementation without a preceding failing test is rejected on review.
+1. **Failing test first** for any testable behavior change or bugfix:
+   red → green → refactor. Implementation without a preceding failing test is
+   rejected on review.
 2. Bug fixes begin with a **reproduction test** that fails on old code and
    passes on new. "Fixed" without a repro is not fixed.
-3. Trust boundaries (net input, CSP, cookies, JS↔DOM bridge, aether-js host
+3. Structural-only changes (refactors, extractions, dependency swaps) gate on
+   the existing suite staying green — do not manufacture new tests to satisfy
+   process. Performance work starts from a measured baseline, not a hunch.
+4. Trust boundaries (net input, CSP, cookies, JS↔DOM bridge, aether-js host
    layer) get **negative-path tests**, not just happy paths.
-4. aether-js work uses **test262** as its harness; gates per js-engine-plan.md §3.
-5. Trivial one-liners are exempt — YAGNI applies to tests too.
+5. aether-js work uses **test262** as its harness; gates per js-engine-plan.md §3.
+6. Trivial one-liners are exempt — YAGNI applies to tests too.
 
 ## Anti-slop policy (hard bans)
 1. **No narration comments.** Comments exist only for non-obvious why.
@@ -97,6 +123,10 @@ invalidates a statement in these docs updates them in the same commit.
 - Tests: `cargo test` · single: `cargo test <name>`
 - Status (verified 2026-08-24): 444 tests green; CI gates fmt/clippy/test on
   Linux+Windows+macOS (`.github/workflows/ci.yml`)
+- Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
+  `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
+  change ship in the same commit (Doc discipline above). Branches: short-lived
+  topic branches off master; rebase before merge.
 
 ## Architecture
 Rust, edition 2021. Entry: `src/main.rs` → `src/lib.rs` → `src/ui/mod.rs`
@@ -132,12 +162,12 @@ fetch_page_content() (async on Iced thread)
 
 ## Conventions & gotchas
 - URL helpers: `resolve_url()`/`normalize_url()` (`net/mod.rs`); `normalize_nav_url()` (`navigator.rs`)
-- Global statics: `OnceLock<Mutex/RwLock<…>>` for client, caches, cookies, storage — blocks multi-window; scheduled debt, don't spread the pattern
+- Global statics: `OnceLock<Mutex/RwLock<…>>` for client, caches, cookies, storage — blocks multi-window; reuse where already established, but new global mutable state requires an ADR. Don't spread the pattern
 - Runtime data files (gitignored): `vayu_settings.json`, `vayu_tabs.json`, `vayu_local_storage.json`, `vayu_cookies.json`
 - Linker is `rust-lld` (`.cargo/config.toml`); don't switch to lld-link unless installed
 - Iced 0.13: `Task::perform(future, mapper)`; there is no `iced::Command`
 - Element caps live: 2000 elements, depth 50, 5000 chars/text node, 1MB HTML (removal planned, PLAN A1)
-- Blocking reqwest everywhere via `run_blocking()`
+- Blocking reqwest everywhere via `run_blocking()` — interim transport bridge; don't expand beyond existing network boundaries (async replacement: PLAN D)
 - Browser submodules read `BrowserScreen` private fields directly (child-module access)
 - `Tab::new(title, url, workspace_id)` — three args
 - CSP: check `net::csp_blocks_scripts()` / `csp_blocks_styles()` before processing

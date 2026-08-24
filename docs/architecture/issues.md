@@ -21,6 +21,7 @@
 | 7 | No byte-budget or memory-pressure handling for decoded images / DOM / caches (entry counts only) | `src/engine/pipeline/fetcher.rs`, extractor | OOM risk on heavy pages | Overlaps PLAN A1 budgets |
 | 8 | Hand-rolled logging (`plog!`), no levels/filtering/structure | `src/logging.rs`, call sites | Poor diagnosability | Unscheduled; candidate: `tracing` |
 | 9 | Residual `String`-typed errors in net paths despite thiserror adoption elsewhere | `src/engine/net/mod.rs` | Lost error context/kind matching | Unscheduled |
+| 10 | CI clippy gate runs without `--all-targets`; widening fails today: `clippy::needless_range_loop` in `korlang` bytecode compiler | `.github/workflows/ci.yml`, `korlang/src` | Test/bench code escapes the lint gate | Fix lint first, then widen CI command |
 
 Already scheduled in PLAN.md — see there, not here: cap removal + budgets (A1),
 viewport culling (A2), TreeSink stubs (A5), TLS/cookies-enforcement/CSP-for-`<link>`
