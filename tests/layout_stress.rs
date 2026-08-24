@@ -1,4 +1,6 @@
 use vayu_browser::engine::pipeline::{apply_taffy_layout, StyledElement};
+use vayu_browser::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
+use vayu_browser::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
 use iced::Color;
 use iced::widget::image::Handle;
 
@@ -13,7 +15,7 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         indent_level: 0,
         color: Color::BLACK,
         font_size: 16.0,
-        font_weight: "normal".to_string(),
+        font_weight: FontWeight::Normal,
         background_color: None,
         border_widths: [0.0; 4],
         border_color: None,
@@ -24,13 +26,13 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         margin_left: None,
         margin_right: None,
         padding: [0.0; 4],
-        display: "block".to_string(),
-        flex_direction: "row".to_string(),
-        flex_wrap: "nowrap".to_string(),
-        justify_content: "flex-start".to_string(),
-        align_items: "stretch".to_string(),
-        align_self: "auto".to_string(),
-        box_sizing: "content-box".to_string(),
+        display: Display::Block,
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::NoWrap,
+        justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Auto,
+        box_sizing: BoxSizing::ContentBox,
         flex_grow: 0.0,
         flex_shrink: 1.0,
         flex_basis: None,
@@ -46,14 +48,14 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         width: 0.0,
         height: 0.0,
         line_height: 1.4,
-        text_decoration: String::new(),
-        text_transform: String::new(),
+        text_decoration: TextDecor::default(),
+       
         border_radius: [0.0; 4],
         input_type: String::new(),
         input_value: String::new(),
         input_placeholder: String::new(),
         checked: false,
-        position: "static".to_string(),
+        position: Position::Static,
         inset_top: 0.0,
         inset_right: 0.0,
         inset_bottom: 0.0,
@@ -106,7 +108,7 @@ fn thousand_inline_siblings() {
     let mut elements = vec![make_el("root", None)];
     for i in 0..1000 {
         let mut el = make_el("span", Some(0));
-        el.display = "inline".to_string();
+        el.display = Display::Inline;
         el.text = format!("item{}", i);
         elements.push(el);
     }
@@ -140,7 +142,7 @@ fn mixed_inline_block() {
     for i in 0..20 {
         let display = if i % 2 == 0 { "inline" } else { "block" };
         let mut el = make_el("child", Some(0));
-        el.display = display.to_string();
+        el.display = if display == "inline" { Display::Inline } else { Display::Block };
         if display == "inline" {
             el.text = format!("span{}", i);
         }
@@ -169,7 +171,13 @@ fn all_display_types() {
     let mut elements = vec![make_el("root", None)];
     for (i, disp) in ["block", "inline", "inline-block", "flex", "none"].iter().enumerate() {
         let mut el = make_el("child", Some(0));
-        el.display = disp.to_string();
+        el.display = match *disp {
+            "inline" => Display::Inline,
+            "inline-block" => Display::InlineBlock,
+            "flex" => Display::Flex,
+            "none" => Display::None,
+            _ => Display::Block,
+        };
         if *disp == "inline" || *disp == "inline-block" {
             el.text = format!("child{}", i);
         }

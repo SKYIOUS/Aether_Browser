@@ -5,7 +5,8 @@ use std::sync::Arc;
 use crate::engine::text::measure_text_width;
 use crate::plog;
 use super::BrowserMessage;
-use crate::engine::pipeline::StyledElement;
+use crate::engine::pipeline::extractor::{FontWeight, StyledElement, TextDecor};
+use crate::engine::stratus as css;
 
 pub struct PageCanvas {
     pub elements: Arc<Vec<StyledElement>>,
@@ -120,7 +121,7 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                 let el = &self.elements[i];
                 let (sy, ey) = painted_vertical_span(el);
                 if !in_band(sy, ey, band_top, band_bottom) { continue; }
-                if el.display == "none" { continue; }
+                if el.display == css::Display::None { continue; }
                 if let Some(ref handle) = el.image_handle {
                     let iw = if el.width.is_finite() && el.width > 0.0 { el.width } else { 50.0 };
                     let ih = if el.height.is_finite() && el.height > 0.0 { el.height } else { 50.0 };
@@ -174,7 +175,10 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                         if bw[3] > 0.0 { frame.fill_rectangle(Point::new(ex, ey), Size::new(bw[3], eh), color); }
                         if bw[1] > 0.0 { frame.fill_rectangle(Point::new(ex + ew - bw[1], ey), Size::new(bw[1], eh), color); }
                     }
-                    let weight = if el.font_weight == "bold" { iced::font::Weight::Bold } else { iced::font::Weight::Normal };
+                    let weight = match el.font_weight {
+                        FontWeight::Bold => iced::font::Weight::Bold,
+                        FontWeight::Normal => iced::font::Weight::Normal,
+                    };
                     let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
                     let line_h = fs * el.line_height.max(1.0);
                     let px0 = el.x.max(0.0) + bw[3];
@@ -195,13 +199,13 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                             let deco_y = py;
                             let deco_h = (fs * 0.06).max(1.0);
                             let deco_w = measure_text_width(line, fs);
-                            if el.text_decoration.contains("underline") {
+                            if el.text_decoration.contains(TextDecor::UNDERLINE) {
                                 frame.fill_rectangle(Point::new(px0, deco_y + fs * 0.1), Size::new(deco_w, deco_h), el.color);
                             }
-                            if el.text_decoration.contains("line-through") {
+                            if el.text_decoration.contains(TextDecor::LINE_THROUGH) {
                                 frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.35), Size::new(deco_w, deco_h), el.color);
                             }
-                            if el.text_decoration.contains("overline") {
+                            if el.text_decoration.contains(TextDecor::OVERLINE) {
                                 frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.75), Size::new(deco_w, deco_h), el.color);
                             }
                         }
@@ -229,7 +233,7 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     let el = &self.elements[i];
                     let (sy, ey) = painted_vertical_span(el);
                     if !in_band(sy, ey, band_top, band_bottom) { continue; }
-                    if el.display == "none" { continue; }
+                    if el.display == css::Display::None { continue; }
                     if el.is_link {
                         let text_w = el.width.max(el.font_size);
                         let ex = el.x.max(0.0);

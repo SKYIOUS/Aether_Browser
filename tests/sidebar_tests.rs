@@ -1,13 +1,18 @@
-﻿use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_taffy_layout};
-use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content};
+use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_taffy_layout};
+use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content, BoxSizing, FontWeight, TextDecor};
 use vayu_browser::engine::net::normalize_url;
 use vayu_browser::engine::pipeline::StyledElement;
+use vayu_browser::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
 use vayu_browser::ui::screens::settings::VayuSettings;
 use iced::Color;
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
+    let display = match display {
+        "inline" => Display::Inline,
+        "flex" => Display::Flex,
+        "grid" => Display::Grid,
+        _ => Display::Block,
+    };
     StyledElement {
         tag: tag.to_string(),
         text: text.to_string(),
@@ -18,7 +23,7 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         indent_level: 0,
         color: Color::BLACK,
         font_size: 16.0,
-        font_weight: "normal".to_string(),
+        font_weight: FontWeight::Normal,
         background_color: None,
         border_widths: [0.0; 4],
         border_color: None,
@@ -29,13 +34,13 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         margin_left: None,
         margin_right: None,
         padding: [0.0; 4],
-        display: display.to_string(),
-        flex_direction: "row".to_string(),
-        flex_wrap: "nowrap".to_string(),
-        justify_content: "flex-start".to_string(),
-        align_items: "stretch".to_string(),
-        align_self: "auto".to_string(),
-        box_sizing: "content-box".to_string(),
+        display,
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::NoWrap,
+        justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Auto,
+        box_sizing: BoxSizing::ContentBox,
         flex_grow: 0.0,
         flex_shrink: 1.0,
         flex_basis: None,
@@ -51,14 +56,14 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         width: 0.0,
         height: 0.0,
         line_height: 1.4,
-        text_decoration: String::new(),
-        text_transform: String::new(),
+        text_decoration: TextDecor::default(),
+       
         border_radius: [0.0; 4],
         input_type: String::new(),
         input_value: String::new(),
         input_placeholder: String::new(),
         checked: false,
-        position: "static".to_string(),
+        position: Position::Static,
         inset_top: 0.0,
         inset_right: 0.0,
         inset_bottom: 0.0,
@@ -66,9 +71,9 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
     }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 1. Tab / Sidebar Construction Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_tab_struct_construction() {
@@ -105,9 +110,9 @@ fn test_tab_serialization_roundtrip() {
     assert_eq!(deserialized[1].url, "https://b.com");
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 2. URL Normalization Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_normalize_nav_url_https() {
@@ -176,9 +181,9 @@ fn test_normalize_url_double_slash_strips_extra_slash() {
     assert!(result.starts_with("https://"));
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 3. Search Engine Fallback Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_is_url_with_scheme() {
@@ -232,9 +237,9 @@ fn test_search_url_special_chars() {
     assert!(!url.contains(" ")); // spaces should be encoded
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 4. Settings Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_settings_defaults() {
@@ -308,9 +313,9 @@ fn test_settings_toggle_cookies() {
     assert!(!s.cookies_enabled);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 5. History Navigation Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_history_initial_state() {
@@ -401,9 +406,9 @@ fn test_history_limit_many_entries() {
     assert_eq!(hist[0], "https://500.com");
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 6. Autocomplete Filtering Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_autocomplete_filter_exact_prefix() {
@@ -449,16 +454,16 @@ fn test_autocomplete_empty_input_shows_nothing() {
     assert!(show_autocomplete);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 7. StyledElement Construction Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_styled_element_construction() {
     let el = make_element("div", "Hello", "block");
     assert_eq!(el.tag, "div");
     assert_eq!(el.text, "Hello");
-    assert_eq!(el.display, "block");
+    assert_eq!(el.display, Display::Block);
 }
 
 #[test]
@@ -467,7 +472,7 @@ fn test_styled_element_default_values() {
     assert!(!el.is_link);
     assert!(el.href.is_none());
     assert_eq!(el.font_size, 16.0);
-    assert_eq!(el.font_weight, "normal");
+    assert_eq!(el.font_weight, FontWeight::Normal);
     assert_eq!(el.x, 0.0);
     assert_eq!(el.y, 0.0);
 }
@@ -524,9 +529,9 @@ fn test_styled_element_clone() {
     assert_eq!(cloned.text, el.text);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 8. Layout / Caelum Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_layout_single_block_element() {
@@ -564,7 +569,7 @@ fn test_layout_inline_elements_side_by_side() {
 #[test]
 fn test_layout_hidden_element() {
     let mut el = make_element("div", "Hidden", "block");
-    el.display = "none".to_string();
+    el.display = Display::None;
     let mut elements = vec![el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     // hidden elements should have zero dimensions
@@ -591,9 +596,9 @@ fn test_layout_with_border() {
     assert!(elements[0].width >= 10.0); // at least left+right border
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 9. Tag Filtering Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_skip_tag_script() {
@@ -680,9 +685,9 @@ fn test_no_skip_content_p() {
     assert!(!should_skip_content("p"));
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 10. Tab Save/Load Roundtrip Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_save_tabs_empty() {
@@ -711,9 +716,9 @@ fn test_save_tabs_multiple() {
     let _ = std::fs::remove_file(path);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 11. Sidebar Item Label Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_sidebar_workspace_labels() {
@@ -738,9 +743,9 @@ fn test_sidebar_section_headers() {
     assert!(headers.iter().all(|h| h.chars().all(|c| c.is_uppercase())));
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 12. DevTools Tab Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_devtools_tab_variants() {
@@ -760,9 +765,9 @@ fn test_devtools_tab_default_is_console() {
     assert_eq!(current, DevToolsTab::Console);
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 13. Edge Case Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_normalize_nav_url_with_port() {
@@ -795,7 +800,7 @@ fn test_settings_search_url_empty_query() {
 #[test]
 fn test_settings_search_url_unicode_query() {
     let settings = VayuSettings::default();
-    let url = settings.search_url("æ—¥æœ¬èªžãƒ†ã‚¹ãƒˆ");
+    let url = settings.search_url("日本語テスト");
     assert!(url.contains("q="));
 }
 
@@ -806,9 +811,9 @@ fn test_tab_title_update() {
     assert_eq!(tab.title, "Example Domain");
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 14. Network & CSP Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_normalize_url_strips_leading_slashes() {
@@ -833,17 +838,17 @@ fn test_csp_allows_self() {
     assert!(!csp_allows_script_url("https://evil.com/app.js", "https://example.com", &policy));
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 // 15. Layout Edge Case Tests
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═════════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn test_deep_nested_layout_positions() {
     use vayu_browser::engine::pipeline::apply_taffy_layout;
     let mut elements = vec![
-        StyledElement { tag: "grandparent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
-        StyledElement { tag: "parent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(0), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
-        StyledElement { tag: "child".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(1), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "grandparent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "parent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(0), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "child".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(1), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
     ];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     let child = &elements[2];
@@ -859,7 +864,7 @@ fn test_deep_nested_layout_positions() {
 fn test_inline_text_width_respected() {
     use vayu_browser::engine::pipeline::apply_taffy_layout;
     let mut elements = vec![
-        StyledElement { tag: "span".into(), text: "hello world".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".into(), background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "inline".into(), flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(), align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: String::new(), text_transform: String::new(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement { tag: "span".into(), text: "hello world".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Inline, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
     ];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     assert!(elements[0].width > 0.0, "inline element should have positive width");

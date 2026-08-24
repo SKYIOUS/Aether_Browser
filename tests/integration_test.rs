@@ -58,7 +58,7 @@ fn test_should_skip_tag_filters() {
 fn test_extract_and_layout_pipeline() {
     use vayu_browser::engine::parser::parse_html;
     use vayu_browser::engine::stratus;
-    use vayu_browser::engine::pipeline::extractor::extract_elements;
+    use vayu_browser::engine::pipeline::extractor::{extract_elements, FontWeight};
     use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 
     let html = r#"
@@ -95,7 +95,7 @@ fn test_extract_and_layout_pipeline() {
     let highlight = highlight.unwrap();
     let red = iced::Color::from_rgb(1.0, 0.0, 0.0);
     assert!((highlight.color.r - red.r).abs() < 0.01, "highlight color should be red");
-    assert_eq!(highlight.font_weight, "bold");
+    assert_eq!(highlight.font_weight, FontWeight::Bold);
 
     let max_el = elements.len().min(2000);
     apply_taffy_layout(&mut elements[..max_el], 800.0, 600.0);

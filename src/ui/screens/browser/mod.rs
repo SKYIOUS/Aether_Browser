@@ -700,7 +700,7 @@ Component SidebarWS {
         } else if self.page_canvas.is_some() {
             let pc = self.page_canvas.as_ref().expect("Expected Some value, found None");
             let total_h = pc.elements.iter()
-                .filter(|el| el.display != "none")
+                .filter(|el| el.display != crate::engine::stratus::Display::None)
                 .map(|el| {
                     let ey = if el.y.is_finite() { el.y } else { 0.0 };
                     let h = if el.height.is_finite() { el.height.max(el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0)) } else { el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0) };
@@ -878,29 +878,38 @@ mod tests {
     use super::*;
     use iced::Color;
     use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url};
+    use crate::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
+    use crate::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
 
     fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> StyledElement {
+        let display = match display {
+            "inline" => Display::Inline,
+            "flex" => Display::Flex,
+            "grid" => Display::Grid,
+            "none" => Display::None,
+            _ => Display::Block,
+        };
         StyledElement {
             tag: tag.to_string(), text: text.to_string(), wrapped_lines: vec![],
             dom_path: vec![],
             is_link: false, href: None, indent_level: 0,
-            color: Color::BLACK, font_size: 16.0, font_weight: "normal".to_string(),
+            color: Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal,
             background_color: None, border_widths: [0.0; 4], border_color: None,
             image_handle: None, image_url: None,
             margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None,
-            padding: [0.0; 4], display: display.to_string(),
-            flex_direction: "row".to_string(), flex_wrap: "nowrap".to_string(),
-            justify_content: "flex-start".to_string(), align_items: "stretch".to_string(),
-            align_self: "auto".to_string(), box_sizing: "content-box".to_string(),
+            padding: [0.0; 4], display,
+            flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
             flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
             css_width: None, css_height: None, parent_index: parent,
             min_width: None, max_width: None, min_height: None, max_height: None,
             x: 0.0, y: 0.0, width: 0.0, height: 0.0,
-            line_height: 1.4, text_decoration: String::new(),
-            text_transform: String::new(), border_radius: [0.0; 4],
+            line_height: 1.4, text_decoration: TextDecor::default(),
+            border_radius: [0.0; 4],
             input_type: String::new(), input_value: String::new(),
             input_placeholder: String::new(), checked: false,
-            position: "static".to_string(),
+            position: Position::Static,
             inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
         }
     }

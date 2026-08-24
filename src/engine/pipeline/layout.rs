@@ -1,4 +1,5 @@
-use super::extractor::StyledElement;
+use super::extractor::{BoxSizing as ElBoxSizing, StyledElement};
+use crate::engine::stratus as css;
 use crate::engine::text::measure_text_width;
 use crate::plog;
 use taffy::{
@@ -74,17 +75,17 @@ fn apply_text_wrapping(elements: &mut [StyledElement], container_width: f32) {
 }
 
 fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
-    if el.display == "none" { return None; }
+    if el.display == css::Display::None { return None; }
     
-    let display = match el.display.as_str() {
-        "flex" | "inline-flex" => Display::Flex,
-        "grid" => Display::Grid,
-        "none" => Display::None,
+    let display = match el.display {
+        css::Display::Flex | css::Display::InlineFlex => Display::Flex,
+        css::Display::Grid => Display::Grid,
+        css::Display::None => Display::None,
         _ => Display::Block,
     };
     
-    let position = match el.position.as_str() {
-        "absolute" | "fixed" => Position::Absolute,
+    let position = match el.position {
+        css::Position::Absolute | css::Position::Fixed => Position::Absolute,
         _ => Position::Relative,
     };
     
@@ -146,47 +147,46 @@ fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
     s.max_size = TaffySize { width: max_w, height: max_h };
     
     if display == Display::Flex {
-        s.flex_direction = match el.flex_direction.as_str() {
-            "row-reverse" => FlexDirection::RowReverse,
-            "column" => FlexDirection::Column,
-            "column-reverse" => FlexDirection::ColumnReverse,
-            _ => FlexDirection::Row,
+        s.flex_direction = match el.flex_direction {
+            css::FlexDirection::RowReverse => FlexDirection::RowReverse,
+            css::FlexDirection::Column => FlexDirection::Column,
+            css::FlexDirection::ColumnReverse => FlexDirection::ColumnReverse,
+            css::FlexDirection::Row => FlexDirection::Row,
         };
-        s.flex_wrap = match el.flex_wrap.as_str() {
-            "wrap-reverse" => FlexWrap::WrapReverse,
-            "wrap" => FlexWrap::Wrap,
-            _ => FlexWrap::NoWrap,
+        s.flex_wrap = match el.flex_wrap {
+            css::FlexWrap::WrapReverse => FlexWrap::WrapReverse,
+            css::FlexWrap::Wrap => FlexWrap::Wrap,
+            css::FlexWrap::NoWrap => FlexWrap::NoWrap,
         };
-        s.justify_content = match el.justify_content.as_str() {
-            "center" => Some(JustifyContent::CENTER),
-            "flex-end" => Some(JustifyContent::FLEX_END),
-            "space-between" => Some(JustifyContent::SPACE_BETWEEN),
-            "space-around" => Some(JustifyContent::SPACE_AROUND),
-            "space-evenly" => Some(JustifyContent::SPACE_EVENLY),
-            _ => Some(JustifyContent::FLEX_START),
+        s.justify_content = match el.justify_content {
+            css::JustifyContent::Center => Some(JustifyContent::CENTER),
+            css::JustifyContent::FlexEnd => Some(JustifyContent::FLEX_END),
+            css::JustifyContent::SpaceBetween => Some(JustifyContent::SPACE_BETWEEN),
+            css::JustifyContent::SpaceAround => Some(JustifyContent::SPACE_AROUND),
+            css::JustifyContent::SpaceEvenly => Some(JustifyContent::SPACE_EVENLY),
+            css::JustifyContent::FlexStart => Some(JustifyContent::FLEX_START),
         };
-        s.align_items = match el.align_items.as_str() {
-            "center" => Some(AlignItems::CENTER),
-            "flex-end" => Some(AlignItems::FLEX_END),
-            "baseline" => Some(AlignItems::BASELINE),
-            "stretch" => Some(AlignItems::STRETCH),
-            _ => Some(AlignItems::STRETCH),
+        s.align_items = match el.align_items {
+            css::AlignItems::Center => Some(AlignItems::CENTER),
+            css::AlignItems::FlexEnd => Some(AlignItems::FLEX_END),
+            css::AlignItems::Baseline => Some(AlignItems::BASELINE),
+            css::AlignItems::Stretch | css::AlignItems::FlexStart => Some(AlignItems::STRETCH),
         };
     }
     s.flex_grow = el.flex_grow;
     s.flex_shrink = el.flex_shrink;
     if let Some(basis) = el.flex_basis { s.flex_basis = Dimension::length(basis); }
-    s.box_sizing = match el.box_sizing.as_str() {
-        "border-box" => BoxSizing::BorderBox,
-        _ => BoxSizing::ContentBox,
+    s.box_sizing = match el.box_sizing {
+        ElBoxSizing::BorderBox => BoxSizing::BorderBox,
+        ElBoxSizing::ContentBox => BoxSizing::ContentBox,
     };
-    if el.align_self != "auto" {
-        s.align_self = match el.align_self.as_str() {
-            "center" => Some(AlignSelf::CENTER),
-            "flex-end" => Some(AlignSelf::FLEX_END),
-            "baseline" => Some(AlignSelf::BASELINE),
-            "stretch" => Some(AlignSelf::STRETCH),
-            _ => Some(AlignSelf::FLEX_START),
+    if el.align_self != css::AlignSelf::Auto {
+        s.align_self = match el.align_self {
+            css::AlignSelf::Center => Some(AlignSelf::CENTER),
+            css::AlignSelf::FlexEnd => Some(AlignSelf::FLEX_END),
+            css::AlignSelf::Baseline => Some(AlignSelf::BASELINE),
+            css::AlignSelf::Stretch => Some(AlignSelf::STRETCH),
+            css::AlignSelf::Auto | css::AlignSelf::FlexStart => Some(AlignSelf::FLEX_START),
         };
     }
     plog!("ELSTYLE", "tag={:15} cd={:?} size={:?} min_size={:?} max_size={:?} align_self={:?} align_items={:?} box_sizing={:?}", el.tag, display, s.size, s.min_size, s.max_size, s.align_self, s.align_items, s.box_sizing);
@@ -196,11 +196,11 @@ fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
 pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, viewport_h: f32) {
     if elements.is_empty() { return; }
 
-    let valid_count = elements.iter().filter(|el| el.display != "none").count();
+    let valid_count = elements.iter().filter(|el| el.display != css::Display::None).count();
     if valid_count == 0 { return; }
 
     for el in elements.iter_mut() {
-        if el.css_height.is_none() && el.display != "none" && !el.text.is_empty() {
+        if el.css_height.is_none() && el.display != css::Display::None && !el.text.is_empty() {
             let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
             let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
             let available_width = el.css_width.unwrap_or(container_width) - pb;
@@ -208,7 +208,7 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
             let lines = wrap_text(&el.text, available, fs);
             el.css_height = Some(fs * el.line_height.max(1.0) * lines.len() as f32);
         }
-        if el.display == "inline" && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
+        if el.display == css::Display::Inline && el.min_width.is_none() && !el.text.is_empty() && el.css_width.is_none() {
             let fs = el.font_size.clamp(6.0, 200.0);
             let text_w = measure_text_width(&el.text, fs);
             let pb = el.padding[1] + el.padding[3] + el.border_widths[1] + el.border_widths[3];
@@ -241,7 +241,7 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
     }
 
     for i in 0..elements.len() {
-        if elements[i].display == "none" { continue; }
+        if elements[i].display == css::Display::None { continue; }
         let child_id = match node_ids[i] { Some(id) => id, None => continue };
 
         let parent_id = match elements[i].parent_index {
@@ -264,10 +264,10 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
     // (display=none, out of bounds, or has no Taffy node) to prevent
     // stale parent pointers from accumulating incorrect offsets.
     for i in 0..elements.len() {
-        if elements[i].display == "none" { continue; }
+        if elements[i].display == css::Display::None { continue; }
         if let Some(pidx) = elements[i].parent_index {
             if pidx >= elements.len() || pidx == i
-                || elements[pidx].display == "none" || node_ids[pidx].is_none() {
+                || elements[pidx].display == css::Display::None || node_ids[pidx].is_none() {
                 elements[i].parent_index = None;
             }
         }
@@ -323,9 +323,9 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
     }
 
     for i in 0..elements.len() {
-        if elements[i].display == "none" || elements[i].display == "inline" { continue; }
+        if elements[i].display == css::Display::None || elements[i].display == css::Display::Inline { continue; }
         let inline_children: Vec<usize> = (0..elements.len())
-            .filter(|j| *j != i && elements[*j].parent_index == Some(i) && elements[*j].display == "inline")
+            .filter(|j| *j != i && elements[*j].parent_index == Some(i) && elements[*j].display == css::Display::Inline)
             .collect();
         if inline_children.is_empty() { continue; }
         let fs = if elements[i].font_size.is_finite() { elements[i].font_size.clamp(6.0, 200.0) } else { 16.0 };

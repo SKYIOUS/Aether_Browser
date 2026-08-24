@@ -5,27 +5,68 @@ use iced::widget::image::Handle;
 
 use crate::engine::dom::{Node, NodeType};
 use crate::engine::js::js_bridge::FlatNode;
-use crate::engine::stratus::Stylesheet;
-use crate::engine::stratus;
+use crate::engine::stratus::{self, AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position, Stylesheet};
 use crate::ui::style::C;
 
 // ponytail: hard safety ceilings, not fidelity targets — normal pages must
 // extract whole (PLAN A1); these only bound pathological inputs. Element
-// ceiling doubles as the RAM guard until StyledElement slimming (PLAN A3)
-// shrinks the per-element cost. MAX_DEPTH also bounds native-recursion depth
-// in the walk fns; an explicit-stack walk is the upgrade path if profiling
-// ever pushes it higher.
+// ceiling doubles as the RAM guard; A3 slimming brought StyledElement from
+// 800 to 544 bytes inline (guard test: styled_element_stays_slim). MAX_DEPTH
+// also bounds native-recursion depth in the walk fns; an explicit-stack walk
+// is the upgrade path if profiling ever pushes it higher.
 pub(crate) const MAX_ELEMENTS: usize = 100_000;
 pub(crate) const MAX_DEPTH: usize = 200;
 const MAX_TEXT_LEN: usize = 64_000;
 
 type SkipFn = Box<dyn Fn(&Node) -> bool>;
 
+// ponytail: renderer only distinguishes bold today (numeric weights already
+// collapse to normal); widen alongside canvas.rs when it needs more.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FontWeight {
+    #[default]
+    Normal,
+    Bold,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum BoxSizing {
+    #[default]
+    ContentBox,
+    BorderBox,
+}
+
+// CSS text-decoration is combinable ("underline line-through"), so a bitfield
+// rather than a single enum. Bits mirror the three decorations the painter knows.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct TextDecor(u8);
+
+impl TextDecor {
+    pub const UNDERLINE: TextDecor = TextDecor(1);
+    pub const OVERLINE: TextDecor = TextDecor(2);
+    pub const LINE_THROUGH: TextDecor = TextDecor(4);
+
+    pub fn contains(self, other: TextDecor) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    fn from_css(value: Option<&str>) -> Self {
+        let mut d = TextDecor(0);
+        let Some(v) = value else { return d };
+        if v.contains("underline") { d.0 |= TextDecor::UNDERLINE.0; }
+        // "line-through" contains no other keyword's substring, but check the
+        // longer names first regardless so ordering never matters.
+        if v.contains("overline") { d.0 |= TextDecor::OVERLINE.0; }
+        if v.contains("line-through") { d.0 |= TextDecor::LINE_THROUGH.0; }
+        d
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FullStyle {
     pub color: Color,
     pub font_size: f32,
-    pub font_weight: String,
+    pub font_weight: FontWeight,
     pub background_color: Option<Color>,
     pub margin_top: f32,
     pub margin_right: Option<f32>,
@@ -34,13 +75,13 @@ pub struct FullStyle {
     pub padding: [f32; 4],
     pub border_widths: [f32; 4],
     pub border_color: Option<Color>,
-    pub display: String,
-    pub flex_direction: String,
-    pub flex_wrap: String,
-    pub justify_content: String,
-    pub align_items: String,
-    pub align_self: String,
-    pub box_sizing: String,
+    pub display: Display,
+    pub flex_direction: FlexDirection,
+    pub flex_wrap: FlexWrap,
+    pub justify_content: JustifyContent,
+    pub align_items: AlignItems,
+    pub align_self: AlignSelf,
+    pub box_sizing: BoxSizing,
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Option<f32>,
@@ -51,10 +92,9 @@ pub struct FullStyle {
     pub min_height: Option<f32>,
     pub max_height: Option<f32>,
     pub line_height: f32,
-    pub text_decoration: String,
-    pub text_transform: String,
+    pub text_decoration: TextDecor,
     pub border_radius: [f32; 4],
-    pub position: String,
+    pub position: Position,
     pub inset_top: f32,
     pub inset_right: f32,
     pub inset_bottom: f32,
@@ -72,7 +112,7 @@ pub struct StyledElement {
     pub indent_level: usize,
     pub color: Color,
     pub font_size: f32,
-    pub font_weight: String,
+    pub font_weight: FontWeight,
     pub background_color: Option<Color>,
     pub border_widths: [f32; 4],
     pub border_color: Option<Color>,
@@ -83,13 +123,13 @@ pub struct StyledElement {
     pub margin_left: Option<f32>,
     pub margin_right: Option<f32>,
     pub padding: [f32; 4],
-    pub display: String,
-    pub flex_direction: String,
-    pub flex_wrap: String,
-    pub justify_content: String,
-    pub align_items: String,
-    pub align_self: String,
-    pub box_sizing: String,
+    pub display: Display,
+    pub flex_direction: FlexDirection,
+    pub flex_wrap: FlexWrap,
+    pub justify_content: JustifyContent,
+    pub align_items: AlignItems,
+    pub align_self: AlignSelf,
+    pub box_sizing: BoxSizing,
     pub flex_grow: f32,
     pub flex_shrink: f32,
     pub flex_basis: Option<f32>,
@@ -105,14 +145,13 @@ pub struct StyledElement {
     pub width: f32,
     pub height: f32,
     pub line_height: f32,
-    pub text_decoration: String,
-    pub text_transform: String,
+    pub text_decoration: TextDecor,
     pub border_radius: [f32; 4],
     pub input_type: String,
     pub input_value: String,
     pub input_placeholder: String,
     pub checked: bool,
-    pub position: String,
+    pub position: Position,
     pub inset_top: f32,
     pub inset_right: f32,
     pub inset_bottom: f32,
@@ -285,7 +324,10 @@ fn compute_full_style_inner(
         color = Color::from_rgb(0.0, 0.0, 0.93);
     }
     let font_size = cs.font_size.filter(|v| v.is_finite()).map(|v| v.clamp(6.0, 200.0)).unwrap_or(16.0);
-    let font_weight = cs.font_weight.unwrap_or_else(|| "normal".to_string());
+    let font_weight = match cs.font_weight.as_deref() {
+        Some("bold") => FontWeight::Bold,
+        _ => FontWeight::Normal,
+    };
     let background_color = cs.background_color.as_ref().map(stratus_color);
 
     let margin_top = cs.margin_top.filter(|v| v.is_finite()).map(|v| v.max(0.0)).unwrap_or(0.0);
@@ -304,18 +346,16 @@ fn compute_full_style_inner(
     let bl = cs.border_left_width.filter(|v| v.is_finite()).unwrap_or(0.0).max(0.0);
     let border_color = cs.border_top_color.or(cs.border_right_color).or(cs.border_bottom_color).or(cs.border_left_color).map(|c| stratus_color(&c));
 
-    let mut display = cs.display.to_string();
     // ponytail: display:none elements still get a StyledElement but are skipped in layout
-    if display == "inline" && is_html_block_tag(tag) {
-        display = "block".to_string();
+    let mut display = cs.display;
+    if display == Display::Inline && is_html_block_tag(tag) {
+        display = Display::Block;
     }
 
-    let flex_direction = cs.flex.flex_direction.to_string();
-    let flex_wrap = cs.flex.flex_wrap.to_string();
-    let justify_content = cs.flex.justify_content.to_string();
-    let align_items = cs.flex.align_items.to_string();
-    let align_self = cs.flex.align_self.to_string();
-    let box_sizing = cs.box_sizing.unwrap_or_else(|| "content-box".to_string());
+    let box_sizing = match cs.box_sizing.as_deref() {
+        Some("border-box") => BoxSizing::BorderBox,
+        _ => BoxSizing::ContentBox,
+    };
 
     FullStyle {
         color, font_size, font_weight, background_color,
@@ -323,8 +363,13 @@ fn compute_full_style_inner(
         padding: [pt, pr, pb, pl],
         border_widths: [bt, br, bb, bl],
         border_color,
-        display, flex_direction, flex_wrap,
-        justify_content, align_items, align_self, box_sizing,
+        display,
+        flex_direction: cs.flex.flex_direction,
+        flex_wrap: cs.flex.flex_wrap,
+        justify_content: cs.flex.justify_content,
+        align_items: cs.flex.align_items,
+        align_self: cs.flex.align_self,
+        box_sizing,
         flex_grow: cs.flex.flex_grow,
         flex_shrink: cs.flex.flex_shrink,
         flex_basis: cs.flex.flex_basis,
@@ -335,13 +380,12 @@ fn compute_full_style_inner(
         min_height: cs.min_height.filter(|v| v.is_finite()),
         max_height: cs.max_height.filter(|v| v.is_finite()),
         line_height: cs.line_height.unwrap_or(1.4),
-        text_decoration: cs.text_decoration.unwrap_or_default(),
-        text_transform: String::new(),
+        text_decoration: TextDecor::from_css(cs.text_decoration.as_deref()),
         border_radius: {
             let r = cs.border_radius.unwrap_or(0.0);
             [r, r, r, r]
         },
-        position: cs.position.to_string(),
+        position: cs.position,
         inset_top: cs.top.unwrap_or(0.0),
         inset_right: cs.right.unwrap_or(0.0),
         inset_bottom: cs.bottom.unwrap_or(0.0),
@@ -360,18 +404,18 @@ fn make_element(
         tag: tag.to_string(), text, wrapped_lines: vec![],
         dom_path,
         is_link: false, href: None, indent_level: 0,
-        color: fs.color, font_size: fs.font_size, font_weight: fs.font_weight.clone(),
+        color: fs.color, font_size: fs.font_size, font_weight: fs.font_weight,
         background_color: fs.background_color,
         border_widths: fs.border_widths, border_color: fs.border_color,
         image_handle: None, image_url: None,
         margin_top: fs.margin_top, margin_bottom: fs.margin_bottom,
         margin_left: fs.margin_left, margin_right: fs.margin_right,
         padding: fs.padding,
-        display: fs.display.clone(), flex_direction: fs.flex_direction.clone(),
-        flex_wrap: fs.flex_wrap.clone(), justify_content: fs.justify_content.clone(),
-        align_items: fs.align_items.clone(),
-        align_self: fs.align_self.clone(),
-        box_sizing: fs.box_sizing.clone(),
+        display: fs.display, flex_direction: fs.flex_direction,
+        flex_wrap: fs.flex_wrap, justify_content: fs.justify_content,
+        align_items: fs.align_items,
+        align_self: fs.align_self,
+        box_sizing: fs.box_sizing,
         flex_grow: fs.flex_grow, flex_shrink: fs.flex_shrink, flex_basis: fs.flex_basis,
         css_width: fs.css_width, css_height: fs.css_height,
         min_width: fs.min_width, max_width: fs.max_width,
@@ -379,14 +423,13 @@ fn make_element(
         parent_index: parent_idx,
         x: 0.0, y: 0.0, width: 0.0, height: 0.0,
         line_height: fs.line_height,
-        text_decoration: fs.text_decoration.clone(),
-        text_transform: fs.text_transform.clone(),
+        text_decoration: fs.text_decoration,
         border_radius: fs.border_radius,
         input_type: String::new(),
         input_value: String::new(),
         input_placeholder: String::new(),
         checked: false,
-        position: fs.position.clone(),
+        position: fs.position,
         inset_top: fs.inset_top,
         inset_right: fs.inset_right,
         inset_bottom: fs.inset_bottom,
@@ -574,7 +617,7 @@ pub fn extract_elements(
                     }
                 }
                 _ => {
-                    if fs.display == "inline" && tag != "span" {
+                    if fs.display == Display::Inline && tag != "span" {
                         let text = get_all_text(node);
                         if text.is_empty() {
                         (String::new(), false, None, 0, "", false, true)
@@ -843,7 +886,7 @@ pub(crate) fn extract_elements_flat(
             }
             "select" => (String::new(), false, None, 0, "select", false, true),
                 _ => {
-                if fs.display == "inline" && tag != "span" {
+                if fs.display == Display::Inline && tag != "span" {
                     let text = get_all_text_flat(nodes, node_id);
                     if text.is_empty() {
                         (String::new(), false, None, 0, "", false, true)
@@ -1060,3 +1103,22 @@ mod tests {
     }
 }
 
+
+#[cfg(test)]
+mod size_probe {
+    use super::StyledElement;
+
+    // A3 guard: repeated per-element Strings became Copy enums / a u8 bitfield.
+    // Measured 800 -> 544 bytes inline, plus one dropped heap allocation per
+    // removed String (~10 per element). Crossing this bound means new weight
+    // snuck back in — justify it against MAX_ELEMENTS (100k) or shrink elsewhere.
+    #[test]
+    fn styled_element_stays_slim() {
+        let size = std::mem::size_of::<StyledElement>();
+        assert!(
+            size <= 544,
+            "StyledElement grew to {} bytes; A3 slimming baseline is 544",
+            size
+        );
+    }
+}

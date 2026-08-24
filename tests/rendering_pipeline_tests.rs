@@ -4,7 +4,9 @@ use vayu_browser::engine::stratus::{
 };
 use vayu_browser::engine::pipeline::extractor::{
     should_skip_tag, should_skip_content, extract_elements, StyledElement, decode_html_entities,
+    BoxSizing, FontWeight, TextDecor,
 };
+use vayu_browser::engine::stratus::{AlignItems, AlignSelf, FlexWrap, Position};
 use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 use vayu_browser::engine::parser::parse_html;
 
@@ -29,23 +31,23 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
         tag: tag.to_string(), text: text.to_string(), wrapped_lines: vec![],
         dom_path: vec![],
         is_link: false, href: None, indent_level: 0,
-        color: iced::Color::BLACK, font_size: 16.0, font_weight: "normal".to_string(),
+        color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal,
         background_color: None, border_widths: [0.0; 4], border_color: None,
         image_handle: None, image_url: None,
         margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None,
-        padding: [0.0; 4], display: display.to_string(),
-        flex_direction: "row".to_string(), flex_wrap: "nowrap".to_string(),
-        justify_content: "flex-start".to_string(), align_items: "stretch".to_string(),
-        align_self: "auto".to_string(), box_sizing: "content-box".to_string(),
+        padding: [0.0; 4], display: match display { "inline" => Display::Inline, "flex" => Display::Flex, "grid" => Display::Grid, "none" => Display::None, _ => Display::Block },
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
+        justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
         flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: parent,
         min_width: None, max_width: None, min_height: None, max_height: None,
         x: 0.0, y: 0.0, width: 0.0, height: 0.0,
-        line_height: 1.4, text_decoration: String::new(),
-        text_transform: String::new(), border_radius: [0.0; 4],
+        line_height: 1.4, text_decoration: TextDecor::default(),
+        border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(),
         input_placeholder: String::new(), checked: false,
-        position: "static".to_string(),
+        position: Position::Static,
         inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     }
 }
@@ -425,8 +427,8 @@ fn test_multiple_inline_spans() {
 fn test_flex_row_direction() {
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
-            flex_direction: "row".to_string(),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
             css_width: Some(400.0), css_height: Some(100.0),
             ..make_test("div", "", "flex", None)
         },
@@ -441,8 +443,8 @@ fn test_flex_row_direction() {
 fn test_flex_column_direction() {
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
-            flex_direction: "column".to_string(),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
             css_width: Some(400.0), css_height: Some(200.0),
             ..make_test("div", "", "flex", None)
         },
@@ -457,8 +459,8 @@ fn test_flex_column_direction() {
 fn test_flex_justify_center() {
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
-            justify_content: "center".to_string(),
+            display: Display::Flex,
+            justify_content: JustifyContent::Center,
             css_width: Some(400.0), css_height: Some(100.0),
             ..make_test("div", "", "flex", None)
         },
@@ -472,8 +474,8 @@ fn test_flex_justify_center() {
 fn test_flex_align_items_center() {
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
-            align_items: "center".to_string(),
+            display: Display::Flex,
+            align_items: AlignItems::Center,
             css_width: Some(400.0), css_height: Some(200.0),
             ..make_test("div", "", "flex", None)
         },
@@ -487,8 +489,8 @@ fn test_flex_align_items_center() {
 fn test_flex_wrap_nowrap() {
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
-            flex_wrap: "nowrap".to_string(),
+            display: Display::Flex,
+            flex_wrap: FlexWrap::NoWrap,
             css_width: Some(100.0), css_height: Some(50.0),
             ..make_test("div", "", "flex", None)
         },
@@ -510,7 +512,7 @@ fn test_flex_grow() {
     el_b.flex_grow = 1.0;
     let mut elements = vec![
         StyledElement {
-            display: "flex".to_string(),
+            display: Display::Flex,
             css_width: Some(400.0), css_height: Some(50.0),
             ..make_test("div", "", "flex", None)
         },
@@ -558,7 +560,7 @@ fn test_grid_display() {
 fn test_grid_children_in_grid_container() {
     let mut elements = vec![
         StyledElement {
-            display: "grid".to_string(),
+            display: Display::Grid,
             css_width: Some(400.0), css_height: Some(200.0),
             ..make_test("div", "", "grid", None)
         },
@@ -575,7 +577,7 @@ fn test_grid_children_in_grid_container() {
 fn test_grid_single_column() {
     let mut elements = vec![
         StyledElement {
-            display: "grid".to_string(),
+            display: Display::Grid,
             css_width: Some(400.0), css_height: Some(300.0),
             ..make_test("div", "", "grid", None)
         },
@@ -592,7 +594,7 @@ fn test_grid_single_column() {
 fn test_grid_item_sizes() {
     let mut elements = vec![
         StyledElement {
-            display: "grid".to_string(),
+            display: Display::Grid,
             css_width: Some(400.0), css_height: Some(200.0),
             ..make_test("div", "", "grid", None)
         },
@@ -607,7 +609,7 @@ fn test_grid_item_sizes() {
 fn test_grid_empty_container() {
     let mut elements = vec![
         StyledElement {
-            display: "grid".to_string(),
+            display: Display::Grid,
             css_width: Some(400.0), css_height: Some(200.0),
             ..make_test("div", "", "grid", None)
         },
@@ -835,7 +837,7 @@ fn test_display_none_elements_ignored() {
     let el = make_test("div", "Hidden", "none", None);
     let mut elements = vec![el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert_eq!(elements[0].display, "none");
+    assert_eq!(elements[0].display, Display::None);
 }
 
 #[test]

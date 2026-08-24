@@ -1,7 +1,7 @@
 //! Stratus Style Value Types
 //! Strongly-typed representation of CSS properties
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum Display {
     #[default]
@@ -286,7 +286,7 @@ impl LengthValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum Position {
     #[default]
@@ -302,7 +302,7 @@ pub enum Position {
     Sticky,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum FlexDirection {
     #[default]
@@ -322,7 +322,7 @@ impl FlexDirection {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum FlexWrap {
     #[default]
@@ -334,7 +334,7 @@ pub enum FlexWrap {
     WrapReverse,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum JustifyContent {
     #[default]
@@ -352,7 +352,7 @@ pub enum JustifyContent {
     SpaceEvenly,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum AlignItems {
     #[default]
@@ -368,7 +368,7 @@ pub enum AlignItems {
     Baseline,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, strum::EnumString, strum::Display)]
 #[strum(ascii_case_insensitive)]
 pub enum AlignSelf {
     #[default]

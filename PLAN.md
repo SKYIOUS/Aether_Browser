@@ -65,13 +65,15 @@ elements):
      full suite green. Per-frame work is O(visible) by construction —
      the <16ms/frame target still needs interactive profiling (separate step).
 
-3. **StyledElement slimming** (`extractor.rs`) — prerequisite for 2x element
-   counts staying cheap
-   - Move repeated `String` fields to enums/compact types (`display`,
-     `position`, `flex_direction`, `font_weight`), drop duplicated raw-CSS
-     strings once mapped. Do NOT attempt the full ComputedStyle/LayoutInput/
-     LayoutOutput three-way split yet — slim first, split only if profiling
-     demands it.
+3. **StyledElement slimming — DONE 2026-08-24**
+   (`extractor.rs`, `layout.rs`, `canvas.rs`)
+   - Shipped: 11 per-element Strings replaced by aether-css enums
+     (`Display`/`Position`/flex five) plus local `FontWeight`, `BoxSizing`,
+     `TextDecor(u8)` bitfield; enum→string→taffy roundtrip deleted;
+     dead `text_transform` removed; Copy derives on the fieldless css enums.
+   - Evidence: `size_of::<StyledElement>()` 800 → 544 bytes inline (~10 fewer
+     heap allocations per element), pinned by `styled_element_stays_slim`;
+     full suite green; no new clippy lints.
 
 4. **Wrap text once** (`src/engine/pipeline/layout.rs`)
    - `wrap_text` runs during height estimation AND again post-layout. Make

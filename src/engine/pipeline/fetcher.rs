@@ -13,7 +13,8 @@ use lru::LruCache;
 use resvg::usvg;
 use resvg::tiny_skia;
 
-use super::extractor::{extract_elements_flat, MAX_ELEMENTS, StyledElement};
+use super::extractor::{extract_elements_flat, BoxSizing, FontWeight, MAX_ELEMENTS, StyledElement, TextDecor};
+use crate::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
 use super::layout::apply_taffy_layout;
 
 static CSS_CACHE: OnceLock<Mutex<LruCache<String, (Stylesheet, usize)>>> = OnceLock::new();
@@ -168,15 +169,15 @@ fn render_vayu_page(url: &str, content_width: f32, viewport_h: f32) -> (String, 
 fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
-        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
@@ -188,15 +189,15 @@ fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
 fn history_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
-        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
@@ -207,15 +208,15 @@ fn history_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
 fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
-        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
@@ -226,15 +227,15 @@ fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
 fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: iced::Color, size: f32, weight: &str, bg: Option<iced::Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
-        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, iced::Color::from_rgb(0.98, 0.98, 0.98), 16.0, "normal", Some(iced::Color::WHITE)),
@@ -255,15 +256,15 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, stat
     let muted = Color::from_rgb(0.65, 0.65, 0.65);
     let se = |tag: &str, text: &str, x: f32, y: f32, w: f32, h: f32, color: Color, size: f32, weight: &str, bg: Option<Color>| StyledElement {
         tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
-        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: weight.into(),
+        is_link: false, href: None, indent_level: 0, color, font_size: size, font_weight: if weight == "bold" { FontWeight::Bold } else { FontWeight::Normal },
         background_color: bg, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: "block".into(),
-        flex_direction: "row".into(), flex_wrap: "nowrap".into(), justify_content: "flex-start".into(),
-        align_items: "stretch".into(), align_self: "auto".into(), box_sizing: "content-box".into(), flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
+        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block,
+        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 0.0, flex_basis: None,
         css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None,
-        x, y, width: w, height: h, line_height: 1.4, text_decoration: "none".into(), text_transform: "none".into(), border_radius: [0.0; 4],
+        x, y, width: w, height: h, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4],
         input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false,
-        position: "static".into(), inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),
