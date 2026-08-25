@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use vayu_browser::engine::net;
 
-type Route = (&'static str, u16, Vec<(&'static str, &'static str)>, &'static str);
+type Route = (&'static str, u16, Vec<(&'static str, String)>, &'static str);
 
 struct Server {
     base: String,
@@ -105,8 +105,8 @@ fn write_response(conn: &mut TcpStream, head: &str, body: &str) {
 #[test]
 fn c1_redirect_cap_returns_terminal_302_and_stops_the_chain() {
     let server = spawn_server(vec![
-        ("/start", 302, vec![("Location", "/mid")], ""),
-        ("/mid", 302, vec![("Location", "/end")], ""),
+        ("/start", 302, vec![("Location", String::from("/mid"))], ""),
+        ("/mid", 302, vec![("Location", String::from("/end"))], ""),
         ("/end", 200, vec![], "done"),
     ]);
     let cl = net::build_http_client().expect("client");
@@ -120,8 +120,8 @@ fn c1_redirect_cap_returns_terminal_302_and_stops_the_chain() {
 #[test]
 fn c1_full_chain_follows_to_completion() {
     let server = spawn_server(vec![
-        ("/start", 302, vec![("Location", "/mid")], ""),
-        ("/mid", 302, vec![("Location", "/end")], ""),
+        ("/start", 302, vec![("Location", String::from("/mid"))], ""),
+        ("/mid", 302, vec![("Location", String::from("/end"))], ""),
         ("/end", 200, vec![], "done"),
     ]);
     let cl = net::build_http_client().expect("client");
@@ -139,7 +139,7 @@ fn c1_full_chain_follows_to_completion() {
 #[test]
 fn c1_cookies_are_reattached_on_every_redirect_hop() {
     let server = spawn_server(vec![
-        ("/a", 302, vec![("Location", "/b"), ("Set-Cookie", "sid=1")], ""),
+        ("/a", 302, vec![("Location", "/b".to_string()), ("Set-Cookie", String::from("sid=1"))], ""),
         ("/b", 200, vec![], "ok"),
     ]);
     let resp = net::fetch_with_redirects(&server.url("/a"), 5, None, None, false)
@@ -184,7 +184,7 @@ fn header_of(server: &Server, n: usize) -> String {
 fn c2_domain_mismatch_cookie_is_never_sent() {
     let cl = net::build_http_client().expect("client");
     let server = spawn_server(vec![
-        ("/set", 200, vec![("Set-Cookie", "sid=9; Domain=localhost")], ""),
+        ("/set", 200, vec![("Set-Cookie", "sid=9; Domain=localhost".to_string())], ""),
         ("/check", 200, vec![], "ok"),
     ]);
     let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
@@ -200,7 +200,7 @@ fn c2_domain_mismatch_cookie_is_never_sent() {
 fn c2_secure_cookie_never_sent_over_http() {
     let cl = net::build_http_client().expect("client");
     let server = spawn_server(vec![
-        ("/set", 200, vec![("Set-Cookie", "sec=1; Secure")], ""),
+        ("/set", 200, vec![("Set-Cookie", String::from("sec=1; Secure"))], ""),
         ("/check", 200, vec![], "ok"),
     ]);
     let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
@@ -217,7 +217,7 @@ fn c2_oversized_set_cookie_is_dropped() {
     let cl = net::build_http_client().expect("client");
     let big: &'static str = Box::leak(format!("big={}; Path=/", "x".repeat(4200)).into_boxed_str());
     let server = spawn_server(vec![
-        ("/set", 200, vec![("Set-Cookie", big)], ""),
+        ("/set", 200, vec![("Set-Cookie", big.to_string())], ""),
         ("/check", 200, vec![], "ok"),
     ]);
     let _ = net::fetch_redirects_with_client(&cl, &server.url("/set"), 0, None, None, false);
@@ -230,7 +230,7 @@ fn c2_oversized_set_cookie_is_dropped() {
 fn c2_path_boundary_foo_matches_bar_not_foobar() {
     let cl = net::build_http_client().expect("client");
     let server = spawn_server(vec![
-        ("/foo/set", 200, vec![("Set-Cookie", "p=1; Path=/foo")], ""),
+        ("/foo/set", 200, vec![("Set-Cookie", String::from("p=1; Path=/foo"))], ""),
         ("/foo/bar", 200, vec![], "in-path"),
         ("/foobar", 200, vec![], "outside"),
     ]);
@@ -241,4 +241,96 @@ fn c2_path_boundary_foo_matches_bar_not_foobar() {
     let out_scope = header_of(&server, 2);
     assert!(in_scope.contains("p=1"), "Path=/foo must cover /foo/bar");
     assert!(!out_scope.contains("p=1"), "Path=/foo must not cover /foobar");
+}
+
+// ?? C3 CSP resource authority ??????????????????????????????????????????????
+
+use vayu_browser::engine::net::{parse_csp, ResourceKind};
+
+fn style_policy_self(page: &str) -> () {
+    // store_csp persists per-origin; helper keeps test intent readable.
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("content-security-policy".to_string(), "style-src 'self'".to_string());
+    net::store_csp(page, &headers);
+}
+
+// Characterization: freeze existing csp_allows_* semantics before authority
+// moves behind fetch_resource. These pass against current code by design.
+#[test]
+fn c3_characterization_style_src_self_semantics() {
+    let policy = parse_csp("style-src 'self'");
+    assert!(net::csp_allows_style_url("https://site.com/a.css", "https://site.com", &policy));
+    assert!(!net::csp_allows_style_url("https://evil.com/a.css", "https://site.com", &policy));
+    assert!(
+        net::csp_allows_style_url("https://any.com/a.css", "https://site.com", &parse_csp("")),
+        "empty policy allows everything"
+    );
+    assert!(
+        !net::csp_allows_style_url("https://any.com/a.css", "https://site.com", &parse_csp("style-src 'none'")),
+    );
+}
+
+#[test]
+fn c3_characterization_directive_fallback_to_default_src() {
+    // effective_sources_for falls back to default-src when style-src absent.
+    let policy = parse_csp("default-src 'self'");
+    assert!(!net::csp_allows_style_url("https://evil.com/a.css", "https://site.com", &policy));
+    assert!(net::csp_allows_style_url("https://site.com/a.css", "https://site.com", &policy));
+}
+
+#[test]
+fn c3_direct_disallowed_host_blocked_before_connect() {
+    style_policy_self("http://127.0.0.1:1");
+    let cl = net::build_http_client().expect("client");
+    let server = spawn_server(vec![("/evil.css", 200, vec![], "evil{}")]);
+    let err = match net::fetch_resource_with_client(&cl, &server.url("/evil.css"), "http://127.0.0.1:1", ResourceKind::Style, None, false) {
+        Err(e) => e,
+        Ok(r) => panic!("disallowed style host must be blocked, got status {}", r.status),
+    };
+    let _ = err.to_string(); // Display exercised
+    assert_eq!(server.count(), 0, "blocked resource must never be fetched");
+}
+
+#[test]
+fn c3_redirect_hop_into_disallowed_host_is_blocked_and_evil_body_never_consumed() {
+    // evil.example/style.css lives on a second listener (different port =
+    // different origin), so 'self' on the page origin cannot cover it.
+    let evil = spawn_server(vec![("/evil.css", 200, vec![], "evil{}")]);
+    let allowed = spawn_server(vec![(
+        "/style.css",
+        302,
+        vec![("Location", format!("{}{}", evil.base, "/evil.css"))],
+        "",
+    )]);
+
+    let page = &allowed.base;
+    style_policy_self(page);
+
+    let cl = net::build_http_client().expect("client");
+    let err = match net::fetch_resource_with_client(&cl, &allowed.url("/style.css"), page, ResourceKind::Style, None, false) {
+        Err(e) => e,
+        Ok(r) => panic!("redirect into disallowed host must be blocked, got status {} from {}", r.status, r.final_url),
+    };
+
+    assert!(err.to_string().to_lowercase().contains("csp") || err.to_string().to_lowercase().contains("policy"),
+        "error should identify the CSP block, got: {err}");
+    assert_eq!(evil.count(), 0, "no request may reach the disallowed host");
+    assert_eq!(allowed.count(), 1, "chain stops after the violating hop");
+}
+
+// Inverse case: an allowed -> allowed redirect keeps loading.
+#[test]
+fn c3_allowed_to_allowed_redirect_still_loads() {
+    let server = spawn_server(vec![
+        ("/a.css", 302, vec![("Location", "/b.css".to_string())], ""),
+        ("/b.css", 200, vec![], ".b{}"),
+    ]);
+    let page = &server.base;
+    style_policy_self(page);
+
+    let cl = net::build_http_client().expect("client");
+    let resp = net::fetch_resource_with_client(&cl, &server.url("/a.css"), page, ResourceKind::Style, None, false)
+        .expect("same-site redirect chain must load");
+    assert_eq!(resp.body, ".b{}");
+    assert_eq!(server.count(), 2);
 }

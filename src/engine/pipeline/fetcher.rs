@@ -387,10 +387,6 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
             break;
         }
         let resolved = net::resolve_url(link_url, &url);
-        if !net::csp_allows_style_url(&resolved, &page_url, &csp_policy) {
-            plog!("CSP", "Blocked external CSS: {}", resolved);
-            continue;
-        }
         if let Ok(mut cache) = css_cache().lock() {
             if let Some((cached, cached_bytes)) = cache.get(&resolved) {
                 if css_used + cached_bytes > CSS_TOTAL_BUDGET_BYTES {
@@ -404,11 +400,13 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
             }
         }
         plog!("CSS", "Fetching external CSS from {}", resolved);
-        match net::fetch(&resolved, Some(&url)) {
-            Ok((css_content, css_status)) => {
-                if css_status >= 400 {
-                    plog!("CSS", "External CSS HTTP error {} for {}", css_status, resolved);
+        // CSP authority (pre-fetch + every redirect hop) lives in net::fetch_resource.
+        match net::fetch_resource(&resolved, &page_url, net::ResourceKind::Style, Some(&url), false) {
+            Ok(resp) => {
+                if resp.status >= 400 {
+                    plog!("CSS", "External CSS HTTP error {} for {}", resp.status, resolved);
                 } else {
+                    let css_content = resp.body;
                     let trimmed = {
                         if css_content.len() > MAX_CSS_SOURCE_BYTES {
                             plog!("CSS", "Trimmed external CSS from {} to {} bytes", css_content.len(), MAX_CSS_SOURCE_BYTES);
@@ -458,13 +456,10 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
                 }
                 ScriptSource::External(src) => {
                     let resolved = net::resolve_url(src, &url);
-                    if !net::csp_allows_script_url(&resolved, &page_url, &csp_policy) {
-                        plog!("CSP", "Blocked external script: {}", resolved);
-                        continue;
-                    }
                     plog!("JS", "Fetching external script from {}", resolved);
-                    match net::fetch(&resolved, Some(&url)) {
-                        Ok((fetched, _status)) => fetched,
+                    // CSP authority (pre-fetch + every redirect hop) in net.
+                    match net::fetch_resource(&resolved, &page_url, net::ResourceKind::Script, Some(&url), false) {
+                        Ok(resp) => resp.body,
                         Err(e) => {
                             plog!("JS", "Failed to fetch external script: {}", e);
                             continue;
@@ -502,10 +497,6 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
     for el in elements.iter_mut() {
         if let Some(ref img_src) = el.image_url.clone() {
             let resolved = net::resolve_url(img_src, &url);
-            if !net::csp_allows_image_url(&resolved, &page_url, &csp_policy) {
-                plog!("CSP", "Blocked image: {}", resolved);
-                continue;
-            }
             img_count += 1;
             if let Some((w, hh, hnd)) = img_cache.get(&resolved).map(|(w, h, h2)| (*w, *h, h2.clone())) {
                 el.width = w;
@@ -513,8 +504,9 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
                 el.image_handle = Some(hnd);
                 continue;
             }
-            let bytes = match net::fetch_bytes(&resolved, Some(&url)) {
-                Ok(b) => b,
+            // CSP authority (pre-fetch + every redirect hop) lives in net.
+            let bytes = match net::fetch_resource(&resolved, &page_url, net::ResourceKind::Image, Some(&url), false) {
+                Ok(resp) => resp.body.into_bytes(),
                 Err(e) => {
                     plog!("IMAGES", "Failed to fetch image: {}", e);
                     continue;

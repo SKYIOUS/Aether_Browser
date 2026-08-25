@@ -143,8 +143,13 @@ Wire what's half-built instead of adding new surface:
   None-without-Secure rejected at set), expiry filtered at read, port
   stripped from storage keys with legacy-jar migration, 4096-byte line cap.
   Images now send cookies per the same rules (previously sent none).
-- **C3 CSP for `<link>`** - stylesheet fetches must consult the page policy
-  like scripts do.
+- **C3 CSP for `<link>` — DONE 2026-08-24** (`net/mod.rs`, `fetcher.rs`):
+  per-type checks for `<link>` stylesheets (and scripts/images) already
+  existed pre-fetch; the real gap was redirect bypass - final URLs were
+  never re-validated. `net::fetch_resource` is now the single CSP authority
+  for typed subresources, consulting the stored page policy pre-fetch AND on
+  every redirect hop (violating hops are refused before the response is
+  consumed). Fetcher migrated to it; js connect-src unchanged by design.
 - **C4 Fuzzing** - cargo-fuzz targets for HTML parse/TreeSink, CSS input
   boundaries, URL resolution, A1 budget helpers.
 - Sandboxing decision ADR: QuickJS capability policy choke point is documented

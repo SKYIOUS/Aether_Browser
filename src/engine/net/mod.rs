@@ -20,6 +20,8 @@ pub enum FetchError {
     /// TLS/certificate failure, separated from generic connect errors so the
     /// error page can say "certificate problem" without dumping internals.
     Tls(String),
+    /// Resource refused by the page's Content-Security-Policy (C3).
+    Csp { resource: String, directive: String },
     EmptyBody,
     CrossOrigin { target: String, origin: String },
 }
@@ -31,6 +33,9 @@ impl fmt::Display for FetchError {
             Self::Network(msg) => write!(f, "Network: {}", msg),
             Self::Timeout => write!(f, "Request timed out"),
             Self::Tls(msg) => write!(f, "Secure connection failed: {}", msg),
+            Self::Csp { resource, directive } => {
+                write!(f, "Blocked by CSP {}: {}", directive, resource)
+            }
             Self::EmptyBody => write!(f, "Empty response body"),
             Self::CrossOrigin { target, origin } => {
                 write!(f, "Cross-origin fetch blocked: '{}' ≠ origin '{}'", target, origin)
@@ -395,29 +400,61 @@ pub fn csp_blocks_styles(headers: &HashMap<String, String>) -> bool {
 
 /// Check if a specific script URL is allowed by the page's CSP policy.
 pub fn csp_allows_script_url(script_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    if policy.is_empty() { return true; }
-    let origin = origin_from_url_inner(page_url);
-    let allowed = policy.allows_url(&CspDirective::ScriptSrc, script_url, &origin);
-    if !allowed { log_violation("script-src", script_url, &origin); }
-    allowed
+    csp_allows_for(CspDirective::ScriptSrc, "script-src", script_url, page_url, policy)
 }
 
 /// Check if a specific style URL is allowed by the page's CSP policy.
 pub fn csp_allows_style_url(style_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    if policy.is_empty() { return true; }
+    csp_allows_for(CspDirective::StyleSrc, "style-src", style_url, page_url, policy)
+}
+
+/// Resource kinds whose subresource fetches carry CSP authority (C3).
+#[derive(Debug, Clone, Copy)]
+pub enum ResourceKind {
+    Style,
+    Script,
+    Image,
+}
+
+impl ResourceKind {
+    fn directive(self) -> (CspDirective, &'static str) {
+        match self {
+            ResourceKind::Style => (CspDirective::StyleSrc, "style-src"),
+            ResourceKind::Script => (CspDirective::ScriptSrc, "script-src"),
+            ResourceKind::Image => (CspDirective::ImgSrc, "img-src"),
+        }
+    }
+}
+
+fn csp_allows_for(
+    directive: CspDirective,
+    name: &'static str,
+    url: &str,
+    page_url: &str,
+    policy: &CspPolicy,
+) -> bool {
+    if policy.is_empty() {
+        return true;
+    }
     let origin = origin_from_url_inner(page_url);
-    let allowed = policy.allows_url(&CspDirective::StyleSrc, style_url, &origin);
-    if !allowed { log_violation("style-src", style_url, &origin); }
+    let allowed = policy.allows_url(&directive, url, &origin);
+    if !allowed {
+        log_violation(name, url, &origin);
+    }
     allowed
+}
+
+/// Single CSP authority for typed subresources (PLAN C3): the stored page
+/// policy is consulted for the pre-fetch URL AND every redirect hop.
+fn csp_allows_resource(kind: ResourceKind, url: &str, page_origin: &str) -> bool {
+    let policy = get_csp_for(page_origin);
+    let (directive, name) = kind.directive();
+    csp_allows_for(directive, name, url, page_origin, &policy)
 }
 
 /// Check if an image URL is allowed by the page's CSP policy.
 pub fn csp_allows_image_url(img_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    if policy.is_empty() { return true; }
-    let origin = origin_from_url_inner(page_url);
-    let allowed = policy.allows_url(&CspDirective::ImgSrc, img_url, &origin);
-    if !allowed { log_violation("img-src", img_url, &origin); }
-    allowed
+    csp_allows_for(CspDirective::ImgSrc, "img-src", img_url, page_url, policy)
 }
 
 /// Check if a connect/fetch/XHR URL is allowed by the page's CSP policy.
@@ -610,6 +647,49 @@ pub fn redirect_target(original: &str, location: &str) -> Option<String> {
 }
 
 fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, origin: Option<&str>, initiator: Option<&str>, top_level_navigation: bool) -> Result<Response, FetchError> {
+    fetch_inner_with_csp(cl, url, max_redirects, origin, initiator, top_level_navigation, None)
+}
+
+/// Typed-subresource fetch (PLAN C3): the stored page policy gates the initial
+/// URL and every redirect hop. A violating hop is refused without consuming
+/// the unauthorized response.
+pub fn fetch_resource(
+    url: &str,
+    page_origin: &str,
+    kind: ResourceKind,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
+) -> Result<Response, FetchError> {
+    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    fetch_resource_with_client(cl, url, page_origin, kind, initiator, top_level_navigation)
+}
+
+/// Test-only variant: caller-owned client so its runtime thread drops with the
+/// test process.
+#[doc(hidden)]
+pub fn fetch_resource_with_client(
+    cl: &reqwest::blocking::Client,
+    url: &str,
+    page_origin: &str,
+    kind: ResourceKind,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
+) -> Result<Response, FetchError> {
+    if !csp_allows_resource(kind, url, page_origin) {
+        return Err(FetchError::Csp { resource: url.to_string(), directive: kind.directive().1.to_string() });
+    }
+    fetch_inner_with_csp(cl, url, 5, None, initiator, top_level_navigation, Some((kind, page_origin.to_string())))
+}
+
+fn fetch_inner_with_csp(
+    cl: &reqwest::blocking::Client,
+    url: &str,
+    max_redirects: usize,
+    origin: Option<&str>,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
+    csp: Option<(ResourceKind, String)>,
+) -> Result<Response, FetchError> {
     let final_url = normalize_url(url);
     plog!("net", "Fetching: {}", final_url);
 
@@ -679,10 +759,21 @@ fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, 
             match redirect_target(&final_url, location) {
                 Some(next) => {
                     plog!("net", "Redirect to: {}", next);
+                    // C3: every hop must satisfy the page policy for this
+                    // resource kind, or the chain stops here - the target
+                    // response is never consumed.
+                    if let Some((kind, page)) = &csp {
+                        if !csp_allows_resource(*kind, &next, page) {
+                            return Err(FetchError::Csp {
+                                resource: next,
+                                directive: kind.directive().1.to_string(),
+                            });
+                        }
+                    }
                     // Drain the body so the connection is released cleanly
                     // before the next hop opens.
                     let _ = resp.text();
-                    return fetch_inner(cl, &next, max_redirects - 1, origin, initiator, top_level_navigation);
+                    return fetch_inner_with_csp(cl, &next, max_redirects - 1, origin, initiator, top_level_navigation, csp);
                 }
                 None => {
                     plog!("net", "HTTPS→HTTP downgrade blocked; returning current response");
