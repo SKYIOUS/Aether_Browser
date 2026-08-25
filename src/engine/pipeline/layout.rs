@@ -128,8 +128,8 @@ fn el_to_taffy_style(el: &StyledElement) -> Option<Style> {
     let (min_w, max_w) = mm(el.min_width, el.max_width);
     let (mut min_h, max_h) = mm(el.min_height, el.max_height);
     
-    if display == Display::Block && !has_content {
-        if min_h == Dimension::auto() { min_h = Dimension::length(1.0); }
+    if matches!(display, Display::Block) && !has_content {
+        min_h = if min_h == Dimension::auto() { Dimension::length(1.0) } else { min_h };
     }
     
     s.min_size = TaffySize { width: min_w, height: min_h };
@@ -266,7 +266,7 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
         }
     }
 
-    if elements.len() > 0 {
+    if !elements.is_empty() {
         if let Err(e) = tree.compute_layout(root_node, TaffySize {
             width: AvailableSpace::Definite(container_width),
             height: AvailableSpace::Definite(viewport_h),

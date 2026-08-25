@@ -130,7 +130,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 560 tests green
+- Status baseline (verified 2026-08-24, Windows local): 564 tests green
   (raw cargo-test totals double-count the lib block - src/main.rs re-runs it;
   per-phase deltas report focused suites plus this full-workspace figure); CI
   gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job

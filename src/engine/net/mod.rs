@@ -10,7 +10,7 @@ use std::fmt;
 
 use crate::plog;
 
-// ── Error type ────────────────────────────────────────────────────────
+// ?? Error type ????????????????????????????????????????????????????????
 
 #[derive(Debug, Clone)]
 pub enum FetchError {
@@ -38,7 +38,7 @@ impl fmt::Display for FetchError {
             }
             Self::EmptyBody => write!(f, "Empty response body"),
             Self::CrossOrigin { target, origin } => {
-                write!(f, "Cross-origin fetch blocked: '{}' ≠ origin '{}'", target, origin)
+                write!(f, "Cross-origin fetch blocked: '{}' ? origin '{}'", target, origin)
             }
         }
     }
@@ -108,7 +108,7 @@ fn client() -> Option<&'static reqwest::blocking::Client> {
     }
 }
 
-// ── HTTP cache ────────────────────────────────────────────────────────
+// ?? HTTP cache ????????????????????????????????????????????????????????
 
 type Cache = HashMap<String, (String, Instant)>;
 
@@ -135,11 +135,11 @@ fn cache_set(url: &str, body: &str) {
     }
 }
 
-// ── Cookie jar ────────────────────────────────────────────────────────
+// ?? Cookie jar ????????????????????????????????????????????????????????
 // Cookie lifecycle lives in net::cookies (PLAN C2).
 pub mod cookies;
 use cookies::{get_cookies_for_request, set_cookie_from_response};
-// ── CSP Types ─────────────────────────────────────────────────────────
+// ?? CSP Types ?????????????????????????????????????????????????????????
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CspDirective {
@@ -272,7 +272,7 @@ impl CspPolicy {
     }
 }
 
-// ── CSP Parser ────────────────────────────────────────────────────────
+// ?? CSP Parser ????????????????????????????????????????????????????????
 
 fn parse_csp_source(token: &str) -> Option<CspSource> {
     match token {
@@ -331,14 +331,14 @@ pub fn parse_csp_from_headers(headers: &HashMap<String, String>) -> CspPolicy {
         .unwrap_or_default()
 }
 
-// ── CSP Violation Logging ─────────────────────────────────────────────
+// ?? CSP Violation Logging ?????????????????????????????????????????????
 
 fn log_violation(directive: &str, resource: &str, origin: &str) {
     eprintln!("[CSP] Blocked by {}: {} (origin: {})", directive, resource, origin);
     plog!("csp-violation", "Blocked {} by {} (origin: {})", resource, directive, origin);
 }
 
-// ── CSP Store (per-origin) ────────────────────────────────────────────
+// ?? CSP Store (per-origin) ????????????????????????????????????????????
 
 type CspStore = HashMap<String, CspPolicy>;
 
@@ -368,7 +368,7 @@ pub fn get_csp_for(url: &str) -> CspPolicy {
     csp_store().read().ok().and_then(|s| s.get(&origin).cloned()).unwrap_or_default()
 }
 
-// ── Public CSP Check Functions ────────────────────────────────────────
+// ?? Public CSP Check Functions ????????????????????????????????????????
 
 /// Check if a resource is allowed by the response's own CSP header.
 // ponytail: used for initial page-load fetch; also stores CSP for the origin
@@ -476,7 +476,7 @@ pub fn csp_allows_inline_style(policy: &CspPolicy) -> bool {
     policy.is_empty() || policy.allows_inline(&CspDirective::StyleSrc)
 }
 
-// ── Network Request Log ──────────────────────────────────────────────
+// ?? Network Request Log ??????????????????????????????????????????????
 
 type NetworkLog = Vec<String>;
 
@@ -504,7 +504,7 @@ pub fn get_network_log() -> Vec<String> {
     network_log().read().map(|log| log.clone()).unwrap_or_default()
 }
 
-// ── URL Helpers ───────────────────────────────────────────────────────
+// ?? URL Helpers ???????????????????????????????????????????????????????
 
 fn header_value<'a>(headers: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
     headers.iter().find_map(|(k, v)| k.eq_ignore_ascii_case(key).then_some(v.as_str()))
@@ -553,7 +553,7 @@ impl Response {
 }
 
 /// Fetches content from the given URL, returning body + HTTP status code.
-// ponytail: cache uses raw URL, not normalized — may cause miss/hit mismatch
+// ponytail: cache uses raw URL, not normalized - may cause miss/hit mismatch
 pub fn fetch(url: &str, initiator: Option<&str>) -> Result<(String, u16), FetchError> {
     if let Some(cached) = cache_get(url) {
         plog!("cache", "HIT: {}", url);
@@ -629,7 +629,7 @@ fn is_scheme_downgrade(original_url: &str, redirect_url: &str) -> bool {
     let orig_is_https = original_url.starts_with("https://");
     let redir_is_http = redirect_url.starts_with("http://");
     if orig_is_https && redir_is_http {
-        plog!("net", "Blocked HTTPS→HTTP downgrade redirect: {} → {}", original_url, redirect_url);
+        plog!("net", "Blocked HTTPS?HTTP downgrade redirect: {} ? {}", original_url, redirect_url);
         return true;
     }
     false
@@ -693,6 +693,35 @@ fn fetch_inner_with_csp(
     let final_url = normalize_url(url);
     plog!("net", "Fetching: {}", final_url);
 
+    // Check mock first - this enables testing without network calls
+    if let Some(body) = mock::resolve_html(&final_url) {
+        plog!("mock", "Serving HTML for {}", final_url);
+        return Ok(Response {
+            body,
+            status: 200,
+            headers: HashMap::new(),
+            final_url: final_url.clone(),
+        });
+    }
+    if let Some(css) = mock::resolve_css(&final_url) {
+        plog!("mock", "Serving CSS for {}", final_url);
+        return Ok(Response {
+            body: css,
+            status: 200,
+            headers: HashMap::new(),
+            final_url: final_url.clone(),
+        });
+    }
+    if let Some(_body) = mock::resolve_binary(&final_url) {
+        plog!("mock", "Serving binary for {}", final_url);
+        return Ok(Response {
+            body: String::new(),
+            status: 200,
+            headers: HashMap::new(),
+            final_url: final_url.clone(),
+        });
+    }
+
     let _start = std::time::Instant::now();
 
     let cookies = get_cookies_for_request(&final_url, initiator, top_level_navigation);
@@ -705,7 +734,9 @@ fn fetch_inner_with_csp(
         req = req.header("Origin", &origin_url);
     }
     let resp = match req.send() {
-        Ok(r) => r,
+        Ok(r) => {
+            r
+        }
         Err(e) => return Err(FetchError::from(e)),
     };
     let status: u16 = resp.status().as_u16();
@@ -776,7 +807,7 @@ fn fetch_inner_with_csp(
                     return fetch_inner_with_csp(cl, &next, max_redirects - 1, origin, initiator, top_level_navigation, csp);
                 }
                 None => {
-                    plog!("net", "HTTPS→HTTP downgrade blocked; returning current response");
+                    plog!("net", "HTTPS?HTTP downgrade blocked; returning current response");
                 }
             }
         }
@@ -856,7 +887,7 @@ pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchE
                     }
                     None => {
                         return Err(FetchError::Network(
-                            "Blocked HTTPS→HTTP redirect for binary resource".to_string(),
+                            "Blocked HTTPS?HTTP redirect for binary resource".to_string(),
                         ));
                     }
                 }

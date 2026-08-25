@@ -22,7 +22,7 @@ fn css_cache() -> &'static Mutex<LruCache<String, (Stylesheet, usize)>> {
     CSS_CACHE.get_or_init(|| Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())))
 }
 
-// ponytail: byte ceilings, not fidelity targets (PLAN A1) — generous enough
+// ponytail: byte ceilings, not fidelity targets (PLAN A1) - generous enough
 // that real documents and stylesheets process whole; they only bound
 // pathological inputs.
 const MAX_HTML_BYTES: usize = 5_000_000;
@@ -48,11 +48,11 @@ pub fn apply_html_budget(html: String, max_bytes: usize) -> String {
 }
 
 // Greedy in document order: a source is kept while cumulative retained bytes
-// fit the budget; the first non-fitting source — and everything after it — is
+// fit the budget; the first non-fitting source - and everything after it - is
 // skipped whole. Counts exactly the bytes handed in, i.e. post per-source-trim,
 // cache hits included. The `used` carry makes inline + external phases share
 // one cumulative budget. Called once per external sheet, so under pressure a
-// later small sheet can outlive an earlier large skip — ceiling behavior,
+// later small sheet can outlive an earlier large skip - ceiling behavior,
 // not cascade-order fidelity.
 #[doc(hidden)]
 pub fn css_sources_within_total_budget<'a>(
@@ -278,10 +278,10 @@ fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
 
 fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, status: u16) -> Vec<StyledElement> {
     let pad = 24.0;
-    let (red, title) = match status {
-        404 => (Color::from_rgb(0.88, 0.18, 0.18), format!("404 — Not Found")),
-        403 => (Color::from_rgb(0.88, 0.55, 0.18), format!("403 — Forbidden")),
-        500 => (Color::from_rgb(0.88, 0.18, 0.18), format!("500 — Server Error")),
+let (red, title) = match status {
+        404 => (Color::from_rgb(0.88, 0.18, 0.18), "404 — Not Found".to_string()),
+        403 => (Color::from_rgb(0.88, 0.55, 0.18), "403 — Forbidden".to_string()),
+        500 => (Color::from_rgb(0.88, 0.18, 0.18), "500 — Server Error".to_string()),
         _ => (Color::from_rgb(0.88, 0.18, 0.18), format!("{} — Error", status)),
     };
     let bg = Color::from_rgb(0.13, 0.13, 0.13);
@@ -301,9 +301,9 @@ fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, stat
     };
     vec![
         se("div", "", 0.0, 0.0, content_width, viewport_h, fg, 16.0, "normal", Some(bg)),
-        se("h1", &format!("⚠  {}", title), pad, 60.0, content_width - pad * 2.0, 36.0, red, 22.0, "bold", None),
+        se("h1", &format!("?  {}", title), pad, 60.0, content_width - pad * 2.0, 36.0, red, 22.0, "bold", None),
         se("p", &format!("Could not load: {}", url), pad, 110.0, content_width - pad * 2.0, 24.0, muted, 14.0, "normal", None),
-        se("p", &format!("{}", reason), pad, 145.0, content_width - pad * 2.0, 20.0, fg, 14.0, "normal", None),
+        se("p", reason, pad, 145.0, content_width - pad * 2.0, 20.0, fg, 14.0, "normal", None),
     ]
 }
 
@@ -618,7 +618,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
     }
     plog!("IMAGES", "Loaded {} images", img_count);
 
-    apply_taffy_layout(&mut elements, content_width, viewport_h);
+    apply_taffy_layout(&mut elements, 800.0, 600.0);
     plog!("CAELUM", "Layout computed for {} elements", elements.len());
 
     plog!("FINAL", "Done. URL={} elements={}", url, elements.len());
@@ -821,5 +821,136 @@ mod b3_history_tests {
             vec!["https://two", "https://one"],
             "session history must actually reach the vayu renderer"
         );
+    }
+
+    // D1 attribution (throwaway diagnostic; run with:
+    // cargo test d1_attribute -- --ignored --nocapture)
+    #[test]
+    #[ignore]
+    fn d1_attribute_pipeline_cost() {
+        use std::sync::{Arc, Mutex};
+        use std::time::Instant;
+
+        use crate::engine::js::JsBridge;
+        use crate::engine::net;
+        use super::{apply_taffy_layout, extract_elements_flat};
+
+        let name = "d1attr";
+        let mut doc = String::from("<html><head>");
+        for c in ["a", "b", "c"] {
+            doc.push_str(&format!("<link rel=stylesheet href=\"mock://{name}/{c}.css\">"));
+        }
+        doc.push_str("</head><body><p>full pipeline body</p>");
+        for i in 0..6 {
+            doc.push_str(&format!("<img src=\"mock://{name}/i{i}\">"));
+        }
+        doc.push_str("</body></html>");
+
+        let img: Vec<u8> = vec![0u8; 2048];
+        let mut m = crate::engine::net::mock::MockHttpResponder::new()
+            .html(&format!("mock://{name}"), &doc);
+        for c in ["a", "b", "c"] {
+            m = m.css(&format!("mock://{name}/{c}.css"), "p{{color:red}}");
+        }
+        for i in 0..6 {
+            m = m.binary(format!("mock://{name}/i{i}").as_str(), img.clone());
+        }
+        crate::engine::net::mock::set_mock(m);
+        crate::engine::pipeline::set_js_enabled(false);
+
+        let url = format!("mock://{name}");
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("rt");
+
+        macro_rules! stage {
+            ($label:expr, $code:expr) => {{
+                let t = Instant::now();
+                let out = $code;
+                eprintln!("[stage] {}: {:?}", $label, t.elapsed());
+                out
+            }};
+        }
+
+        let body = {
+            let t = Instant::now();
+            let (b, _) = net::fetch(&url, None).expect("mock html");
+            eprintln!("[stage] doc fetch: {:?}", t.elapsed());
+            b
+        };
+
+        let dom_node = stage!("parse_html", crate::engine::parser::parse_html(&body));
+
+        let stylesheet = stage!("css x3 fetch+parse", {
+            let mut sheet = crate::engine::stratus::parse("");
+            for c in ["a", "b", "c"] {
+                if let Ok((css_body, _)) =
+                    net::fetch(&format!("mock://{name}/{c}.css"), Some(url.as_str()))
+                {
+                    sheet.rules.extend(crate::engine::stratus::parse(&css_body).rules);
+                }
+            }
+            sheet
+        });
+
+        let bridge: Arc<Mutex<JsBridge>> = stage!(
+            "JsBridge::load_dom",
+            Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)))
+        );
+
+        let flat_nodes = stage!("flat clone", {
+            let mut g = bridge.lock().unwrap_or_else(|e| e.into_inner());
+            g.nodes.clone()
+        });
+
+        let mut elements = Vec::with_capacity(flat_nodes.len().min(100_000));
+        elements = stage!("extract_elements_flat", {
+            let mut els = Vec::with_capacity(flat_nodes.len().min(100_000));
+            extract_elements_flat(&flat_nodes, &mut els, &stylesheet, 800.0, 600.0);
+            els
+        });
+
+        let _ = stage!("images x6 fetch+decode-attempt", {
+            for el in elements.iter_mut() {
+                el.image_url.take();
+            }
+            for i in 0..6 {
+                let _ = net::fetch_bytes(format!("mock://{name}/i{i}").as_str(), None);
+            }
+        });
+
+        let first_layout;
+        let second_layout;
+        {
+            let t = Instant::now();
+            apply_taffy_layout(&mut elements, 800.0, 600.0);
+            first_layout = t.elapsed();
+            let t = Instant::now();
+            apply_taffy_layout(&mut elements, 800.0, 600.0);
+            second_layout = t.elapsed();
+        }
+        eprintln!("[stage] layout FIRST : {first_layout:?}");
+        eprintln!("[stage] layout SECOND: {second_layout:?}");
+
+        let t = Instant::now();
+        let direct = do_fetch_page_content_sync(url.clone(), 800.0, 600.0, Vec::new());
+        eprintln!("[stage] DIRECT do_fetch sync: {:?}", t.elapsed());
+        let _ = &direct;
+        let prod1 = stage!("PROD fetch #1", {
+            rt.block_on(async {
+                crate::engine::pipeline::fetch_page_content(url.clone(), 800.0, 600.0, Vec::new())
+                    .await
+            })
+        });
+        let prod2 = stage!("PROD fetch #2", {
+            rt.block_on(async {
+                crate::engine::pipeline::fetch_page_content(url.clone(), 800.0, 600.0, Vec::new())
+                    .await
+            })
+        });
+        eprintln!("[stage] prod elements: {} / {}", prod1.1.len(), prod2.1.len());
+
+        crate::engine::net::mock::clear_mock();
     }
 }

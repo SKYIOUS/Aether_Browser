@@ -8,8 +8,6 @@ pub fn tab_bar(screen: &super::BrowserScreen) -> Element<'_, super::BrowserMessa
         let is_hovered = tab.is_hovered;
         let bg = if is_active { 
             Background::Color(C::page_bg()) 
-        } else if is_hovered { 
-            Background::Color(C::surface()) 
         } else { 
             Background::Color(C::surface()) 
         };

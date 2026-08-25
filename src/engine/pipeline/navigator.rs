@@ -89,7 +89,7 @@ impl Tab {
     }
     
     pub fn should_switch_on_hover(&self) -> bool {
-        self.is_hovered && self.hover_started.map_or(false, |start| start.elapsed().as_millis() >= 300)
+        self.is_hovered && self.hover_started.is_some_and(|start| start.elapsed().as_millis() >= 300)
     }
 }
 

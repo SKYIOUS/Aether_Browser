@@ -7,11 +7,14 @@ use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+// Type alias for the child map - defined at module level for use in DomSink
+type ChildMapTy = HashMap<*const RefCell<Node>, Vec<Rc<RefCell<Node>>>>;
+
 struct DomSink {
     document: Rc<RefCell<Node>>,
     qual_names: RefCell<Vec<html5ever::QualName>>,
     handle_to_index: RefCell<HashMap<*const std::cell::RefCell<Node>, usize>>,
-    children: RefCell<HashMap<*const std::cell::RefCell<Node>, Vec<Rc<RefCell<Node>>>>>,
+    children: RefCell<ChildMapTy>,
 }
 
 impl DomSink {

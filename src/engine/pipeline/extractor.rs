@@ -651,8 +651,8 @@ pub fn extract_elements(
                     el.image_url = elem.attributes.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
                 }
                 apply_media_defaults(tag.as_str(), &mut el);
-                if uses_default_margins {
-                    if el.margin_top == 0.0 { el.margin_top = default_top_margin(tag.as_str()); }
+                if uses_default_margins && el.margin_top == 0.0 {
+                    el.margin_top = default_top_margin(tag.as_str());
                 }
                 if !extra_input_type.is_empty() {
                     el.input_type = extra_input_type;
@@ -918,8 +918,8 @@ pub(crate) fn extract_elements_flat(
                 el.image_url = node.attrs.get("src").map(|v| decode_html_entities(v)).filter(|s| !s.is_empty());
             }
             apply_media_defaults(tag, &mut el);
-            if uses_default_margins {
-                if el.margin_top == 0.0 { el.margin_top = default_top_margin(tag); }
+            if uses_default_margins && el.margin_top == 0.0 {
+                el.margin_top = default_top_margin(tag);
             }
             let idx = elements.len();
             elements.push(el);

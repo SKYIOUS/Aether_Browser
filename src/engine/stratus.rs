@@ -382,7 +382,8 @@ fn try_parse_color<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Color, ()> {
             Color::from_hex(&hex).ok_or(())
         }
         Token::Ident(name) => {
-            Color::from_named(&name).ok_or(())
+            let name_lower = name.to_lowercase();
+            Color::from_named(&name_lower).ok_or(())
         }
         Token::Function(name) => {
             let name_lower = name.to_lowercase();
