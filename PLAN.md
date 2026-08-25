@@ -162,7 +162,13 @@ Wire what's half-built instead of adding new surface:
 
 ## Phase D — Performance & Advanced (post-fidelity)
 
-- Async reqwest (tokio) for parallel subresource fetches.
+- **D0 Measurement — DONE 2026-08-24** (`benches/pipeline.rs`, criterion;
+  baseline artifact `docs/benchmarks/2026-08-24-baseline.md`): benches for
+  parse/CSS/extract/layout/full-mock-fetch with median+CI recorded. Flags
+  carried into D1: full-fetch unexpectedly heavy at 2.28 s (attribute before
+  parallelising), delayed variant indistinguishable until then, and
+  taffy_5k_wrapped at 137 ms/frame is the dominant layout cost.
+- **D1 Async subresources** - restructure `fetch_page_content`: document fetch awaited first, then CSS/scripts/images fetched **concurrently** via tokio (`join_all` of async `fetch_resource`), feeding the existing sync processing. The architectural change AGENTS reserved for PLAN D; measured against D0.
 - `@font-face` + fontdb loading pipeline (cosmic-text already bundles fontdb).
 - CSS transitions/animations engine (rquickjs timers exist; needs interpolation).
 - Revisit `url` crate for RFC-correct resolution if edge cases bite.

@@ -36,6 +36,14 @@ precomputed-hash = "0.1"
 [profile.dev]
 overflow-checks = false
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+
+[[bench]]
+name = "pipeline"
+harness = false
+
 [features]
 default = ["content_size"]
 content_size = []

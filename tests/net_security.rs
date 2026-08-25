@@ -334,3 +334,25 @@ fn c3_allowed_to_allowed_redirect_still_loads() {
     assert_eq!(resp.body, ".b{}");
     assert_eq!(server.count(), 2);
 }
+
+// ?? D0 mock latency knob ???????????????????????????????????????????????????
+
+#[test]
+fn d0_mock_delay_applies_per_resolved_request() {
+    use std::time::Instant;
+    vayu_browser::engine::net::mock::set_mock(
+        vayu_browser::engine::net::mock::MockHttpResponder::new()
+            .delay_ms(120)
+            .html("mock://doc", "<p>x</p>"),
+    );
+    let start = Instant::now();
+    let first = vayu_browser::engine::net::fetch("mock://doc", None);
+    let first_elapsed = start.elapsed();
+
+    // Second fetch hits the HTTP cache above the mock: no second delay.
+    let second = vayu_browser::engine::net::fetch("mock://doc", None);
+
+    vayu_browser::engine::net::mock::clear_mock();
+    assert!(first.is_ok() && second.is_ok());
+    assert!(first_elapsed.as_millis() >= 120, "first fetch must pay the mock delay");
+}
