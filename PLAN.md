@@ -150,8 +150,13 @@ Wire what's half-built instead of adding new surface:
   for typed subresources, consulting the stored page policy pre-fetch AND on
   every redirect hop (violating hops are refused before the response is
   consumed). Fetcher migrated to it; js connect-src unchanged by design.
-- **C4 Fuzzing** - cargo-fuzz targets for HTML parse/TreeSink, CSS input
-  boundaries, URL resolution, A1 budget helpers.
+- **C4 Fuzzing — DONE 2026-08-24** (`fuzz/`, `tests/fuzz_corpus_tests.rs`,
+  CI `fuzz` job): four cargo-fuzz targets over the real entry points
+  (parse_html→TreeSink, stratus::parse, URL normalize/resolve/redirect gate,
+  A1 budget helpers) run in Linux CI on a pinned nightly, 60s each as a hard
+  gate; a deterministic adversarial-corpus suite exercises the same paths on
+  every platform with budget/boundary invariant asserts. libfuzzer-sys and
+  arbitrary recorded in future-crates.md (fuzz dev-crate only).
 - Sandboxing decision ADR: QuickJS capability policy choke point is documented
   in CONTEXT.md; decide process-isolation later, don't build now.
 

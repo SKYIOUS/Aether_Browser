@@ -1,0 +1,46 @@
+[package]
+name = "vayu-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.vayu-browser]
+path = ".."
+
+# Detached from the parent workspace on purpose: fuzzing builds with nightly
+# sanitizers and must not drag the browser's dependency graph into it.
+[workspace]
+
+[[bin]]
+name = "parse_html"
+path = "fuzz_targets/parse_html.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_css"
+path = "fuzz_targets/parse_css.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "url_resolution"
+path = "fuzz_targets/url_resolution.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "budget_helpers"
+path = "fuzz_targets/budget_helpers.rs"
+test = false
+doc = false
+bench = false

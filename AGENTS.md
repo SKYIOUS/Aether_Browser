@@ -130,10 +130,11 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 552 tests green
+- Status baseline (verified 2026-08-24, Windows local): 556 tests green
   (raw cargo-test totals double-count the lib block - src/main.rs re-runs it;
   per-phase deltas report focused suites plus this full-workspace figure); CI
-  gates fmt/clippy/test on Linux+Windows+macOS (`.github/workflows/ci.yml`).
+  gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job
+  (`fuzz/`, pinned nightly - not runnable locally on Windows-MSVC).
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a

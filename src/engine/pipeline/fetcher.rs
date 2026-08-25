@@ -29,14 +29,16 @@ const MAX_HTML_BYTES: usize = 5_000_000;
 const MAX_CSS_SOURCE_BYTES: usize = 500_000;
 const CSS_TOTAL_BUDGET_BYTES: usize = 8_000_000;
 
-fn trim_to_budget(s: &str, max_bytes: usize) -> &str {
+#[doc(hidden)]
+pub fn trim_to_budget(s: &str, max_bytes: usize) -> &str {
     if s.len() <= max_bytes { return s; }
     let mut end = max_bytes;
     while !s.is_char_boundary(end) { end -= 1; }
     &s[..end]
 }
 
-fn apply_html_budget(html: String, max_bytes: usize) -> String {
+#[doc(hidden)]
+pub fn apply_html_budget(html: String, max_bytes: usize) -> String {
     let end = trim_to_budget(&html, max_bytes).len();
     if end == html.len() { return html; }
     plog!("FETCH", "Truncated HTML from {} to {} bytes", html.len(), end);
@@ -52,7 +54,8 @@ fn apply_html_budget(html: String, max_bytes: usize) -> String {
 // one cumulative budget. Called once per external sheet, so under pressure a
 // later small sheet can outlive an earlier large skip — ceiling behavior,
 // not cascade-order fidelity.
-fn css_sources_within_total_budget<'a>(
+#[doc(hidden)]
+pub fn css_sources_within_total_budget<'a>(
     sources: &[&'a str],
     used_bytes: usize,
     budget: usize,

@@ -14,7 +14,7 @@ use crate::ui::style::C;
 // 800 to 544 bytes inline (guard test: styled_element_stays_slim). MAX_DEPTH
 // also bounds native-recursion depth in the walk fns; an explicit-stack walk
 // is the upgrade path if profiling ever pushes it higher.
-pub(crate) const MAX_ELEMENTS: usize = 100_000;
+pub const MAX_ELEMENTS: usize = 100_000;
 pub(crate) const MAX_DEPTH: usize = 200;
 const MAX_TEXT_LEN: usize = 64_000;
 

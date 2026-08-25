@@ -38,6 +38,8 @@ Adopt only when a PLAN phase names them; each needs a rationale here first.
 
 | Crate | Purpose | When |
 |---|---|---|
+| libfuzzer-sys | Coverage-guided fuzzing harness for parser/network entry points | Phase C4 - `fuzz/` dev-crate only, never a workspace dependency; targets run in Linux CI on a pinned nightly |
+| arbitrary | Structured input generation alongside libfuzzer-sys in the same fuzz dev-crate | Phase C4, same constraints as libfuzzer-sys |
 | lyon | Path tessellation for border-radius/clip-path GPU draws | Phase D+ |
 | clipper2 | Polygon boolean ops for non-trivial `clip-path` | Phase D+ |
 | swash | Low-level font ops for `@font-face` subsetting (cosmic-text bundles it transitively) | Phase D+ |

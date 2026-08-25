@@ -60,3 +60,25 @@ jobs:
 
       - name: Build docs
         run: cargo doc --no-deps
+
+  fuzz:
+    name: Fuzz (bounded)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Pinned nightly so a moving target cannot be confused with a fuzz
+      # finding; bump deliberately.
+      - name: Install pinned nightly
+        uses: dtolnay/rust-toolchain@nightly-2026-07-20
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run fuzz targets (60s each, hard gate)
+        run: |
+          for t in parse_html parse_css url_resolution budget_helpers; do
+            echo "=== fuzz: $t ==="
+            cargo fuzz run "$t" -- -max_total_time=60 -rss_limit_mb=2048
+          done
