@@ -280,10 +280,10 @@ fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
 fn error_page(url: &str, reason: &str, content_width: f32, viewport_h: f32, status: u16) -> Vec<StyledElement> {
     let pad = 24.0;
 let (red, title) = match status {
-        404 => (Color::from_rgb(0.88, 0.18, 0.18), "404 — Not Found".to_string()),
-        403 => (Color::from_rgb(0.88, 0.55, 0.18), "403 — Forbidden".to_string()),
-        500 => (Color::from_rgb(0.88, 0.18, 0.18), "500 — Server Error".to_string()),
-        _ => (Color::from_rgb(0.88, 0.18, 0.18), format!("{} — Error", status)),
+        404 => (Color::from_rgb(0.88, 0.18, 0.18), "404 - Not Found".to_string()),
+        403 => (Color::from_rgb(0.88, 0.55, 0.18), "403 - Forbidden".to_string()),
+        500 => (Color::from_rgb(0.88, 0.18, 0.18), "500 - Server Error".to_string()),
+        _ => (Color::from_rgb(0.88, 0.18, 0.18), format!("{} - Error", status)),
     };
     let bg = Color::from_rgb(0.13, 0.13, 0.13);
     let fg = Color::from_rgb(0.95, 0.95, 0.95);
@@ -511,7 +511,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
     let max_page_img_bytes: u64 = 256 * 1024 * 1024;
     let mut img_count = 0;
 
-    // D1: Phase 1 — collect all uncached image URLs.
+    // D1: Phase 1 - collect all uncached image URLs.
     let mut fetch_set: Vec<String> = Vec::new();
     for el in elements.iter() {
         if let Some(ref img_src) = el.image_url {
@@ -523,7 +523,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
         }
     }
 
-    // D1: Phase 2 — fetch all uncached images concurrently.
+    // D1: Phase 2 - fetch all uncached images concurrently.
     let fetched_bytes: Vec<(String, Option<Vec<u8>>)> = std::thread::scope(|scope| {
         let handles: Vec<_> = fetch_set.iter().map(|resolved| {
             let r = resolved.clone();
@@ -544,7 +544,7 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
         .filter_map(|(url, maybe)| maybe.map(|b| (url, b)))
         .collect();
 
-    // D1: Phase 3 — decode + assign sequentially (needs mutable elements).
+    // D1: Phase 3 - decode + assign sequentially (needs mutable elements).
     for el in elements.iter_mut() {
         let Some(ref img_src) = el.image_url else { continue; };
         let resolved = net::resolve_url(img_src, &url);
@@ -955,3 +955,49 @@ mod b3_history_tests {
         crate::engine::net::mock::clear_mock();
     }
 }
+
+    // D2-A: reproduce ~2.27s outside Criterion (run with --ignored --nocapture)
+    #[test]
+    #[ignore]
+    fn d2a_reproduce_outside_criterion() {
+        use std::time::Instant;
+
+        let name = "d2a";
+        let doc = format!(
+            "<html><head><link rel=stylesheet href=\"mock://{name}/a.css\">\
+             <link rel=stylesheet href=\"mock://{name}/b.css\"></head><body>\
+             <p>body</p><img src=\"mock://{name}/i1\">\
+             </body></html>"
+        );
+        let mut m = crate::engine::net::mock::MockHttpResponder::new().delay_ms(0)
+            .html(&format!("mock://{name}"), &doc)
+            .css(&format!("mock://{name}/a.css"), "p{color:red}")
+            .css(&format!("mock://{name}/b.css"), "p{color:blue}");
+        m = m.binary(format!("mock://{name}/i1").as_str(), vec![0u8; 64]);
+        crate::engine::net::mock::set_mock(m);
+        crate::engine::pipeline::set_js_enabled(false);
+
+        // Warm-up
+        let _ = do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![]);
+
+        // Timed: direct sync call, no criterion, no spawn_blocking, no async runtime
+        for i in 1..=5 {
+            let t = Instant::now();
+            let r = do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![]);
+            println!("[d2a] iter {}: {:?} ({} elements)", i, t.elapsed(), r.1.len());
+        }
+
+        // Also time with a tokio runtime + spawn_blocking wrapper (criterion path)
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        for i in 1..=5 {
+            let t = Instant::now();
+            let r = rt.block_on(async {
+                tokio::task::spawn_blocking(move || {
+                    do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![])
+                }).await.expect("spawn_blocking")
+            });
+            println!("[d2a] spawn_blocking {}: {:?} ({} elements)", i, t.elapsed(), r.1.len());
+        }
+
+        crate::engine::net::mock::clear_mock();
+    }
