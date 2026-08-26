@@ -136,6 +136,8 @@ invalidates a statement in these docs updates them in the same commit.
   gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job
   (`fuzz/`, pinned nightly - not runnable locally on Windows-MSVC).
   Performance baseline: docs/benchmarks/2026-08-24-baseline.md (`cargo bench`).
+  **D1 finding:** concurrency is functionally validated but provides no meaningful end-to-end speedup because the measured workload is dominated by an unexplained fixed ~2.27 s cost inside `do_fetch_page_content_sync`.
+  **D1 finding:** the ~137 ms 5k-element layout benchmark remains the strongest validated performance target.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a

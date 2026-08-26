@@ -690,38 +690,38 @@ fn fetch_inner_with_csp(
     top_level_navigation: bool,
     csp: Option<(ResourceKind, String)>,
 ) -> Result<Response, FetchError> {
-    let final_url = normalize_url(url);
-    plog!("net", "Fetching: {}", final_url);
-
-    // Check mock first - this enables testing without network calls
-    if let Some(body) = mock::resolve_html(&final_url) {
-        plog!("mock", "Serving HTML for {}", final_url);
+    // Mock interception must use the RAW url, before normalization mangles
+    // non-HTTP schemes (e.g. mock:// → https://mock://).
+    if let Some(body) = mock::resolve_html(url) {
+        plog!("mock", "Serving HTML for {}", url);
         return Ok(Response {
             body,
             status: 200,
             headers: HashMap::new(),
-            final_url: final_url.clone(),
+            final_url: url.to_string(),
         });
     }
-    if let Some(css) = mock::resolve_css(&final_url) {
-        plog!("mock", "Serving CSS for {}", final_url);
+    if let Some(css) = mock::resolve_css(url) {
+        plog!("mock", "Serving CSS for {}", url);
         return Ok(Response {
             body: css,
             status: 200,
             headers: HashMap::new(),
-            final_url: final_url.clone(),
+            final_url: url.to_string(),
         });
     }
-    if let Some(_body) = mock::resolve_binary(&final_url) {
-        plog!("mock", "Serving binary for {}", final_url);
+    if let Some(bytes) = mock::resolve_binary(url) {
+        plog!("mock", "Serving binary for {}", url);
         return Ok(Response {
-            body: String::new(),
+            body: String::from_utf8_lossy(&bytes).into_owned(),
             status: 200,
             headers: HashMap::new(),
-            final_url: final_url.clone(),
+            final_url: url.to_string(),
         });
     }
 
+    let final_url = normalize_url(url);
+    plog!("net", "Fetching: {}", final_url);
     let _start = std::time::Instant::now();
 
     let cookies = get_cookies_for_request(&final_url, initiator, top_level_navigation);

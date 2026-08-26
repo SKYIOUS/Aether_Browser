@@ -160,18 +160,20 @@ Wire what's half-built instead of adding new surface:
 - Sandboxing decision ADR: QuickJS capability policy choke point is documented
   in CONTEXT.md; decide process-isolation later, don't build now.
 
-## Phase D — Performance & Advanced (post-fidelity)
+## Phase D — Performance (measurement-driven)
 
-- **D0 Measurement — DONE 2026-08-24** (`benches/pipeline.rs`, criterion;
-  baseline artifact `docs/benchmarks/2026-08-24-baseline.md`): benches for
-  parse/CSS/extract/layout/full-mock-fetch with median+CI recorded. Flags
-  carried into D1: full-fetch unexpectedly heavy at 2.28 s (attribute before
-  parallelising), delayed variant indistinguishable until then, and
-  taffy_5k_wrapped at 137 ms/frame is the dominant layout cost.
-- **D1 Async subresources** - restructure `fetch_page_content`: document fetch awaited first, then CSS/scripts/images fetched **concurrently** via tokio (`join_all` of async `fetch_resource`), feeding the existing sync processing. The architectural change AGENTS reserved for PLAN D; measured against D0.
-- `@font-face` + fontdb loading pipeline (cosmic-text already bundles fontdb).
-- CSS transitions/animations engine (rquickjs timers exist; needs interpolation).
-- Revisit `url` crate for RFC-correct resolution if edge cases bite.
+> **Status:** D0/D1 done. D2 profiling is next — fresh session, profile-first.
+> **D1 finding:** concurrency works but is NOT the bottleneck — the workload
+> is dominated by an unexplained fixed ~2.27 s inside `do_fetch_page_content_sync`.
+> **D2 objective:** attribute that fixed cost, then independently profile layout.
+
+- **D0 Measurement — DONE** (`benches/pipeline.rs`, `docs/benchmarks/2026-08-24-baseline.md`)
+- **D1 Concurrency — DONE** (scoped-thread CSS + images; concurrency validated but not the bottleneck)
+- **D2-A: Validate the measurement path** — determine where the ~2.3 s actually comes from. Test outside Criterion too; direct sync call reproduces it, so Criterion overhead is only one hypothesis.
+- **D2-B: Profile layout independently** — separate text measurement → Taffy computation → wrapping → result application → paint. Use `cargo bench -- --profile-time=10` first; add pprof only if simpler routes are insufficient on Windows.
+- **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
+- **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
+  revisit `url` crate for RFC-correct resolution if edge cases bite.
 
 ## Known debt (do not fix opportunistically; schedule it)
 
