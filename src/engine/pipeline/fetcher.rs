@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::num::NonZeroUsize;
 use iced::Color;
@@ -377,64 +378,76 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
     } else {
         plog!("CSP", "Blocked all {} inline style block(s) (no 'unsafe-inline')", styles.len());
     }
-    plog!("CSS", "{} rules from inline styles, {} bytes of budget used", stylesheet.rules.len(), css_used);
+        plog!("CSS", "{} rules from inline styles, {} bytes of budget used", stylesheet.rules.len(), css_used);
 
     let mut link_urls = Vec::new();
     extract_links(&dom_node, &mut link_urls, 0);
     plog!("CSS", "Found {} external CSS links", link_urls.len());
-    for link_url in link_urls.iter() {
-        // Check before fetching: an exhausted budget must not download sheets
-        // only to discard them (net::fetch has no download-size cap).
-        if css_used >= CSS_TOTAL_BUDGET_BYTES {
-            plog!("CSS", "Total-CSS budget exhausted; skipping remaining external sheets");
-            break;
-        }
-        let resolved = net::resolve_url(link_url, &url);
-        if let Ok(mut cache) = css_cache().lock() {
-            if let Some((cached, cached_bytes)) = cache.get(&resolved) {
-                if css_used + cached_bytes > CSS_TOTAL_BUDGET_BYTES {
-                    plog!("CSS", "Total-CSS budget skipped cached sheet {}", resolved);
-                    continue;
-                }
-                plog!("CSS", "Cache HIT: {}", resolved);
-                stylesheet.rules.extend(cached.rules.clone());
-                css_used += cached_bytes;
-                continue;
-            }
-        }
-        plog!("CSS", "Fetching external CSS from {}", resolved);
-        // CSP authority (pre-fetch + every redirect hop) lives in net::fetch_resource.
-        match net::fetch_resource(&resolved, &page_url, net::ResourceKind::Style, Some(&url), false) {
-            Ok(resp) => {
-                if resp.status >= 400 {
-                    plog!("CSS", "External CSS HTTP error {} for {}", resp.status, resolved);
-                } else {
-                    let css_content = resp.body;
-                    let trimmed = {
-                        if css_content.len() > MAX_CSS_SOURCE_BYTES {
-                            plog!("CSS", "Trimmed external CSS from {} to {} bytes", css_content.len(), MAX_CSS_SOURCE_BYTES);
-                        }
-                        trim_to_budget(&css_content, MAX_CSS_SOURCE_BYTES)
-                    };
-                    let (kept, used_after) =
-                        css_sources_within_total_budget(&[trimmed], css_used, CSS_TOTAL_BUDGET_BYTES);
-                    if kept.is_empty() {
-                        plog!("CSS", "Total-CSS budget skipped external sheet {}", resolved);
+
+    // D1: fetch uncached sheets concurrently via scoped threads.
+    // Budget check happens before spawn (sequential); bodies are processed
+    // in document order after the scope joins.
+    let css_fetch_set: Vec<String> = {
+        let mut set = Vec::new();
+        for link_url in link_urls.iter() {
+            if css_used >= CSS_TOTAL_BUDGET_BYTES { break; }
+            let resolved = net::resolve_url(link_url, &url);
+            let mut cached_hit = false;
+            if let Ok(mut cache) = css_cache().lock() {
+                if let Some((cached, cached_bytes)) = cache.get(&resolved) {
+                    if css_used + *cached_bytes > CSS_TOTAL_BUDGET_BYTES {
                         continue;
                     }
-                    let parsed = crate::engine::stratus::parse(trimmed);
-                    if let Ok(mut cache) = css_cache().lock() {
-                        // ponytail: LruCache::put auto-evicts LRU entry when over capacity
-                        cache.put(resolved.clone(), (parsed.clone(), trimmed.len()));
-                    }
-                    let rules = parsed.rules;
-                    let count = rules.len();
-                    stylesheet.rules.extend(rules);
-                    css_used = used_after;
-                    plog!("CSS", "Parsed {} rules from external CSS", count);
+                    stylesheet.rules.extend(cached.rules.clone());
+                    css_used += *cached_bytes;
+                    cached_hit = true;
                 }
             }
-            Err(e) => { plog!("CSS", "Failed to fetch external CSS: {}", e); }
+            if !cached_hit { set.push(resolved); }
+        }
+        set
+    };
+    if !css_fetch_set.is_empty() {
+        let page_url_ref = &page_url;
+        let url_ref = &url;
+        let results: Vec<(String, std::result::Result<Vec<u8>, ()>)> = std::thread::scope(|scope| {
+            let handles: Vec<_> = css_fetch_set.iter().map(|resolved| {
+                let pu = page_url_ref;
+                let ur = url_ref;
+                scope.spawn(move || {
+                    match net::fetch_resource(resolved, pu, net::ResourceKind::Style, Some(ur), false) {
+                        Ok(resp) if resp.status < 400 => (resolved.clone(), Ok(resp.body.into_bytes())),
+                        Ok(resp) => {
+                            plog!("CSS", "External CSS HTTP error {} for {}", resp.status, resolved);
+                            (resolved.clone(), Err(()))
+                        }
+                        Err(e) => { plog!("CSS", "Failed to fetch external CSS: {}", e); (resolved.clone(), Err(())) }
+                    }
+                })
+            }).collect();
+            handles.into_iter().map(|h| h.join().expect("css fetch thread")).collect()
+        });
+        for (resolved, body_result) in results {
+            let Ok(css_bytes) = body_result else { continue };
+            let css_content = String::from_utf8_lossy(&css_bytes).into_owned();
+            if css_content.len() > MAX_CSS_SOURCE_BYTES {
+                plog!("CSS", "Trimmed external CSS from {} to {} bytes", css_content.len(), MAX_CSS_SOURCE_BYTES);
+            }
+            let trimmed = trim_to_budget(&css_content, MAX_CSS_SOURCE_BYTES);
+            let (kept, used_after) =
+                css_sources_within_total_budget(std::slice::from_ref(&trimmed), css_used, CSS_TOTAL_BUDGET_BYTES);
+            if kept.is_empty() {
+                plog!("CSS", "Total-CSS budget skipped external sheet {}", resolved);
+                continue;
+            }
+            let parsed = crate::engine::stratus::parse(trimmed);
+            if let Ok(mut cache) = css_cache().lock() {
+                cache.put(resolved.clone(), (parsed.clone(), trimmed.len()));
+            }
+            let count = parsed.rules.len();
+            stylesheet.rules.extend(parsed.rules);
+            css_used = used_after;
+            plog!("CSS", "Parsed {} rules from external CSS", count);
         }
     }
     plog!("CSS", "Total stylesheet rules: {}", stylesheet.rules.len());
@@ -495,125 +508,114 @@ fn do_fetch_page_content_sync(url: String, content_width: f32, viewport_h: f32, 
     // ponytail: per-page decoded image LRU, max 50 entries
     let mut img_cache: LruCache<String, (f32, f32, Handle)> = LruCache::new(NonZeroUsize::new(50).unwrap());
     let mut decoded_img_bytes: u64 = 0;
-    let max_page_img_bytes: u64 = 256 * 1024 * 1024; // 256MB page-level budget
+    let max_page_img_bytes: u64 = 256 * 1024 * 1024;
     let mut img_count = 0;
-    for el in elements.iter_mut() {
-        if let Some(ref img_src) = el.image_url.clone() {
+
+    // D1: Phase 1 — collect all uncached image URLs.
+    let mut fetch_set: Vec<String> = Vec::new();
+    for el in elements.iter() {
+        if let Some(ref img_src) = el.image_url {
             let resolved = net::resolve_url(img_src, &url);
+            if !img_cache.contains(&resolved) {
+                fetch_set.push(resolved);
+            }
             img_count += 1;
-            if let Some((w, hh, hnd)) = img_cache.get(&resolved).map(|(w, h, h2)| (*w, *h, h2.clone())) {
-                el.width = w;
-                el.height = hh;
-                el.image_handle = Some(hnd);
-                continue;
-            }
-            // CSP authority (pre-fetch + every redirect hop) lives in net.
-            let bytes = match net::fetch_resource(&resolved, &page_url, net::ResourceKind::Image, Some(&url), false) {
-                Ok(resp) => resp.body.into_bytes(),
-                Err(e) => {
-                    plog!("IMAGES", "Failed to fetch image: {}", e);
-                    continue;
+        }
+    }
+
+    // D1: Phase 2 — fetch all uncached images concurrently.
+    let fetched_bytes: Vec<(String, Option<Vec<u8>>)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = fetch_set.iter().map(|resolved| {
+            let r = resolved.clone();
+            let u = url.clone();
+            scope.spawn(move || {
+                match net::fetch_resource(&r, &u, net::ResourceKind::Image, Some(&u), false) {
+                    Ok(resp) => (r, Some(resp.body.into_bytes())),
+                    Err(e) => {
+                        plog!("IMAGES", "Failed to fetch image: {}", e);
+                        (r, None)
+                    }
                 }
-            };
-            if bytes.len() >= 5_000_000 {
-                plog!("IMAGES", "Image too large ({} bytes), skipping decode", bytes.len());
-                continue;
-            }
-            if is_svg_bytes(&bytes) {
-                if let Some(rgba) = decode_svg(&bytes) {
+            })
+        }).collect();
+        handles.into_iter().map(|h| h.join().expect("image fetch thread")).collect()
+    });
+    let fetched_map: HashMap<String, Vec<u8>> = fetched_bytes.into_iter()
+        .filter_map(|(url, maybe)| maybe.map(|b| (url, b)))
+        .collect();
+
+    // D1: Phase 3 — decode + assign sequentially (needs mutable elements).
+    for el in elements.iter_mut() {
+        let Some(ref img_src) = el.image_url else { continue; };
+        let resolved = net::resolve_url(img_src, &url);
+        if let Some((w, hh, hnd)) = img_cache.get(&resolved).map(|(w, h, h2)| (*w, *h, h2.clone())) {
+            el.width = w;
+            el.height = hh;
+            el.image_handle = Some(hnd);
+            continue;
+        }
+        let Some(bytes) = fetched_map.get(&resolved) else { continue };
+        if bytes.len() >= 5_000_000 {
+            plog!("IMAGES", "Image too large ({} bytes), skipping decode", bytes.len());
+            continue;
+        }
+
+        fn decode_and_resize(bytes: &[u8]) -> Option<(f32, f32, Handle)> {
+            if is_svg_bytes(bytes) {
+                decode_svg(bytes).map(|rgba| {
                     let (w, h) = rgba.dimensions();
-                    let decoded_bytes = w as u64 * h as u64 * 4;
-                    if decoded_bytes > SVG_MAX_BYTES {
-                        plog!("IMAGES", "SVG decoded size too large ({} bytes), skipping", decoded_bytes);
-                        continue;
-                    }
-                    decoded_img_bytes += decoded_bytes;
-                    if decoded_img_bytes > max_page_img_bytes {
-                        plog!("IMAGES", "Page image budget exceeded ({} bytes), skipping remaining", decoded_img_bytes);
-                        break;
-                    }
-                    let max_dim = 800.0;
-                    let scale = if (w as f32).max(h as f32) > max_dim {
-                        max_dim / (w as f32).max(h as f32)
-                    } else {
-                        1.0
-                    };
-                    let (fw, fh, handle) = if scale < 1.0 {
+                    let scale = if (w as f32).max(h as f32) > 800.0 { 800.0 / (w as f32).max(h as f32) } else { 1.0 };
+                    if scale < 1.0 {
                         let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
                         let (rw, rh) = resized.dimensions();
                         (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
                     } else {
                         (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
-                    };
-                    el.width = fw;
-                    el.height = fh;
-                    el.image_handle = Some(handle.clone());
-                    img_cache.put(resolved, (fw, fh, handle));
-                } else {
-                    plog!("IMAGES", "Failed to decode SVG ({} bytes), trying raster fallback", bytes.len());
-                    if let Ok(img) = image::load_from_memory(&bytes) {
+                    }
+                }).or_else(|| {
+                    image::load_from_memory(bytes).ok().map(|img| {
                         let rgba = img.to_rgba8();
                         let (w, h) = rgba.dimensions();
-                        let decoded_bytes = w as u64 * h as u64 * 4;
-                        if decoded_bytes <= SVG_MAX_BYTES && decoded_img_bytes + decoded_bytes <= max_page_img_bytes {
-                            decoded_img_bytes += decoded_bytes;
-                            let max_dim = 800.0;
-                            let scale = if (w as f32).max(h as f32) > max_dim {
-                                max_dim / (w as f32).max(h as f32)
-                            } else {
-                                1.0
-                            };
-                            let (fw, fh, handle) = if scale < 1.0 {
-                                let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
-                                let (rw, rh) = resized.dimensions();
-                                (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
-                            } else {
-                                (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
-                            };
-                            el.width = fw;
-                            el.height = fh;
-                            el.image_handle = Some(handle.clone());
-                            img_cache.put(resolved, (fw, fh, handle));
+                        let scale = if (w as f32).max(h as f32) > 800.0 { 800.0 / (w as f32).max(h as f32) } else { 1.0 };
+                        if scale < 1.0 {
+                            let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
+                            let (rw, rh) = resized.dimensions();
+                            (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
                         } else {
-                            plog!("IMAGES", "Raster fallback size too large, skipping");
+                            (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
                         }
-                    } else {
-                        plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
-                    }
-                }
-            } else if let Ok(img) = image::load_from_memory(&bytes) {
-                let rgba = img.to_rgba8();
-                let (w, h) = rgba.dimensions();
-                let decoded_bytes = w as u64 * h as u64 * 4;
-                if decoded_bytes > SVG_MAX_BYTES {
-                    plog!("IMAGES", "Raster decoded size too large ({} bytes), skipping", decoded_bytes);
-                    continue;
-                }
-                decoded_img_bytes += decoded_bytes;
-                if decoded_img_bytes > max_page_img_bytes {
-                    plog!("IMAGES", "Page image budget exceeded ({} bytes), skipping remaining", decoded_img_bytes);
-                    break;
-                }
-                let max_dim = 800.0;
-                let scale = if (w as f32).max(h as f32) > max_dim {
-                    max_dim / (w as f32).max(h as f32)
-                } else {
-                    1.0
-                };
-                let (fw, fh, handle) = if scale < 1.0 {
-                    let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
-                    let (rw, rh) = resized.dimensions();
-                    (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
-                } else {
-                    (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
-                };
-                el.width = fw;
-                el.height = fh;
-                el.image_handle = Some(handle.clone());
-                img_cache.put(resolved, (fw, fh, handle));
+                    })
+                })
             } else {
-                plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
+                image::load_from_memory(bytes).ok().map(|img| {
+                    let rgba = img.to_rgba8();
+                    let (w, h) = rgba.dimensions();
+                    let scale = if (w as f32).max(h as f32) > 800.0 { 800.0 / (w as f32).max(h as f32) } else { 1.0 };
+                    if scale < 1.0 {
+                        let resized = image::imageops::resize(&rgba, (w as f32 * scale) as u32, (h as f32 * scale) as u32, image::imageops::FilterType::Lanczos3);
+                        let (rw, rh) = resized.dimensions();
+                        (rw as f32, rh as f32, Handle::from_rgba(rw, rh, resized.into_raw()))
+                    } else {
+                        (w as f32, h as f32, Handle::from_rgba(w, h, rgba.into_raw()))
+                    }
+                })
             }
+        }
+
+        let decoded_bytes_estimate = bytes.len() as u64 * 4;
+        if decoded_img_bytes + decoded_bytes_estimate > max_page_img_bytes {
+            plog!("IMAGES", "Page image budget exceeded, skipping remaining");
+            continue;
+        }
+        decoded_img_bytes += decoded_bytes_estimate;
+
+        if let Some((fw, fh, handle)) = decode_and_resize(bytes) {
+            el.width = fw;
+            el.height = fh;
+            el.image_handle = Some(handle.clone());
+            img_cache.put(resolved, (fw, fh, handle));
+        } else {
+            plog!("IMAGES", "Failed to decode image bytes ({} bytes)", bytes.len());
         }
     }
     plog!("IMAGES", "Loaded {} images", img_count);
@@ -643,7 +645,6 @@ fn is_svg_bytes(bytes: &[u8]) -> bool {
 }
 
 const SVG_MAX_DIM: u32 = 4096;
-const SVG_MAX_BYTES: u64 = 67_108_864; // 64MB = 4096*4096*4
 const SVG_RENDER_TIMEOUT_MS: u64 = 5_000;
 
 fn decode_svg(bytes: &[u8]) -> Option<image::RgbaImage> {

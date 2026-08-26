@@ -821,6 +821,39 @@ fn fetch_inner_with_csp(
     Ok(Response { body, status, headers, final_url })
 }
 
+// ── D1: async wrappers for concurrent subresource fetching ──────────────────
+//
+// The underlying client is blocking, so each wrapper hops to spawn_blocking.
+// Concurrency comes from running N wrappers via join_all — each gets its own
+// blocking-pool thread and they genuinely overlap on network I/O.
+
+/// Async typed-subresource fetch (PLAN D1).
+pub async fn fetch_resource_async(
+    url: String,
+    page_origin: String,
+    kind: ResourceKind,
+    initiator: Option<String>,
+    top_level_navigation: bool,
+) -> Result<Response, FetchError> {
+    tokio::task::spawn_blocking(move || {
+        fetch_resource(url.trim(), page_origin.trim(), kind, initiator.as_deref(), top_level_navigation)
+    })
+    .await
+    .map_err(|e| FetchError::Network(format!("join error: {}", e)))?
+}
+
+/// Async binary fetch (PLAN D1).
+pub async fn fetch_bytes_async(
+    url: String,
+    initiator: Option<String>,
+) -> Result<Vec<u8>, FetchError> {
+    tokio::task::spawn_blocking(move || {
+        fetch_bytes(url.trim(), initiator.as_deref())
+    })
+    .await
+    .map_err(|e| FetchError::Network(format!("join error: {}", e)))?
+}
+
 pub fn is_same_origin(a: &str, b: &str) -> bool {
     let pa = parse_simple_url(a);
     let pb = parse_simple_url(b);
