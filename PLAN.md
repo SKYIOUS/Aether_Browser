@@ -169,8 +169,13 @@ Wire what's half-built instead of adding new surface:
 
 - **D0 Measurement — DONE** (`benches/pipeline.rs`, `docs/benchmarks/2026-08-24-baseline.md`)
 - **D1 Concurrency — DONE** (scoped-thread CSS + images; concurrency validated but not the bottleneck)
-- **D2-A: Validate the measurement path** — determine where the ~2.3 s actually comes from. Test outside Criterion too; direct sync call reproduces it, so Criterion overhead is only one hypothesis.
-- **D2-B: Profile layout independently** — separate text measurement → Taffy computation → wrapping → result application → paint. Use `cargo bench -- --profile-time=10` first; add pprof only if simpler routes are insufficient on Windows.
+- **D2-A: Validate the measurement path — DONE 2026-08-24** (`net/mod.rs`):
+  Root cause found and fixed — `normalize_url`/`resolve_url` mangled
+  `mock://` URLs into `https://mock://...` which missed mocks and hit real
+  DNS timeouts. Both functions now pass through any URL containing `://`.
+  Corrected baseline: full fetch ~7ms (was 2.28s), delayed ~108ms.
+- **D2-B: Profile layout independently** — text measurement → Taffy → wrapping → paint.
+  Font init confirmed: first call ~380ms, subsequent ~600µs, cached <20µs.
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
   revisit `url` crate for RFC-correct resolution if edge cases bite.
