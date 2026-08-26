@@ -941,7 +941,8 @@ pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchE
 }
 
 pub fn normalize_url(url: &str) -> String {
-    if url.starts_with("http://") || url.starts_with("https://") {
+    // Pass through recognized schemes including mock:// (used by tests).
+    if url.starts_with("http://") || url.starts_with("https://") || url.contains("://") {
         url.to_string()
     } else {
         let cleaned = url.trim_start_matches('/');
@@ -951,7 +952,9 @@ pub fn normalize_url(url: &str) -> String {
 
 /// Resolve a potentially relative URL against a base URL.
 pub fn resolve_url(url: &str, base_url: &str) -> String {
-    if url.starts_with("http://") || url.starts_with("https://") {
+    // Absolute URLs (including mock:// etc.) pass through unchanged.
+    if let Some(pos) = url.find("://") {
+        let _ = pos;
         return url.to_string();
     }
 

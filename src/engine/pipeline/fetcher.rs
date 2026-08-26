@@ -823,181 +823,74 @@ mod b3_history_tests {
             "session history must actually reach the vayu renderer"
         );
     }
-
-    // D1 attribution (throwaway diagnostic; run with:
-    // cargo test d1_attribute -- --ignored --nocapture)
+    // D2-B: font/text measurement profiling (run with --ignored --nocapture)
     #[test]
     #[ignore]
-    fn d1_attribute_pipeline_cost() {
-        use std::sync::{Arc, Mutex};
+    fn d2b_profile_font_and_layout() {
         use std::time::Instant;
+        use crate::engine::text::measure_text_width;
+        use super::super::extractor::{StyledElement, TextDecor, FontWeight, BoxSizing};
+        use super::{apply_taffy_layout};
+        use crate::engine::stratus::{Display, FlexDirection, FlexWrap, JustifyContent,
+            AlignItems, AlignSelf, Position};
+        use iced::Color;
 
-        use crate::engine::js::JsBridge;
-        use crate::engine::net;
-        use super::{apply_taffy_layout, extract_elements_flat};
+        // Phase 1: measure_text_width directly (outside Taffy entirely)
+        println!("\n=== D2-B: text measurement profiling ===");
+        let t = Instant::now();
+        let _w = measure_text_width("hello world", 16.0);
+        println!("[d2b] FIRST measure_text_width    : {:?}", t.elapsed());
 
-        let name = "d1attr";
-        let mut doc = String::from("<html><head>");
-        for c in ["a", "b", "c"] {
-            doc.push_str(&format!("<link rel=stylesheet href=\"mock://{name}/{c}.css\">"));
-        }
-        doc.push_str("</head><body><p>full pipeline body</p>");
-        for i in 0..6 {
-            doc.push_str(&format!("<img src=\"mock://{name}/i{i}\">"));
-        }
-        doc.push_str("</body></html>");
-
-        let img: Vec<u8> = vec![0u8; 2048];
-        let mut m = crate::engine::net::mock::MockHttpResponder::new()
-            .html(&format!("mock://{name}"), &doc);
-        for c in ["a", "b", "c"] {
-            m = m.css(&format!("mock://{name}/{c}.css"), "p{{color:red}}");
-        }
-        for i in 0..6 {
-            m = m.binary(format!("mock://{name}/i{i}").as_str(), img.clone());
-        }
-        crate::engine::net::mock::set_mock(m);
-        crate::engine::pipeline::set_js_enabled(false);
-
-        let url = format!("mock://{name}");
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("rt");
-
-        macro_rules! stage {
-            ($label:expr, $code:expr) => {{
-                let t = Instant::now();
-                let out = $code;
-                eprintln!("[stage] {}: {:?}", $label, t.elapsed());
-                out
-            }};
-        }
-
-        let body = {
+        for i in 1..=5 {
             let t = Instant::now();
-            let (b, _) = net::fetch(&url, None).expect("mock html");
-            eprintln!("[stage] doc fetch: {:?}", t.elapsed());
-            b
+            let _w = measure_text_width(&format!("iteration {i} unique text for measurement"), 16.0);
+            println!("[d2b] measure_text_width #{:<2}      : {:?}", i, t.elapsed());
+        }
+
+        for i in 1..=3 {
+            let t = Instant::now();
+            let _w = measure_text_width("hello world", 16.0);
+            println!("[d2b] measure_text_width cached#{:<2}: {:?}", i, t.elapsed());
+        }
+
+        // Phase 2: apply_taffy_layout on tiny elements
+        let make_el = |tag: &str, text: &str| StyledElement {
+            tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+            is_link: false, href: None, indent_level: 0, color: Color::BLACK,
+            font_size: 16.0, font_weight: FontWeight::Normal, background_color: None,
+            border_widths: [0.0; 4], border_color: None, image_handle: None,
+            image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None,
+            margin_right: None, padding: [0.0; 4], display: Display::Block,
+            flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
+            css_width: None, css_height: None, parent_index: None,
+            min_width: None, max_width: None, min_height: None, max_height: None,
+            x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4,
+            text_decoration: TextDecor::default(), border_radius: [0.0; 4],
+            input_type: String::new(), input_value: String::new(),
+            input_placeholder: String::new(), checked: false,
+            position: Position::Static, inset_top: 0.0, inset_right: 0.0,
+            inset_bottom: 0.0, inset_left: 0.0,
         };
 
-        let dom_node = stage!("parse_html", crate::engine::parser::parse_html(&body));
+        let mut elements = vec![
+            make_el("div", ""),
+            make_el("p", "full pipeline body"),
+            make_el("img", ""),
+            make_el("img", ""),
+        ];
 
-        let stylesheet = stage!("css x3 fetch+parse", {
-            let mut sheet = crate::engine::stratus::parse("");
-            for c in ["a", "b", "c"] {
-                if let Ok((css_body, _)) =
-                    net::fetch(&format!("mock://{name}/{c}.css"), Some(url.as_str()))
-                {
-                    sheet.rules.extend(crate::engine::stratus::parse(&css_body).rules);
-                }
-            }
-            sheet
-        });
-
-        let bridge: Arc<Mutex<JsBridge>> = stage!(
-            "JsBridge::load_dom",
-            Arc::new(Mutex::new(JsBridge::load_dom(&dom_node, &url)))
-        );
-
-        let flat_nodes = stage!("flat clone", {
-            let mut g = bridge.lock().unwrap_or_else(|e| e.into_inner());
-            g.nodes.clone()
-        });
-
-        let mut elements = Vec::with_capacity(flat_nodes.len().min(100_000));
-        elements = stage!("extract_elements_flat", {
-            let mut els = Vec::with_capacity(flat_nodes.len().min(100_000));
-            extract_elements_flat(&flat_nodes, &mut els, &stylesheet, 800.0, 600.0);
-            els
-        });
-
-        let _ = stage!("images x6 fetch+decode-attempt", {
+        println!("\n=== D2-B: apply_taffy_layout cold vs warm ===");
+        for i in 1..=5 {
             for el in elements.iter_mut() {
-                el.image_url.take();
+                el.x = 0.0; el.y = 0.0; el.width = 0.0; el.height = 0.0;
+                el.wrapped_lines.clear();
             }
-            for i in 0..6 {
-                let _ = net::fetch_bytes(format!("mock://{name}/i{i}").as_str(), None);
-            }
-        });
-
-        let first_layout;
-        let second_layout;
-        {
             let t = Instant::now();
             apply_taffy_layout(&mut elements, 800.0, 600.0);
-            first_layout = t.elapsed();
-            let t = Instant::now();
-            apply_taffy_layout(&mut elements, 800.0, 600.0);
-            second_layout = t.elapsed();
+            println!("[d2b] taffy_4_elements iter {:<2} : {:?}", i, t.elapsed());
         }
-        eprintln!("[stage] layout FIRST : {first_layout:?}");
-        eprintln!("[stage] layout SECOND: {second_layout:?}");
-
-        let t = Instant::now();
-        let direct = do_fetch_page_content_sync(url.clone(), 800.0, 600.0, Vec::new());
-        eprintln!("[stage] DIRECT do_fetch sync: {:?}", t.elapsed());
-        let _ = &direct;
-        let prod1 = stage!("PROD fetch #1", {
-            rt.block_on(async {
-                crate::engine::pipeline::fetch_page_content(url.clone(), 800.0, 600.0, Vec::new())
-                    .await
-            })
-        });
-        let prod2 = stage!("PROD fetch #2", {
-            rt.block_on(async {
-                crate::engine::pipeline::fetch_page_content(url.clone(), 800.0, 600.0, Vec::new())
-                    .await
-            })
-        });
-        eprintln!("[stage] prod elements: {} / {}", prod1.1.len(), prod2.1.len());
-
-        crate::engine::net::mock::clear_mock();
     }
 }
-
-    // D2-A: reproduce ~2.27s outside Criterion (run with --ignored --nocapture)
-    #[test]
-    #[ignore]
-    fn d2a_reproduce_outside_criterion() {
-        use std::time::Instant;
-
-        let name = "d2a";
-        let doc = format!(
-            "<html><head><link rel=stylesheet href=\"mock://{name}/a.css\">\
-             <link rel=stylesheet href=\"mock://{name}/b.css\"></head><body>\
-             <p>body</p><img src=\"mock://{name}/i1\">\
-             </body></html>"
-        );
-        let mut m = crate::engine::net::mock::MockHttpResponder::new().delay_ms(0)
-            .html(&format!("mock://{name}"), &doc)
-            .css(&format!("mock://{name}/a.css"), "p{color:red}")
-            .css(&format!("mock://{name}/b.css"), "p{color:blue}");
-        m = m.binary(format!("mock://{name}/i1").as_str(), vec![0u8; 64]);
-        crate::engine::net::mock::set_mock(m);
-        crate::engine::pipeline::set_js_enabled(false);
-
-        // Warm-up
-        let _ = do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![]);
-
-        // Timed: direct sync call, no criterion, no spawn_blocking, no async runtime
-        for i in 1..=5 {
-            let t = Instant::now();
-            let r = do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![]);
-            println!("[d2a] iter {}: {:?} ({} elements)", i, t.elapsed(), r.1.len());
-        }
-
-        // Also time with a tokio runtime + spawn_blocking wrapper (criterion path)
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-        for i in 1..=5 {
-            let t = Instant::now();
-            let r = rt.block_on(async {
-                tokio::task::spawn_blocking(move || {
-                    do_fetch_page_content_sync(format!("mock://{name}"), 800.0, 600.0, vec![])
-                }).await.expect("spawn_blocking")
-            });
-            println!("[d2a] spawn_blocking {}: {:?} ({} elements)", i, t.elapsed(), r.1.len());
-        }
-
-        crate::engine::net::mock::clear_mock();
-    }
