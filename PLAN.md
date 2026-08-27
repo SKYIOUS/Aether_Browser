@@ -194,8 +194,11 @@ Wire what's half-built instead of adding new surface:
   Paint instrumentation (D3) captures cache/invalidation/timing.
 - **E0: Measurement-volume attribution — DONE 2026-08-27** (`text.rs`):
   5k varied: 25,000 measure calls, 0% cache hit (512-entry LRU), 17.8s shaping.
-  Root cause: cache capacity << working set. Taffy floor: 293ms–3.8s when cached.
-- **E1: Measurement reuse** — pending (increase cache capacity / optimize wrap_text)
+  Root cause: cache capacity (512) << working set (~25k unique keys per page).
+- **E1-A: Cache capacity sensitivity — DONE 2026-08-27** (`text.rs`):
+  Benchmark working set = 2515 keys. Optimal capacity = 8192 (908ms, 2× speedup).
+  Taffy floor = 765ms. 16K regresses (LRU overhead).
+- **E1-B: wrap_text measurement reduction** — pending
 - **E2: Invalidation correctness** — pending
 - **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.

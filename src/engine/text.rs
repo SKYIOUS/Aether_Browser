@@ -21,9 +21,12 @@ fn font_system() -> &'static Mutex<FontSystem> {
 
 static MEASURE_CACHE: std::sync::OnceLock<Mutex<lru::LruCache<(String, u32), f32>>> = std::sync::OnceLock::new();
 
+// E1-A: cache capacity (change this and re-run to test different sizes)
+const MEASURE_CACHE_CAPACITY: usize = 8192;
+
 fn measure_cache() -> &'static Mutex<lru::LruCache<(String, u32), f32>> {
     MEASURE_CACHE.get_or_init(|| {
-        Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(512).unwrap()))
+        Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(MEASURE_CACHE_CAPACITY).unwrap()))
     })
 }
 
@@ -143,10 +146,10 @@ mod tests {
         assert!(w_wide > w_narrow, "proportional fonts should measure differently: {} vs {}", w_wide, w_narrow);
     }
 
-    // E0 instrumentation test
+    // E1-A: cache capacity sensitivity test
     #[test]
     #[ignore]
-    fn e0_measurement_volume() {
+    fn e1a_cache_capacity_sensitivity() {
         use crate::engine::pipeline::extractor::{StyledElement, TextDecor, FontWeight, BoxSizing};
         use crate::engine::stratus::{Display, FlexDirection, FlexWrap, JustifyContent,
             AlignItems, AlignSelf, Position};
@@ -176,56 +179,55 @@ mod tests {
             }
         }
 
-        fn run_case(name: &str, element_count: usize, varied_text: bool) {
-            e0_reset_counters();
-            
-            let mut elements: Vec<StyledElement> = Vec::with_capacity(element_count);
-            for i in 0..element_count {
-                let text = if varied_text {
-                    format!("Paragraph {} with unique text content for measurement purposes", i)
-                } else {
-                    "Shared text content".to_string()
-                };
-                elements.push(make_el("p", &text, 16.0));
-            }
-            
-            let text_elements = elements.iter().filter(|e| !e.text.is_empty()).count();
-            
-            let start = std::time::Instant::now();
-            apply_taffy_layout(&mut elements, 800.0, 600.0);
-            let total_ms = start.elapsed().as_secs_f64() * 1000.0;
-            
-            let (calls, hits, misses, buffers, shaping_ms, font_inits) = e0_get_summary();
-            
-            println!("\n=== E0: {} ({} elements, {} text) ===", name, element_count, text_elements);
-            println!("  total layout time:     {:.2} ms", total_ms);
-            println!("  text elements:         {}", text_elements);
-            println!("  measure calls:         {}", calls);
-            println!("  cache hits:            {} ({:.1}%)", hits, if calls > 0 { hits as f64 * 100.0 / calls as f64 } else { 0.0 });
-            println!("  cache misses:          {}", misses);
-            println!("  buffer constructions:  {}", buffers);
-            println!("  shaping time:          {:.2} ms", shaping_ms);
-            println!("  FontSystem inits:      {}", font_inits);
-            
-            // Taffy time ≈ total - shaping - overhead
-            let taffy_est = total_ms - shaping_ms;
-            println!("  Taffy+application est: {:.2} ms", taffy_est.max(0.0));
+        // E1-A: single capacity test (change MEASURE_CACHE_CAPACITY const and re-run)
+        const ELEMENT_COUNT: usize = 2500;
+        
+        e0_reset_counters();
+        
+        let mut elements: Vec<StyledElement> = Vec::with_capacity(ELEMENT_COUNT);
+        for i in 0..ELEMENT_COUNT {
+            // Match benchmark text pattern: "paragraph {i} wraps across the line because this sentence is long enough to split"
+            let text = format!("paragraph {} wraps across the line because this sentence is long enough to split", i);
+            elements.push(make_el("p", &text, 16.0));
         }
-
-        println!("\n=== E0 Measurement Volume Attribution ===");
         
-        // Cold runs
-        run_case("200 varied", 200, true);
-        run_case("2000 varied", 2000, true);
-        run_case("5000 varied", 5000, true);
+        let start = std::time::Instant::now();
+        apply_taffy_layout(&mut elements, 800.0, 600.0);
+        let total_ms = start.elapsed().as_secs_f64() * 1000.0;
         
-        // Warm runs (re-use cached measurements)
-        run_case("200 varied WARM", 200, true);
-        run_case("2000 varied WARM", 2000, true);
-        run_case("5000 varied WARM", 5000, true);
+        let (calls, hits, misses, buffers, shaping_ms, _) = e0_get_summary();
+        let hit_rate = if calls > 0 { hits as f64 * 100.0 / calls as f64 } else { 0.0 };
         
-        // Shared text runs (cache-friendly)
-        run_case("5000 shared", 5000, false);
-        run_case("5000 shared WARM", 5000, false);
+        println!("\n=== E1-A: Cache Capacity {} ({} elements, pass 1) ===", MEASURE_CACHE_CAPACITY, ELEMENT_COUNT);
+        println!("  measure calls:    {}", calls);
+        println!("  cache hits:       {} ({:.1}%)", hits, hit_rate);
+        println!("  cache misses:     {}", misses);
+        println!("  buffer consts:    {}", buffers);
+        println!("  shaping time:     {:.1} ms", shaping_ms);
+        println!("  total layout:     {:.1} ms", total_ms);
+        
+        // Pass 2: simulate navigation to different content
+        e0_reset_counters();
+        
+        let mut elements2: Vec<StyledElement> = Vec::with_capacity(ELEMENT_COUNT);
+        for i in 0..ELEMENT_COUNT {
+            let text = format!("different page paragraph {} wraps across the line because this sentence is long enough to split", i);
+            elements2.push(make_el("p", &text, 16.0));
+        }
+        
+        let start2 = std::time::Instant::now();
+        apply_taffy_layout(&mut elements2, 800.0, 600.0);
+        let total_ms2 = start2.elapsed().as_secs_f64() * 1000.0;
+        
+        let (calls2, hits2, misses2, buffers2, shaping_ms2, _) = e0_get_summary();
+        let hit_rate2 = if calls2 > 0 { hits2 as f64 * 100.0 / calls2 as f64 } else { 0.0 };
+        
+        println!("\n=== E1-A: Cache Capacity {} ({} elements, pass 2 - navigation) ===", MEASURE_CACHE_CAPACITY, ELEMENT_COUNT);
+        println!("  measure calls:    {}", calls2);
+        println!("  cache hits:       {} ({:.1}%)", hits2, hit_rate2);
+        println!("  cache misses:     {}", misses2);
+        println!("  buffer consts:    {}", buffers2);
+        println!("  shaping time:     {:.1} ms", shaping_ms2);
+        println!("  total layout:     {:.1} ms", total_ms2);
     }
 }
