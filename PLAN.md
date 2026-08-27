@@ -192,6 +192,12 @@ Wire what's half-built instead of adding new surface:
   Large DOM bottleneck: 5k elements = 5–6s (text measurement dominant).
   Concurrency validated: 2.1× speedup on multi-resource warm runs.
   Paint instrumentation (D3) captures cache/invalidation/timing.
+- **E0: Measurement-volume attribution — DONE 2026-08-27** (`text.rs`):
+  5k varied: 25,000 measure calls, 0% cache hit (512-entry LRU), 17.8s shaping.
+  Root cause: cache capacity << working set. Taffy floor: 293ms–3.8s when cached.
+- **E1: Measurement reuse** — pending (increase cache capacity / optimize wrap_text)
+- **E2: Invalidation correctness** — pending
+- **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
   revisit `url` crate for RFC-correct resolution if edge cases bite.
