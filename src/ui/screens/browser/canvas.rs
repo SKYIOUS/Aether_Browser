@@ -2,11 +2,64 @@
 use iced::mouse;
 use iced::{Point, Rectangle, Size};
 use std::sync::Arc;
+use std::time::Instant;
 use crate::engine::text::measure_text_width;
 use crate::plog;
 use super::BrowserMessage;
 use crate::engine::pipeline::extractor::{FontWeight, StyledElement, TextDecor};
 use crate::engine::stratus as css;
+
+// D3-A/B/C: Paint/animation profiling instrumentation
+#[derive(Default, Clone, Copy)]
+struct PaintProfile {
+    cache_hit: bool,
+    total_ms: f64,
+    geometry_ms: f64,
+    text_ms: f64,
+    image_ms: f64,
+    box_ms: f64,
+    form_ms: f64,
+    elements_drawn: usize,
+    elements_culled: usize,
+}
+
+thread_local! {
+    static LAST_PAINT: std::cell::RefCell<Option<Instant>> = const { std::cell::RefCell::new(None) };
+    static PAINT_COUNT: std::cell::RefCell<u64> = const { std::cell::RefCell::new(0) };
+    static CACHE_INVALIDATIONS: std::cell::RefCell<u64> = const { std::cell::RefCell::new(0) };
+    static LAST_INVALIDATION_REASON: std::cell::RefCell<Option<&'static str>> = const { std::cell::RefCell::new(None) };
+}
+
+fn record_paint(profile: PaintProfile) {
+    LAST_PAINT.with(|lp| *lp.borrow_mut() = Some(Instant::now()));
+    PAINT_COUNT.with(|c| *c.borrow_mut() += 1);
+    let count = PAINT_COUNT.with(|c| *c.borrow());
+    
+    if count % 60 == 1 || profile.total_ms > 16.0 {
+        let idle_ms = LAST_PAINT.with(|lp| {
+            lp.borrow().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
+        });
+        plog!("D3", "paint #{:>5} cache={} total={:.2}ms geom={:.2}ms text={:.2}ms img={:.2}ms box={:.2}ms form={:.2}ms drawn={} culled={} idle={}ms",
+            count,
+            if profile.cache_hit { "HIT" } else { "MISS" },
+            profile.total_ms, profile.geometry_ms, profile.text_ms, profile.image_ms, profile.box_ms, profile.form_ms,
+            profile.elements_drawn, profile.elements_culled, idle_ms);
+    }
+}
+
+fn record_invalidation(reason: &'static str) {
+    CACHE_INVALIDATIONS.with(|c| *c.borrow_mut() += 1);
+    LAST_INVALIDATION_REASON.with(|r| *r.borrow_mut() = Some(reason));
+    let count = CACHE_INVALIDATIONS.with(|c| *c.borrow());
+    if count % 10 == 1 {
+        plog!("D3", "cache invalidation #{}: {}", count, reason);
+    }
+}
+
+/// Public wrapper for cache invalidation tracking
+pub fn record_canvas_invalidation(reason: &'static str) {
+    record_invalidation(reason);
+}
 
 pub struct PageCanvas {
     pub elements: Arc<Vec<StyledElement>>,
@@ -113,16 +166,33 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         let size = bounds.size();
         let band_top = self.scroll_top;
         let band_bottom = self.scroll_top + self.viewport_h;
-        vec![self.cache.draw(renderer, size, |frame| {
-            plog!("DRAW", "Rendering {} elements into {:?}", self.elements.len(), size);
+        
+        let total_start = Instant::now();
+        let mut profile = PaintProfile::default();
+        
+        // Detect cache miss by checking if closure executes
+        let cache_miss = std::cell::RefCell::new(true);
+        
+        let geometry = self.cache.draw(renderer, size, |frame| {
+            cache_miss.replace(false);
+            let geom_start = Instant::now();
+            
             frame.fill_rectangle(Point::new(0.0, 0.0), size, iced::Color::WHITE);
-            for pos in self.band_window(band_top, band_bottom) {
+            
+            let window = self.band_window(band_top, band_bottom);
+            profile.elements_culled = self.elements.len().saturating_sub(window.len());
+            
+            for pos in window {
                 let i = self.cull.order[pos] as usize;
                 let el = &self.elements[i];
                 let (sy, ey) = painted_vertical_span(el);
                 if !in_band(sy, ey, band_top, band_bottom) { continue; }
                 if el.display == css::Display::None { continue; }
+                
+                profile.elements_drawn += 1;
+                
                 if let Some(ref handle) = el.image_handle {
+                    let img_start = Instant::now();
                     let iw = if el.width.is_finite() && el.width > 0.0 { el.width } else { 50.0 };
                     let ih = if el.height.is_finite() && el.height > 0.0 { el.height } else { 50.0 };
                     let ix = el.x.max(0.0);
@@ -130,7 +200,9 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     if ix.is_finite() && iy.is_finite() && iw.is_finite() && ih.is_finite() {
                         frame.draw_image(Rectangle::new(Point::new(ix, iy), Size::new(iw, ih)), CanvasImage::new(handle.clone()));
                     }
+                    profile.image_ms += img_start.elapsed().as_secs_f64() * 1000.0;
                 } else if matches!(el.tag.as_str(), "input" | "textarea" | "select" | "button") {
+                    let form_start = Instant::now();
                     let ex = if el.x.is_finite() { el.x.max(0.0) } else { 0.0 };
                     let ey = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
                     let ew = if el.width.is_finite() { el.width.max(60.0) } else { 200.0 };
@@ -157,7 +229,9 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                             ..Default::default()
                         });
                     }
+                    profile.form_ms += form_start.elapsed().as_secs_f64() * 1000.0;
                 } else {
+                    let box_start = Instant::now();
                     let bg = if matches!(el.tag.as_str(), "body" | "html") { None } else { el.background_color };
                     let bw = el.border_widths;
                     let bc = el.border_color;
@@ -175,6 +249,9 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                         if bw[3] > 0.0 { frame.fill_rectangle(Point::new(ex, ey), Size::new(bw[3], eh), color); }
                         if bw[1] > 0.0 { frame.fill_rectangle(Point::new(ex + ew - bw[1], ey), Size::new(bw[1], eh), color); }
                     }
+                    profile.box_ms += box_start.elapsed().as_secs_f64() * 1000.0;
+                    
+                    let text_start = Instant::now();
                     let weight = match el.font_weight {
                         FontWeight::Bold => iced::font::Weight::Bold,
                         FontWeight::Normal => iced::font::Weight::Normal,
@@ -210,9 +287,20 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                             }
                         }
                     }
+                    profile.text_ms += text_start.elapsed().as_secs_f64() * 1000.0;
                 }
             }
-        })]
+            
+            profile.geometry_ms = geom_start.elapsed().as_secs_f64() * 1000.0;
+        });
+        
+        let geometry = vec![geometry];
+        
+        profile.cache_hit = *cache_miss.borrow();
+        profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
+        record_paint(profile);
+        
+        geometry
     }
 
     fn update(
@@ -336,7 +424,7 @@ mod cull_tests {
         assert!(!in_band(100.0, f32::INFINITY, TOP, BOTTOM));
     }
 
-    // The window returned by the index must be a superset of the exact
+// The window returned by the index must be a superset of the exact
     // predicate over ALL spans — including the hard case of a tall early
     // container followed by short spans above the viewport.
     #[test]
@@ -361,5 +449,26 @@ mod cull_tests {
             }
         }
         assert!(win.end <= spans.len());
+    }
+
+    // D3 profiling infrastructure test
+    #[test]
+    fn d3_profiling_infrastructure() {
+        use crate::ui::screens::browser::canvas::{record_canvas_invalidation, CACHE_INVALIDATIONS, LAST_INVALIDATION_REASON};
+        
+        // Reset thread-local state
+        CACHE_INVALIDATIONS.with(|c| *c.borrow_mut() = 0);
+        LAST_INVALIDATION_REASON.with(|r| *r.borrow_mut() = None);
+        
+        // Record some invalidations
+        record_canvas_invalidation("test_reason_1");
+        record_canvas_invalidation("test_reason_2");
+        record_canvas_invalidation("test_reason_1");
+        
+        let count = CACHE_INVALIDATIONS.with(|c| *c.borrow());
+        assert_eq!(count, 3);
+        
+        let reason = LAST_INVALIDATION_REASON.with(|r| *r.borrow());
+        assert_eq!(reason, Some("test_reason_1"));
     }
 }

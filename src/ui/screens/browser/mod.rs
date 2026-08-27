@@ -355,6 +355,7 @@ Component SidebarWS {
                 self.styled_elements = Arc::new(elements);
                 self.layout_gen += 1;
                 self.page_canvas = Some(canvas::PageCanvas::new(Arc::clone(&self.styled_elements), self.inspect_element, self.bounds.1));
+                crate::ui::screens::browser::canvas::record_canvas_invalidation("navigation_new_canvas");
                 let page_title = bridge_opt.as_ref().and_then(|b| {
                     b.lock()
                         .ok()
@@ -389,6 +390,7 @@ Component SidebarWS {
                     let viewport_h = h;
                     apply_taffy_layout(&mut *Arc::make_mut(&mut self.styled_elements), content_w, viewport_h);
                     self.page_canvas = Some(canvas::PageCanvas::new(Arc::clone(&self.styled_elements), self.inspect_element, h));
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation("resize_new_canvas");
                 }
                 Task::none()
             }
@@ -627,6 +629,7 @@ Component SidebarWS {
                 if let Some(pc) = self.page_canvas.as_mut() {
                     pc.focused_index = None;
                     pc.cache.clear();
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation("inspect_toggle");
                 }
                 Task::none()
             }
@@ -635,6 +638,7 @@ Component SidebarWS {
                 if let Some(pc) = self.page_canvas.as_mut() {
                     pc.focused_index = Some(idx);
                     pc.cache.clear();
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation("inspect_element");
                 }
                 Task::none()
             }
@@ -650,6 +654,7 @@ Component SidebarWS {
                     if (pc.scroll_top - y).abs() > f32::EPSILON {
                         pc.scroll_top = y;
                         pc.cache.clear();
+                        crate::ui::screens::browser::canvas::record_canvas_invalidation("scroll");
                     }
                 }
                 Task::none()
