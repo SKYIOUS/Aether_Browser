@@ -140,6 +140,7 @@ invalidates a statement in these docs updates them in the same commit.
   **D2-B finding:** font init = ~380ms one-time (FontSystem::new), shaping = ~700µs/unique string, cached <20µs; Taffy layout on 4 elements = 1-15ms.
   **D1 finding:** concurrency is functionally validated but provides no meaningful end-to-end speedup because the measured workload was dominated by DNS timeouts (now fixed).
   **D1 finding:** the ~1.8s 5k-element layout benchmark remains the strongest validated performance target.
+  **Open finding:** HTML/CSS parsing regressed 2–4× vs the 2026-08-24 baseline (parse_html_small 362µs→1.87ms, parse_html_big_5k 169ms→612ms, parse_css_2k_rules 3.63ms→8.48ms); extraction/layout stable. Root cause unknown — requires independent profiling.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
