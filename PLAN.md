@@ -169,13 +169,16 @@ Wire what's half-built instead of adding new surface:
 
 - **D0 Measurement — DONE** (`benches/pipeline.rs`, `docs/benchmarks/2026-08-24-baseline.md`)
 - **D1 Concurrency — DONE** (scoped-thread CSS + images; concurrency validated but not the bottleneck)
-- **D2-A: Validate the measurement path — DONE 2026-08-24** (`net/mod.rs`):
+- **D2-A: Validate the measurement path — DONE 2026-08-27** (`net/mod.rs`):
   Root cause found and fixed — `normalize_url`/`resolve_url` mangled
   `mock://` URLs into `https://mock://...` which missed mocks and hit real
   DNS timeouts. Both functions now pass through any URL containing `://`.
-  Corrected baseline: full fetch ~7ms (was 2.28s), delayed ~108ms.
-- **D2-B: Profile layout independently** — text measurement → Taffy → wrapping → paint.
+  Corrected baseline: full fetch ~10.5ms (was 2.28s), delayed ~109ms.
+- **D2-B: Profile layout independently — DONE 2026-08-27** (`text.rs`, `fetcher.rs`):
   Font init confirmed: first call ~380ms, subsequent ~600µs, cached <20µs.
+  Taffy 4-element layout: 1-15ms. Layout is not the 2.7s bottleneck.
+- **D2-C: Re-baseline — DONE 2026-08-27** (`docs/benchmarks/2026-08-24-baseline.md`):
+  Documented corrected numbers; noted parsing regressions (unrelated to D2-A).
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
   revisit `url` crate for RFC-correct resolution if edge cases bite.

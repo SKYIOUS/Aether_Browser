@@ -130,15 +130,16 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-24, Windows local): 564 tests green
+- Status baseline (verified 2026-08-27, Windows local): 564 tests green
   (raw cargo-test totals double-count the lib block - src/main.rs re-runs it;
   per-phase deltas report focused suites plus this full-workspace figure); CI
   gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job
   (`fuzz/`, pinned nightly - not runnable locally on Windows-MSVC).
   Performance baseline: docs/benchmarks/2026-08-24-baseline.md (`cargo bench`).
-  **D2-A finding:** the original 2.28s `fetch_full_mock` benchmark was invalid — mock:// URLs were mangled by normalize_url/resolve_url into https://mock://... which missed mocks and hit real DNS timeouts. Fixed: both functions pass through non-HTTP schemes unchanged. Corrected baseline: full fetch ~7ms, delayed variant ~108ms.
-  **D1 finding:** concurrency is functionally validated but provides no meaningful end-to-end speedup because the measured workload is dominated by an unexplained fixed ~2.27 s cost inside `do_fetch_page_content_sync`.
-  **D1 finding:** the ~137 ms 5k-element layout benchmark remains the strongest validated performance target.
+  **D2-A finding:** the original 2.28s `fetch_full_mock` benchmark was invalid — mock:// URLs were mangled by normalize_url/resolve_url into https://mock://... which missed mocks and hit real DNS timeouts. Fixed: both functions pass through non-HTTP schemes unchanged. Corrected baseline: full fetch ~10.5ms, delayed variant ~109ms.
+  **D2-B finding:** font init = ~380ms one-time (FontSystem::new), shaping = ~700µs/unique string, cached <20µs; Taffy layout on 4 elements = 1-15ms.
+  **D1 finding:** concurrency is functionally validated but provides no meaningful end-to-end speedup because the measured workload was dominated by DNS timeouts (now fixed).
+  **D1 finding:** the ~1.8s 5k-element layout benchmark remains the strongest validated performance target.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
   `chore:`), atomic per concern, subject ≤72 chars; docs invalidated by a
