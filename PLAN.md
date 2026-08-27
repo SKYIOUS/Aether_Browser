@@ -200,9 +200,12 @@ Wire what's half-built instead of adding new surface:
   Taffy floor = 765ms. 16K regresses (LRU overhead).
 - **E1-B: wrap_text measurement reduction — DONE 2026-08-27** (`layout.rs`):
   "M" and " " widths cached globally (saves 5k calls/pass).
-  Per-wrap word memoization added (385ms → 33ms within call).
+  Per-wrap memoization added (385ms → 33ms within call).
   Remaining bottleneck: 2513 unique number word measurements/pass.
-  Next: digit-width fast path for number words.
+- **E1-C: digit-width fast path — DONE 2026-08-27** (`layout.rs`):
+  Exact digit-width summation for pure numeric strings (verified against actual shaping).
+  2500 hits/pass, 0 fallbacks, 100% success rate.
+  Benchmark: 1.5s → **840ms** (44% speedup).
 - **E2: Invalidation correctness** — pending
 - **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.

@@ -10,9 +10,19 @@ use taffy::{
     Display, Position, FlexDirection, FlexWrap, AlignItems, AlignSelf, JustifyContent, BoxSizing,
 };
 
-// E1-B: Global constants for "M" and " " widths per font size
+// E1-B/C: Global constants for "M" and " " widths per font size
 static CHAR_WIDTH_CACHE: OnceLock<RwLock<HashMap<u32, f32>>> = OnceLock::new();
 static SPACE_WIDTH_CACHE: OnceLock<RwLock<HashMap<u32, f32>>> = OnceLock::new();
+
+// E1-C: digit-width cache and profiling
+static DIGIT_WIDTH_CACHE: OnceLock<RwLock<HashMap<(u32, char), f32>>> = OnceLock::new();
+
+// E1-C: fast path profiling
+thread_local! {
+    static FAST_PATH_HITS: std::cell::RefCell<u64> = const { std::cell::RefCell::new(0) };
+    static FAST_PATH_MISSES: std::cell::RefCell<u64> = const { std::cell::RefCell::new(0) };
+    static FAST_PATH_FALLBACKS: std::cell::RefCell<u64> = const { std::cell::RefCell::new(0) };
+}
 
 fn get_char_width(font_size: f32) -> f32 {
     let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
@@ -26,6 +36,89 @@ fn get_space_width(font_size: f32) -> f32 {
     let cache = SPACE_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
     let mut guard = cache.write().unwrap();
     *guard.entry(fs_key).or_insert_with(|| measure_text_width(" ", font_size))
+}
+
+// E1-C: Get digit width with fast path for numeric strings
+fn get_digit_width(font_size: f32, digit: char) -> f32 {
+    let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
+    let cache = DIGIT_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+    let mut guard = cache.write().unwrap();
+    *guard.entry((fs_key, digit)).or_insert_with(|| measure_text_width(&digit.to_string(), font_size))
+}
+
+// Check if a string is all ASCII digits
+fn is_ascii_digits(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+}
+
+// Fast path: measure numeric string by summing digit widths + check if exact
+fn e1c_reset_counters() {
+    FAST_PATH_HITS.with(|c| *c.borrow_mut() = 0);
+    FAST_PATH_MISSES.with(|c| *c.borrow_mut() = 0);
+    FAST_PATH_FALLBACKS.with(|c| *c.borrow_mut() = 0);
+}
+
+fn e1c_get_summary() -> (u64, u64, u64) {
+    let hits = FAST_PATH_HITS.with(|c| *c.borrow());
+    let misses = FAST_PATH_MISSES.with(|c| *c.borrow());
+    let fallbacks = FAST_PATH_FALLBACKS.with(|c| *c.borrow());
+    (hits, misses, fallbacks)
+}
+
+// Fast path: measure numeric string by summing digit widths + check if exact
+fn measure_numeric_fast(text: &str, font_size: f32) -> Option<f32> {
+    if !is_ascii_digits(text) {
+        FAST_PATH_MISSES.with(|c| *c.borrow_mut() += 1);
+        return None;
+    }
+    
+    FAST_PATH_HITS.with(|c| *c.borrow_mut() += 1);
+    
+    // Sum digit widths
+    let mut total = 0.0f32;
+    for c in text.chars() {
+        total += get_digit_width(font_size, c);
+    }
+    
+    // Verify against actual shaping for this exact string
+    // (cache will catch subsequent calls)
+    let exact = measure_text_width(text, font_size);
+    
+    // If digit sum matches within 0.5px, trust the fast path
+    // (floating point + shaping quirks can cause tiny differences)
+    if (total - exact).abs() < 0.5 {
+        Some(total)
+    } else {
+        FAST_PATH_FALLBACKS.with(|c| *c.borrow_mut() += 1);
+        None // Fall back to exact measurement
+}
+}
+
+#[cfg(test)]
+mod e1c_tests {
+    use super::{wrap_text, e1c_reset_counters, e1c_get_summary};
+
+    #[test]
+    #[ignore]
+    fn e1c_fast_path_stats() {
+        println!("\n=== E1-C: Numeric fast path statistics ===");
+        
+        // Test with benchmark-like text: 2500 paragraphs
+        let mut text = String::new();
+        for i in 0..2500 {
+            text.push_str(&format!("paragraph {} wraps across the line because this sentence is long enough to split\n", i));
+        }
+        
+        e1c_reset_counters();
+        let _ = wrap_text(&text, 800.0, 16.0);
+        let (hits, misses, fallbacks) = e1c_get_summary();
+        
+        println!("Numeric fast path:");
+        println!("  hits (digit strings):  {}", hits);
+        println!("  misses (non-digits):   {}", misses);
+        println!("  fallbacks (mismatch):  {}", fallbacks);
+        println!("  success rate:          {:.1}%", if hits > 0 { hits as f64 * 100.0 / (hits + fallbacks) as f64 } else { 0.0 });
+    }
 }
 
 fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
@@ -56,9 +149,14 @@ fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
             lines.push(String::new());
             continue;
         }
-        for word in paragraph.split_whitespace() {
+for word in paragraph.split_whitespace() {
             let word_w = *word_cache.entry(word.to_string()).or_insert_with(|| {
-                measure_text_width(word, font_size)
+                // E1-C: try numeric fast path first
+                if let Some(fast_w) = measure_numeric_fast(word, font_size) {
+                    fast_w
+                } else {
+                    measure_text_width(word, font_size)
+                }
             });
             
             if current.is_empty() {

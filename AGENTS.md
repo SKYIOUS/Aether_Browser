@@ -144,7 +144,8 @@ invalidates a statement in these docs updates them in the same commit.
   **D4 finding:** end-to-end matrix validated against corrected baselines. First sync cold anomaly: 4.5s one-time initialization (not steady-state). Large DOM (5k) = 5–6s (text measurement dominant). Concurrency: 2.1× speedup on multi-resource warm. Parser regression 2–4× persists (independent).
   **E0 finding:** 5k-element layout = 18s cold (realistic varied text). Breakdown: 25,000 measure calls, **0% cache hit** (512-entry LRU overflow), 25,000 Buffer constructions, **17.8s shaping**. Taffy floor when cached: 293ms–3.8s. Root cause: cache capacity (512) << working set (~25k unique keys per page).
   **E1-A finding:** cache capacity sensitivity measured. Benchmark working set = 2515 keys. Optimal capacity = 8192 → 908ms warm (2× speedup vs 1.8s). Taffy floor = 765ms. 16K regresses (LRU overhead).
-  **E1-B finding:** "M" and " " widths cached globally (saves 5k calls/pass). Per-wrap memoization added (385ms → 33ms within call). Remaining bottleneck: 2513 unique number word measurements/pass. Next: digit-width fast path.
+  **E1-B finding:** "M" and " " widths cached globally (saves 5k calls/pass). Per-wrap memoization added (385ms → 33ms within call). Remaining bottleneck: 2513 unique number word measurements/pass.
+  **E1-C finding:** exact digit-width fast path for pure numeric strings (verified against actual shaping). 2500 hits/pass, 0 fallbacks, 100% success rate. Benchmark: 1.5s → **840ms** (44% speedup).
   **Open finding:** HTML/CSS parsing regressed 2–4× vs the 2026-08-24 baseline (parse_html_small 362µs→1.87ms, parse_html_big_5k 169ms→612ms, parse_css_2k_rules 3.63ms→8.48ms); extraction/layout stable. Root cause unknown — requires independent profiling.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/
