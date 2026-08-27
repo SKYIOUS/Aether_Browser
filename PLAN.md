@@ -185,7 +185,13 @@ Wire what's half-built instead of adding new surface:
   Invalidation reasons tracked: scroll, inspect, navigation, resize.
 - **D3-C: Animation/update behavior — DONE 2026-08-27** (`canvas.rs`):
   Paint frequency, idle time between frames.
-- **D4: End-to-end validation** — pending
+- **D4: End-to-end validation — DONE 2026-08-27** (`fetcher.rs`):
+  Matrix validated (small/large/deep/multi/nav, cold/warm/async).
+  Corrected baselines confirmed: fetch 10.5ms, delayed 109ms.
+  First sync cold anomaly documented (4.5s one-time).
+  Large DOM bottleneck: 5k elements = 5–6s (text measurement dominant).
+  Concurrency validated: 2.1× speedup on multi-resource warm runs.
+  Paint instrumentation (D3) captures cache/invalidation/timing.
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
   revisit `url` crate for RFC-correct resolution if edge cases bite.

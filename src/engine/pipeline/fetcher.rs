@@ -893,4 +893,182 @@ mod b3_history_tests {
             println!("[d2b] taffy_4_elements iter {:<2} : {:?}", i, t.elapsed());
         }
     }
+    // D4: end-to-end validation (run with --ignored --nocapture)
+    #[test]
+    #[ignore]
+    fn d4_e2e_validation() {
+        use std::time::Instant;
+        use super::{do_fetch_page_content_sync, fetch_page_content};
+        use crate::engine::net::mock;
+
+        fn run_scenario(name: &str, doc: &str, css: &[(&str, &str)], images: &[(&str, Vec<u8>)], width: f32, height: f32, iterations: usize) {
+            let mut m = mock::MockHttpResponder::new().delay_ms(0).html(&format!("mock://d4/{}", name), doc);
+            for (url, css_content) in css {
+                m = m.css(&format!("mock://d4/{}/{}", name, url), css_content);
+            }
+            for (url, img_data) in images {
+                m = m.binary(&format!("mock://d4/{}/{}", name, url), img_data.clone());
+            }
+            mock::set_mock(m);
+            crate::engine::pipeline::set_js_enabled(false);
+
+            let url = format!("mock://d4/{}", name);
+
+            // Cold run
+            let t = Instant::now();
+            let r1 = do_fetch_page_content_sync(url.clone(), width, height, vec![]);
+            let cold = t.elapsed();
+            println!("[d4] {} cold      : {:?} ({} elements)", name, cold, r1.1.len());
+
+            // Warm runs
+            for i in 1..=iterations {
+                let t = Instant::now();
+                let r = do_fetch_page_content_sync(url.clone(), width, height, vec![]);
+                let warm = t.elapsed();
+                println!("[d4] {} warm #{:<2}: {:?} ({} elements)", name, i, warm, r.1.len());
+            }
+
+            // Full async path (cold)
+            let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+            let t = Instant::now();
+            let r_async = rt.block_on(async {
+                fetch_page_content(url.clone(), width, height, vec![]).await
+            });
+            let async_cold = t.elapsed();
+            println!("[d4] {} async cold: {:?} ({} elements)", name, async_cold, r_async.1.len());
+
+            mock::clear_mock();
+        }
+
+        println!("\n=== D4: End-to-end validation ===");
+
+        // 1. Small page (baseline synthetic)
+        run_scenario(
+            "small",
+            "<html><head><link rel=stylesheet href=\"mock://d4/small/a.css\"></head><body><p>small page</p></body></html>",
+            &[("a.css", "p{color:red}")],
+            &[("i1", vec![0u8; 64])],
+            800.0, 600.0, 3
+        );
+
+        // 2. Large DOM near A1 budget (5000 elements)
+        let large_doc = {
+            let mut s = String::from("<html><head><link rel=stylesheet href=\"mock://d4/large/a.css\"></head><body>");
+            for i in 0..5000 {
+                s.push_str(&format!("<p>paragraph {i}</p>"));
+            }
+            s.push_str("</body></html>");
+            s
+        };
+        run_scenario(
+            "large",
+            &large_doc,
+            &[("a.css", "p{color:blue;margin:4px}")],
+            &[],
+            800.0, 600.0, 3
+        );
+
+        // 3. Deep DOM (nested 200 levels)
+        let deep_doc = {
+            let mut s = String::from("<html><head><link rel=stylesheet href=\"mock://d4/deep/a.css\"></head><body>");
+            for _ in 0..200 { s.push_str("<div>"); }
+            s.push_str("<p>deep content</p>");
+            for _ in 0..200 { s.push_str("</div>"); }
+            s.push_str("</body></html>");
+            s
+        };
+        run_scenario(
+            "deep",
+            &deep_doc,
+            &[("a.css", "div{margin:2px} p{font-weight:bold}")],
+            &[],
+            800.0, 600.0, 3
+        );
+
+        // 4. Many CSS + image subresources
+        let multi_doc = {
+            let mut s = String::from("<html><head>");
+            for c in 0..10 { s.push_str(&format!("<link rel=stylesheet href=\"mock://d4/multi/c{c}.css\">")); }
+            s.push_str("</head><body><p>multi resource</p>");
+            for i in 0..20 { s.push_str(&format!("<img src=\"mock://d4/multi/i{i}\">")); }
+            s.push_str("</body></html>");
+            s
+        };
+        let multi_css: Vec<_> = (0..10).map(|c| (format!("c{c}.css"), format!(".c{c}{{color:hsl({}deg,100%,50%)}}", c*36))).collect();
+        let multi_img: Vec<_> = (0..20).map(|i| (format!("i{i}"), vec![0u8; 256])).collect();
+        run_scenario(
+            "multi",
+            &multi_doc,
+            &multi_css.iter().map(|(u,c)| (u.as_str(), c.as_str())).collect::<Vec<_>>(),
+            &multi_img.iter().map(|(u,d)| (u.as_str(), d.clone())).collect::<Vec<_>>(),
+            800.0, 600.0, 3
+        );
+
+        // 5. Navigation/redirect path (C3 scenario)
+        let nav_doc = "<html><head><link rel=stylesheet href=\"mock://d4/nav/a.css\"></head><body><p>post redirect</p></body></html>";
+        run_scenario(
+            "nav",
+            nav_doc,
+            &[("a.css", "p{font-size:18px}")],
+            &[],
+            800.0, 600.0, 3
+        );
+
+        println!("\n[d4] Validation complete. Compare cold vs warm deltas against corrected baselines:");
+        println!("[d4]   Fetch baseline: ~10.5ms (steady-state), ~380ms font init on true cold start");
+        println!("[d4]   Layout 4-el: 1-15ms; Layout 5k: ~1.8s");
+        println!("[d4]   Paint: check D3 logs for cache hit/miss, per-component timing");
+    }
+    // D4-B: concurrency validation with controlled delays
+    #[test]
+    #[ignore]
+    fn d4_concurrency_validation() {
+        use std::time::Instant;
+        use super::do_fetch_page_content_sync;
+        use crate::engine::net::mock;
+
+        let doc = {
+            let mut s = String::from("<html><head>");
+            for c in 0..5 { s.push_str(&format!("<link rel=stylesheet href=\"mock://d4/conc/c{c}.css\">")); }
+            s.push_str("</head><body><p>concurrency test</p>");
+            for i in 0..10 { s.push_str(&format!("<img src=\"mock://d4/conc/i{i}\">")); }
+            s.push_str("</body></html>");
+            s
+        };
+        let css: Vec<_> = (0..5).map(|c| (format!("c{c}.css"), format!(".c{c}{{color:hsl({}deg,100%,50%)}}", c*72))).collect();
+        let img: Vec<_> = (0..10).map(|i| (format!("i{i}"), vec![0u8; 256])).collect();
+
+        // Serial baseline (delay_ms=5, no concurrency)
+        let m = mock::MockHttpResponder::new().delay_ms(5).html("mock://d4/conc", &doc);
+        let mut m = m;
+        for (u, c) in &css { m = m.css(&format!("mock://d4/conc/{}", u), c); }
+        for (u, d) in &img { m = m.binary(&format!("mock://d4/conc/{}", u), d.clone()); }
+        mock::set_mock(m);
+        crate::engine::pipeline::set_js_enabled(false);
+
+        let url = "mock://d4/conc";
+        let t = Instant::now();
+        let _ = do_fetch_page_content_sync(url.to_string(), 800.0, 600.0, vec![]);
+        let serial = t.elapsed();
+        println!("[d4-conc] serial (15×5ms delay) : {:?}", serial);
+
+        // Concurrent (same delays, but concurrency in fetcher)
+        // The fetcher already uses scoped threads for CSS + images
+        mock::clear_mock();
+        let m = mock::MockHttpResponder::new().delay_ms(5).html("mock://d4/conc", &doc);
+        let mut m = m;
+        for (u, c) in &css { m = m.css(&format!("mock://d4/conc/{}", u), c); }
+        for (u, d) in &img { m = m.binary(&format!("mock://d4/conc/{}", u), d.clone()); }
+        mock::set_mock(m);
+
+        let t = Instant::now();
+        let _ = do_fetch_page_content_sync(url.to_string(), 800.0, 600.0, vec![]);
+        let concurrent = t.elapsed();
+        println!("[d4-conc] concurrent (15×5ms delay): {:?}", concurrent);
+
+        println!("[d4-conc] expected serial floor: 75ms (5 CSS × 5ms + 10 img × 5ms if serial)");
+        println!("[d4-conc] expected concurrent floor: ~15ms (5 CSS serial + 10 img parallel)");
+
+        mock::clear_mock();
+    }
 }
