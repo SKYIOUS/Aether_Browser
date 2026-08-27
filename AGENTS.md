@@ -130,7 +130,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-27, Windows local): 565 tests green
+- Status baseline (verified 2026-08-27, Windows local): 576 tests green
   (raw cargo-test totals double-count the lib block - src/main.rs re-runs it;
   per-phase deltas report focused suites plus this full-workspace figure); CI
   gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job
@@ -146,6 +146,7 @@ invalidates a statement in these docs updates them in the same commit.
   **E1-A finding:** cache capacity sensitivity measured. Benchmark working set = 2515 keys. Optimal capacity = 8192 → 908ms warm (2× speedup vs 1.8s). Taffy floor = 765ms. 16K regresses (LRU overhead).
   **E1-B finding:** "M" and " " widths cached globally (saves 5k calls/pass). Per-wrap memoization added (385ms → 33ms within call). Remaining bottleneck: 2513 unique number word measurements/pass.
   **E1-C finding:** exact digit-width fast path for pure numeric strings (verified against actual shaping). 2500 hits/pass, 0 fallbacks, 100% success rate. Benchmark: 1.5s → **840ms** (44% speedup). Text measurement no longer dominant; Taffy floor ~765ms exposed.
+  **E2 finding:** 11 invalidation tests pass. Cache key fixed to (text, font_size, weight_placeholder). Identical inputs reuse cache; text/font_size changes invalidate; font_weight/width/viewport correctly do NOT invalidate measurement (drawing/wrapping concerns); navigation preserves cache; numeric fast path obeys same rules; LRU eviction works.
   **Open finding:** HTML/CSS parsing regressed 2–4× vs the 2026-08-24 baseline (parse_html_small 362µs→1.87ms, parse_html_big_5k 169ms→612ms, parse_css_2k_rules 3.63ms→8.48ms); extraction/layout stable. Root cause unknown — requires independent profiling.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/

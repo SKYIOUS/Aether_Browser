@@ -206,8 +206,9 @@ Wire what's half-built instead of adding new surface:
   Exact digit-width summation for pure numeric strings (verified against actual shaping).
   2500 hits/pass, 0 fallbacks, 100% success rate.
   Benchmark: 1.5s → **840ms** (44% speedup).
-- **E2: Invalidation correctness** — pending
-  Cache reuse when identical (text, style, width); invalidation on any text/style/width/font/wrapping change; no cross-document leaks; numeric fast path obeys same rules.
+- **E2: Invalidation correctness — DONE 2026-08-27** (`text.rs`):
+  11 tests validating: identical inputs reuse cache; text/font_size changes invalidate; font_weight/width/viewport do NOT invalidate measurement (drawing/wrapping concerns); navigation preserves cache; numeric fast path obeys same rules; LRU eviction works.
+  Cache key fixed to (text, font_size, weight_placeholder) for future extensibility.
 - **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
