@@ -207,6 +207,7 @@ Wire what's half-built instead of adding new surface:
   2500 hits/pass, 0 fallbacks, 100% success rate.
   Benchmark: 1.5s → **840ms** (44% speedup).
 - **E2: Invalidation correctness** — pending
+  Cache reuse when identical (text, style, width); invalidation on any text/style/width/font/wrapping change; no cross-document leaks; numeric fast path obeys same rules.
 - **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
