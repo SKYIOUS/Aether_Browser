@@ -130,7 +130,7 @@ invalidates a statement in these docs updates them in the same commit.
 ## Commands
 - Build: `cargo build` · Run: `cargo run`
 - Tests: `cargo test` · single: `cargo test <name>`
-- Status baseline (verified 2026-08-27, Windows local): 564 tests green
+- Status baseline (verified 2026-08-27, Windows local): 565 tests green
   (raw cargo-test totals double-count the lib block - src/main.rs re-runs it;
   per-phase deltas report focused suites plus this full-workspace figure); CI
   gates fmt/clippy/test on Linux+Windows+macOS plus a bounded Linux fuzz job
@@ -140,6 +140,7 @@ invalidates a statement in these docs updates them in the same commit.
   **D2-B finding:** font init = ~380ms one-time (FontSystem::new), shaping = ~700µs/unique string, cached <20µs; Taffy layout on 4 elements = 1-15ms.
   **D1 finding:** concurrency is functionally validated but provides no meaningful end-to-end speedup because the measured workload was dominated by DNS timeouts (now fixed).
   **D1 finding:** the ~1.8s 5k-element layout benchmark remains the strongest validated performance target.
+  **D3 finding:** paint instrumentation deployed — cache hit/miss, per-component timing (geometry/text/image/box/form), culling stats, idle time, invalidation reasons (scroll/inspect/navigation/resize).
   **Open finding:** HTML/CSS parsing regressed 2–4× vs the 2026-08-24 baseline (parse_html_small 362µs→1.87ms, parse_html_big_5k 169ms→612ms, parse_css_2k_rules 3.63ms→8.48ms); extraction/layout stable. Root cause unknown — requires independent profiling.
   Update this figure in the same commit that adds or removes tests.
 - Commits: conventional prefixes (`feat:`/`fix:`/`docs:`/`refactor:`/

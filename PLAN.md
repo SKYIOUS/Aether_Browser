@@ -179,7 +179,12 @@ Wire what's half-built instead of adding new surface:
   Taffy 4-element layout: 1-15ms. Layout is not the 2.7s bottleneck.
 - **D2-C: Re-baseline — DONE 2026-08-27** (`docs/benchmarks/2026-08-24-baseline.md`):
   Documented corrected numbers; noted parsing regressions (unrelated to D2-A).
-- **D3: Paint/animation profiling** — pending
+- **D3-A: Paint attribution — DONE 2026-08-27** (`canvas.rs`):
+  Geometry/text/image/box/form timing; cache hit/miss; elements drawn/culled.
+- **D3-B: Cache behavior — DONE 2026-08-27** (`canvas.rs`, `mod.rs`):
+  Invalidation reasons tracked: scroll, inspect, navigation, resize.
+- **D3-C: Animation/update behavior — DONE 2026-08-27** (`canvas.rs`):
+  Paint frequency, idle time between frames.
 - **D4: End-to-end validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
