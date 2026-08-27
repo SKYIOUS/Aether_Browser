@@ -196,9 +196,13 @@ Wire what's half-built instead of adding new surface:
   5k varied: 25,000 measure calls, 0% cache hit (512-entry LRU), 17.8s shaping.
   Root cause: cache capacity (512) << working set (~25k unique keys per page).
 - **E1-A: Cache capacity sensitivity — DONE 2026-08-27** (`text.rs`):
-  Benchmark working set = 2515 keys. Optimal capacity = 8192 (908ms, 2× speedup).
+  Benchmark working set = 2515 keys. Optimal capacity = 8192 (908ms warm, 1.5s median with cold start).
   Taffy floor = 765ms. 16K regresses (LRU overhead).
-- **E1-B: wrap_text measurement reduction** — pending
+- **E1-B: wrap_text measurement reduction — DONE 2026-08-27** (`layout.rs`):
+  "M" and " " widths cached globally (saves 5k calls/pass).
+  Per-wrap word memoization added (385ms → 33ms within call).
+  Remaining bottleneck: 2513 unique number word measurements/pass.
+  Next: digit-width fast path for number words.
 - **E2: Invalidation correctness** — pending
 - **E3: Large-page validation** — pending
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.

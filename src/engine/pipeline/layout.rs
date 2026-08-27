@@ -2,24 +2,50 @@ use super::extractor::{BoxSizing as ElBoxSizing, StyledElement};
 use crate::engine::stratus as css;
 use crate::engine::text::measure_text_width;
 use crate::plog;
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
 use taffy::{
     TaffyTree, Style, NodeId, AvailableSpace, Size as TaffySize,
     Dimension, LengthPercentage, LengthPercentageAuto,
     Display, Position, FlexDirection, FlexWrap, AlignItems, AlignSelf, JustifyContent, BoxSizing,
 };
 
+// E1-B: Global constants for "M" and " " widths per font size
+static CHAR_WIDTH_CACHE: OnceLock<RwLock<HashMap<u32, f32>>> = OnceLock::new();
+static SPACE_WIDTH_CACHE: OnceLock<RwLock<HashMap<u32, f32>>> = OnceLock::new();
+
+fn get_char_width(font_size: f32) -> f32 {
+    let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
+    let cache = CHAR_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+    let mut guard = cache.write().unwrap();
+    *guard.entry(fs_key).or_insert_with(|| measure_text_width("M", font_size))
+}
+
+fn get_space_width(font_size: f32) -> f32 {
+    let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
+    let cache = SPACE_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+    let mut guard = cache.write().unwrap();
+    *guard.entry(fs_key).or_insert_with(|| measure_text_width(" ", font_size))
+}
+
 fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
     if max_width <= 0.0 || font_size <= 0.0 || text.is_empty() {
         return vec![text.to_string()];
     }
-    let char_w = measure_text_width("M", font_size);
+    
+    let char_w = get_char_width(font_size);
     let max_chars = (max_width / char_w).floor() as usize;
     if max_chars < 1 { return vec![text.to_string()]; }
-
-    let space_w = measure_text_width(" ", font_size);
+    
+    let space_w = get_space_width(font_size);
+    
     let mut lines: Vec<String> = vec![];
     let mut current = String::new();
     let mut current_w = 0.0f32;
+    
+    // Per-wrap memoization for word widths within this call
+    let mut word_cache: HashMap<String, f32> = HashMap::new();
+    
     for paragraph in text.split('\n') {
         if paragraph.is_empty() {
             if !current.is_empty() {
@@ -31,7 +57,10 @@ fn wrap_text(text: &str, max_width: f32, font_size: f32) -> Vec<String> {
             continue;
         }
         for word in paragraph.split_whitespace() {
-            let word_w = measure_text_width(word, font_size);
+            let word_w = *word_cache.entry(word.to_string()).or_insert_with(|| {
+                measure_text_width(word, font_size)
+            });
+            
             if current.is_empty() {
                 current = word.to_string();
                 current_w = word_w;
@@ -344,5 +373,8 @@ pub fn apply_taffy_layout(elements: &mut [StyledElement], container_width: f32, 
         let text_preview: String = el.text.chars().take(30).collect();
         plog!("POS", "[{}] tag={:15} x={:>6.0} y={:>6.0} w={:>6.0} h={:>6.0} parent={:?} text=\"{}\"",
             i, tag, el.x, el.y, el.width, el.height, el.parent_index, text_preview);
-    }
 }
+}
+
+
+
