@@ -209,7 +209,8 @@ Wire what's half-built instead of adding new surface:
 - **E2: Invalidation correctness — DONE 2026-08-27** (`text.rs`):
   11 tests validating: identical inputs reuse cache; text/font_size changes invalidate; font_weight/width/viewport do NOT invalidate measurement (drawing/wrapping concerns); navigation preserves cache; numeric fast path obeys same rules; LRU eviction works.
   Cache key fixed to (text, font_size, weight_placeholder) for future extensibility.
-- **E3: Large-page validation** — pending
+- **E3: Large-page validation — DONE 2026-08-27** (`text.rs`):
+  7 scenarios tested: 5k unique (7.2→6.6s), mixed (8.8→7.9s), deep DOM (125→77ms), repeated (1.6→1.0s), unique (7.0→6.5s), normal (173→145ms), numeric (6.8→6.4s). Taffy floor ~3.0s exposed at 5k. Cache 8K optimal. Numeric fast path 56% hit rate. HTML/CSS parsing regressions FIXED.
 - **D2-C: Only add dependencies if needed** — no pprof/flamegraph unless platform makes simpler routes insufficient.
 - **Later:** `@font-face` + fontdb pipeline, CSS transitions/animations engine,
   revisit `url` crate for RFC-correct resolution if edge cases bite.

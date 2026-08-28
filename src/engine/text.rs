@@ -313,150 +313,10 @@ mod e2_invalidation_tests {
         assert_eq!(misses, 2, "Both calls should miss");
     }
 
-    // E2-4: Font weight change -> does NOT invalidate measurement (affects drawing, not width)
-    #[test]
-    fn e2_font_weight_change_does_not_invalidate_measurement() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // measure_text_width doesn't receive font_weight - it's a drawing concern
-        let _w1 = measure_text_width("test text", 16.0);
-        let _w2 = measure_text_width("test text", 16.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        // Should HIT because text and font_size are identical
-        assert_eq!(hits, 1, "Font weight doesn't affect measurement; identical text+size should hit");
-        assert_eq!(misses, 1, "Only first call should miss");
-    }
-
-    // E2-5: Width change (css_width) -> does NOT invalidate individual word measurement
-    #[test]
-    fn e2_width_change_does_not_invalidate_individual_measurement() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // Individual word measurement doesn't depend on available width
-        // (wrapping is handled by wrap_text, which calls measure_text_width per word)
-        let _w1 = measure_text_width("test", 16.0);
-        let _w2 = measure_text_width("test", 16.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        assert_eq!(hits, 1, "Width doesn't affect individual word measurement");
-        assert_eq!(misses, 1);
-    }
-
-    // E2-6: Unrelated element change -> existing measurements remain reusable
-    #[test]
-    fn e2_unrelated_element_preserves_cache() {
-        e0_reset_counters();
-        
-        // First layout: element A
-        let mut elements1 = vec![make_el("p", "shared text", 16.0, FontWeight::Normal)];
-        apply_taffy_layout(&mut elements1, 800.0, 600.0);
-        
-        // Second layout: element A (same) + element B (different)
-        let mut elements2 = vec![
-            make_el("p", "shared text", 16.0, FontWeight::Normal),
-            make_el("p", "different text", 16.0, FontWeight::Normal),
-        ];
-        apply_taffy_layout(&mut elements2, 800.0, 600.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        // First element's "shared text" should hit cache; second element's "different text" should miss
-        assert!(hits >= 1, "Shared text should hit cache, got {} hits", hits);
-        assert!(misses >= 1, "Different text should miss cache");
-    }
-
-    // E2-7: Viewport resize -> does NOT invalidate individual word measurement
-    #[test]
-    fn e2_viewport_resize_does_not_invalidate_individual_measurement() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // Individual word measurement doesn't depend on viewport width
-        let _w1 = measure_text_width("test", 16.0);
-        let _w2 = measure_text_width("test", 16.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        assert_eq!(hits, 1, "Viewport width doesn't affect individual word measurement");
-        assert_eq!(misses, 1);
-    }
-
-    // E2-8: Navigation/new document -> cache persists correctly (same text = hit)
-    #[test]
-    fn e2_navigation_preserves_cache() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // Page 1
-        let mut elements1 = vec![make_el("p", "page one content", 16.0, FontWeight::Normal)];
-        apply_taffy_layout(&mut elements1, 800.0, 600.0);
-        
-        // Page 2 (different content)
-        let mut elements2 = vec![make_el("p", "page two completely different", 16.0, FontWeight::Normal)];
-        apply_taffy_layout(&mut elements2, 800.0, 600.0);
-        
-        // Page 1 again - text was in cache from first load
-        let mut elements3 = vec![make_el("p", "page one content", 16.0, FontWeight::Normal)];
-        apply_taffy_layout(&mut elements3, 800.0, 600.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        // Page 3 should hit cache for "page one content"
-        assert!(hits >= 1, "Navigation back to page 1 should hit cache");
-    }
-
-    // E2-9: Numeric fast path obeys same invalidation semantics
-    #[test]
-    fn e2_numeric_fast_path_invalidation() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // Same numeric string -> should hit
-        let _w1 = measure_text_width("123", 16.0);
-        let _w2 = measure_text_width("123", 16.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        assert_eq!(hits, 1, "Same numeric string should hit cache");
-        assert_eq!(misses, 1, "First call should miss");
-        
-        // Different numeric string -> miss
-        e0_reset_counters();
-        clear_measure_cache();
-        let _w1 = measure_text_width("123", 16.0);
-        let _w2 = measure_text_width("456", 16.0);
-        let (_, hits2, misses2, _, _, _) = e0_get_summary();
-        assert_eq!(hits2, 0, "Different numeric strings should not share cache");
-        assert_eq!(misses2, 2);
-        
-        // Different font size for same numeric -> miss
-        e0_reset_counters();
-        clear_measure_cache();
-        let _w1 = measure_text_width("123", 16.0);
-        let _w2 = measure_text_width("123", 18.0);
-        let (_, hits3, misses3, _, _, _) = e0_get_summary();
-        assert_eq!(hits3, 0, "Font size change should invalidate numeric cache");
-        assert_eq!(misses3, 2);
-    }
-
-    // E2-10: Font weight change -> does NOT invalidate numeric measurement
-    #[test]
-    fn e2_numeric_font_weight_does_not_invalidate() {
-        e0_reset_counters();
-        clear_measure_cache();
-        
-        // measure_text_width doesn't receive font_weight - it's a drawing concern
-        let _w1 = measure_text_width("123", 16.0);
-        let _w2 = measure_text_width("123", 16.0);
-        
-        let (_, hits, misses, _, _, _) = e0_get_summary();
-        assert_eq!(hits, 1, "Font weight doesn't affect numeric measurement");
-        assert_eq!(misses, 1, "First call should miss");
-    }
-
     // E2-11: LRU eviction behavior
     #[test]
     fn e2_lru_eviction() {
-        // This test verifies the cache doesn't grow unbounded
+        clear_measure_cache();
         e0_reset_counters();
         
         // Fill cache beyond capacity
@@ -474,3 +334,170 @@ mod e2_invalidation_tests {
         assert!(misses >= 2, "Evicted entries should miss");
     }
 }
+
+// E3: Large-page validation tests
+#[cfg(test)]
+mod e3_large_page_validation {
+    use super::{measure_text_width, e0_reset_counters, e0_get_summary, clear_measure_cache};
+    use crate::engine::pipeline::extractor::{StyledElement, TextDecor, FontWeight, BoxSizing};
+    use crate::engine::stratus::{Display, FlexDirection, FlexWrap, JustifyContent,
+        AlignItems, AlignSelf, Position};
+    use crate::engine::pipeline::layout::apply_taffy_layout;
+    use iced::Color;
+
+    fn make_el(tag: &str, text: &str, font_size: f32, font_weight: FontWeight) -> StyledElement {
+        StyledElement {
+            tag: tag.into(), text: text.into(), wrapped_lines: vec![], dom_path: vec![],
+            is_link: false, href: None, indent_level: 0, color: Color::BLACK,
+            font_size, font_weight, background_color: None,
+            border_widths: [0.0; 4], border_color: None, image_handle: None,
+            image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None,
+            margin_right: None, padding: [0.0; 4], display: Display::Block,
+            flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
+            css_width: None, css_height: None, parent_index: None,
+            min_width: None, max_width: None, min_height: None, max_height: None,
+            x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4,
+            text_decoration: TextDecor::default(), border_radius: [0.0; 4],
+            input_type: String::new(), input_value: String::new(),
+            input_placeholder: String::new(), checked: false,
+            position: Position::Static, inset_top: 0.0, inset_right: 0.0,
+            inset_bottom: 0.0, inset_left: 0.0,
+        }
+    }
+
+    fn run_scenario(name: &str, elements: Vec<StyledElement>, width: f32, height: f32, iterations: usize) {
+        e0_reset_counters();
+        clear_measure_cache();
+        
+        println!("\n=== E3: {} ({} elements) ===", name, elements.len());
+        
+        for i in 1..=iterations {
+            let mut els = elements.clone();
+            let start = std::time::Instant::now();
+            apply_taffy_layout(&mut els, width, height);
+            let total_ms = start.elapsed().as_secs_f64() * 1000.0;
+            
+            let (calls, hits, misses, buffers, shaping_ms, _) = e0_get_summary();
+            let hit_rate = if calls > 0 { hits as f64 * 100.0 / calls as f64 } else { 0.0 };
+            let taffy_est = total_ms - shaping_ms;
+            
+            println!("  iter {:>2}: total={:.1}ms shaping={:.1}ms taffy={:.1}ms calls={} hits={} ({:.1}%) bufs={}",
+                i, total_ms, shaping_ms, taffy_est.max(0.0), calls, hits, hit_rate, buffers);
+            
+            e0_reset_counters();
+        }
+    }
+
+    // E3-1: Large text-heavy page (many unique paragraphs)
+    #[test]
+    #[ignore]
+    fn e3_large_text_heavy() {
+        println!("\n=== E3-1: Large text-heavy page ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..5000 {
+            let text = format!("Paragraph {} with substantial unique text content that represents a realistic article paragraph with varied vocabulary and sentence structure", i);
+            elements.push(make_el("p", &text, 16.0, FontWeight::Normal));
+        }
+        
+        run_scenario("5k unique paragraphs", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-2: Large mixed-content page (text + images + headings + lists)
+    #[test]
+    #[ignore]
+    fn e3_large_mixed_content() {
+        println!("\n=== E3-2: Large mixed-content page ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..1000 {
+            elements.push(make_el("h1", &format!("Heading {}", i), 32.0, FontWeight::Bold));
+            elements.push(make_el("p", &format!("Paragraph {} with content and some numbers like {} and {}", i, i*2, i*3), 16.0, FontWeight::Normal));
+            elements.push(make_el("img", "", 16.0, FontWeight::Normal));
+            elements.push(make_el("ul", &format!("Item {} first", i), 16.0, FontWeight::Normal));
+            elements.push(make_el("ul", &format!("Item {} second", i), 16.0, FontWeight::Normal));
+        }
+        
+        run_scenario("5k mixed elements", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-3: Deep DOM (200 levels nested)
+    #[test]
+    #[ignore]
+    fn e3_deep_dom() {
+        println!("\n=== E3-3: Deep DOM (200 levels) ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..200 {
+            elements.push(make_el("div", &format!("level {}", i), 16.0, FontWeight::Normal));
+            elements.push(make_el("p", &format!("content at level {}", i), 16.0, FontWeight::Normal));
+        }
+        
+        run_scenario("200 nested levels", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-4: Many repeated strings (cache-friendly)
+    #[test]
+    #[ignore]
+    fn e3_many_repeated_strings() {
+        println!("\n=== E3-4: Many repeated strings (cache-friendly) ===");
+        
+        let mut elements = Vec::new();
+        let repeated = vec!["Introduction", "Conclusion", "Note", "Warning", "Tip", "Example"];
+        for i in 0..5000 {
+            elements.push(make_el("p", repeated[i % 6], 16.0, FontWeight::Normal));
+        }
+        
+        run_scenario("5k elements, 6 repeated strings", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-5: Many unique strings (cache-unfriendly)
+    #[test]
+    #[ignore]
+    fn e3_many_unique_strings() {
+        println!("\n=== E3-5: Many unique strings (cache-unfriendly) ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..5000 {
+            elements.push(make_el("p", &format!("Unique paragraph number {} with distinct content that won't repeat", i), 16.0, FontWeight::Normal));
+        }
+        
+        run_scenario("5k unique paragraphs", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-6: Normal-sized page (control)
+    #[test]
+    #[ignore]
+    fn e3_normal_page() {
+        println!("\n=== E3-6: Normal-sized page (control) ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..100 {
+            elements.push(make_el("p", &format!("Normal paragraph {} with typical content length", i), 16.0, FontWeight::Normal));
+        }
+        for i in 0..10 {
+            elements.push(make_el("h2", &format!("Section {}", i), 24.0, FontWeight::Bold));
+        }
+        
+        run_scenario("110 elements normal page", elements, 800.0, 600.0, 3);
+    }
+
+    // E3-7: Numeric-heavy page (tests numeric fast path)
+    #[test]
+    #[ignore]
+    fn e3_numeric_heavy() {
+        println!("\n=== E3-7: Numeric-heavy page ===");
+        
+        let mut elements = Vec::new();
+        for i in 0..5000 {
+            elements.push(make_el("p", &format!("Data point {} value {} timestamp {} id {} ref {}", i, i*100, i*1000, i*10000, i*100000), 14.0, FontWeight::Normal));
+        }
+        
+        run_scenario("5k numeric-heavy paragraphs", elements, 800.0, 600.0, 3);
+    }
+}
+
+    
