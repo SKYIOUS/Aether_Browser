@@ -1,5 +1,5 @@
 [workspace]
-members = ["korlang", "crates/aether-dom", "crates/aether-css"]
+members = ["korlang", "crates/aether-dom", "crates/aether-css", "crates/layout-engine"]
 resolver = "2"
 [package]
 name = "vayu-browser"
@@ -20,6 +20,7 @@ serde_json = "1.0"
 
 aether-dom = { path = "crates/aether-dom" }
 aether-css = { path = "crates/aether-css" }
+layout-engine = { path = "crates/layout-engine", features = ["taffy-backend", "native-backend"] }
 # rquickjs 0.12 reviewed: no breaking changes in Context creation,
 # function callbacks (Fn->Result pattern preserved), or Promise handling.
 # Upgrade from 0.11 to 0.12 is a minor version bump with compatible API surface.
@@ -45,5 +46,7 @@ name = "pipeline"
 harness = false
 
 [features]
-default = ["content_size"]
+default = ["content_size", "layout-native"]
 content_size = []
+layout-taffy = ["layout-engine/taffy-backend"]
+layout-native = ["layout-engine/native-backend"]

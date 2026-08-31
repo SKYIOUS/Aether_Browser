@@ -1,0 +1,19 @@
+[package]
+name = "layout-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Layout engine abstraction for Vayu Browser"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/skyious/Aether_Browser"
+
+[dependencies]
+# Re-export core types from aether-css for style values
+aether-css = { path = "../aether-css" }
+
+# Taffy implementation (optional, behind feature)
+taffy = { version = "0.12", optional = true }
+
+[features]
+default = ["taffy-backend"]
+taffy-backend = ["taffy"]
+native-backend = []

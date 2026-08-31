@@ -2644,6 +2644,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "layout-engine"
+version = "0.1.0"
+dependencies = [
+ "aether-css",
+ "taffy",
+]
+
+[[package]]
 name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5593,6 +5601,7 @@ dependencies = [
  "iced",
  "image 0.25.10",
  "korlang",
+ "layout-engine",
  "lru 0.13.0",
  "precomputed-hash",
  "reqwest",
