@@ -1,8 +1,8 @@
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::time::Instant;
 use std::time::SystemTime;
 
@@ -72,7 +72,11 @@ impl PipelineLog {
     fn new() -> Self {
         let ts = format_timestamp();
         let path = log_dir().join(format!("pipeline_{}.log", ts));
-        let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .ok();
         if let Some(ref mut f) = file {
             if let Err(e) = writeln!(f, "═══ Vayu Browser Pipeline Log ═══") {
                 eprintln!("[logging] write failed: {}", e);
@@ -80,15 +84,22 @@ impl PipelineLog {
             if let Err(e) = writeln!(f, "Started: {}", format_timestamp_human()) {
                 eprintln!("[logging] write failed: {}", e);
             }
-            if let Err(e) = writeln!(f, "────────────────────────────────────") {
+            if let Err(e) = writeln!(f, "────────────────────────────────────")
+            {
                 eprintln!("[logging] write failed: {}", e);
             }
         }
-        PipelineLog { file, start: Instant::now(), enabled: false }
+        PipelineLog {
+            file,
+            start: Instant::now(),
+            enabled: false,
+        }
     }
 
     pub(crate) fn write(&mut self, section: &str, msg: &str) {
-        if !self.enabled { return; }
+        if !self.enabled {
+            return;
+        }
         let elapsed = self.start.elapsed();
         let ms = elapsed.as_secs_f64() * 1000.0;
         if let Some(ref mut f) = self.file {
@@ -126,8 +137,8 @@ macro_rules! plog {
             if let Ok(mut log) = $crate::logging::LOGGER.lock() {
                 log.write($section, &format!($($arg)*));
             }
+            eprintln!("[{}] {}", $section, format_args!($($arg)*));
         }
-        eprintln!("[{}] {}", $section, format_args!($($arg)*));
     };
 }
 

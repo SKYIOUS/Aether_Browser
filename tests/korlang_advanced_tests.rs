@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use korlang::{VirtualMachine, Value};
 use korlang::vm::OpCode;
+use korlang::{Value, VirtualMachine};
+use std::sync::Arc;
 
 // ════════════════════════════════════════════════════════════════════
 // 1. Nested function calls
@@ -9,16 +9,26 @@ use korlang::vm::OpCode;
 #[test]
 fn test_nested_function_calls() {
     let mut vm = VirtualMachine::new();
-    vm.register_native("double", Arc::new(|args: &[Value]| {
-        if let Some(Value::Number(n)) = args.first() {
-            Value::Number(n * 2.0)
-        } else { Value::None }
-    }));
-    vm.register_native("add_one", Arc::new(|args: &[Value]| {
-        if let Some(Value::Number(n)) = args.first() {
-            Value::Number(n + 1.0)
-        } else { Value::None }
-    }));
+    vm.register_native(
+        "double",
+        Arc::new(|args: &[Value]| {
+            if let Some(Value::Number(n)) = args.first() {
+                Value::Number(n * 2.0)
+            } else {
+                Value::None
+            }
+        }),
+    );
+    vm.register_native(
+        "add_one",
+        Arc::new(|args: &[Value]| {
+            if let Some(Value::Number(n)) = args.first() {
+                Value::Number(n + 1.0)
+            } else {
+                Value::None
+            }
+        }),
+    );
     // Simulate nested: add_one(double(5)) = add_one(10) = 11
     // Push 5, call double → push 10, call add_one → push 11
     vm.execute(vec![
@@ -39,10 +49,9 @@ fn test_nested_function_calls() {
 fn test_closure_capture() {
     // ponytail: korlang VM has no closures; verify heap persists across calls
     let mut vm = VirtualMachine::new();
-    vm.heap.insert("captured".into(), Value::String("hello".into()));
-    vm.execute(vec![
-        OpCode::Load("captured".into()),
-    ]);
+    vm.heap
+        .insert("captured".into(), Value::String("hello".into()));
+    vm.execute(vec![OpCode::Load("captured".into())]);
     assert_eq!(vm.stack[0].to_string_val(), "hello");
 }
 
@@ -55,12 +64,15 @@ fn test_native_print() {
     let mut vm = VirtualMachine::new();
     let called = Arc::new(std::sync::Mutex::new(false));
     let c = Arc::clone(&called);
-    vm.register_native("print", Arc::new(move |args: &[Value]| {
-        *c.lock().unwrap() = true;
-        assert_eq!(args.len(), 1);
-        assert_eq!(args[0].to_string_val(), "test msg");
-        Value::None
-    }));
+    vm.register_native(
+        "print",
+        Arc::new(move |args: &[Value]| {
+            *c.lock().unwrap() = true;
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].to_string_val(), "test msg");
+            Value::None
+        }),
+    );
     vm.execute(vec![
         OpCode::Push(Value::String("test msg".into())),
         OpCode::Call("print".into(), 1),
@@ -79,13 +91,16 @@ fn test_native_chrome_render() {
     let mut vm = VirtualMachine::new();
     let called = Arc::new(std::sync::Mutex::new(false));
     let c = Arc::clone(&called);
-    vm.register_native("chrome.render", Arc::new(move |args: &[Value]| {
-        *c.lock().unwrap() = true;
-        if let Some(Value::String(html)) = args.first() {
-            assert_eq!(html, "<div>hi</div>");
-        }
-        Value::Bool(true)
-    }));
+    vm.register_native(
+        "chrome.render",
+        Arc::new(move |args: &[Value]| {
+            *c.lock().unwrap() = true;
+            if let Some(Value::String(html)) = args.first() {
+                assert_eq!(html, "<div>hi</div>");
+            }
+            Value::Bool(true)
+        }),
+    );
     vm.execute(vec![
         OpCode::Push(Value::String("<div>hi</div>".into())),
         OpCode::Call("chrome.render".into(), 1),
@@ -202,10 +217,7 @@ fn test_jump_if_false_empty_string() {
 #[test]
 fn test_dup_preserves_value() {
     let mut vm = VirtualMachine::new();
-    vm.execute(vec![
-        OpCode::Push(Value::Number(7.0)),
-        OpCode::Dup,
-    ]);
+    vm.execute(vec![OpCode::Push(Value::Number(7.0)), OpCode::Dup]);
     assert_eq!(vm.stack.len(), 2);
     assert_eq!(vm.stack[0].to_string_val(), "7");
     assert_eq!(vm.stack[1].to_string_val(), "7");
@@ -250,9 +262,7 @@ fn test_store_load_roundtrip() {
 #[test]
 fn test_create_element_sets_tag() {
     let mut vm = VirtualMachine::new();
-    vm.execute(vec![
-        OpCode::CreateElement("Button".into()),
-    ]);
+    vm.execute(vec![OpCode::CreateElement("Button".into())]);
     if let Some(Value::Object(obj)) = vm.stack.last() {
         let obj = obj.lock().unwrap();
         assert_eq!(obj.tag, "Button");
@@ -357,10 +367,13 @@ fn test_deep_element_tree() {
 #[test]
 fn test_multi_arg_native_call() {
     let mut vm = VirtualMachine::new();
-    vm.register_native("concat3", Arc::new(|args: &[Value]| {
-        let parts: Vec<String> = args.iter().map(|v| v.to_string_val()).collect();
-        Value::String(parts.concat())
-    }));
+    vm.register_native(
+        "concat3",
+        Arc::new(|args: &[Value]| {
+            let parts: Vec<String> = args.iter().map(|v| v.to_string_val()).collect();
+            Value::String(parts.concat())
+        }),
+    );
     vm.execute(vec![
         OpCode::Push(Value::String("a".into())),
         OpCode::Push(Value::String("b".into())),
@@ -379,9 +392,9 @@ fn test_for_each_with_jump_back() {
     let mut vm = VirtualMachine::new();
     // Loop 3 times, each iteration pushes 1.0
     vm.execute(vec![
-        OpCode::ForEach("i".into(), 3),  // ip=0
+        OpCode::ForEach("i".into(), 3),   // ip=0
         OpCode::Push(Value::Number(1.0)), // ip=1
-        OpCode::Jump(0),                   // ip=2 → back to ForEach
+        OpCode::Jump(0),                  // ip=2 → back to ForEach
     ]);
     assert_eq!(vm.stack.len(), 3);
     for v in &vm.stack {

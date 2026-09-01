@@ -1,7 +1,7 @@
 //! Stratus Selector Matcher
 //! Matches DOM elements against CSS selectors
 
-use super::parser::{Selector, SimpleSelector, Stylesheet, Rule, Declaration};
+use super::parser::{Declaration, Rule, Selector, SimpleSelector, Stylesheet};
 
 pub type Specificity = (usize, usize, usize);
 
@@ -18,16 +18,29 @@ impl ElementData {
         }
     }
 
-    pub fn with_attributes(tag_name: String, attributes: std::collections::HashMap<String, String>) -> Self {
-        ElementData { tag_name, attributes }
+    pub fn with_attributes(
+        tag_name: String,
+        attributes: std::collections::HashMap<String, String>,
+    ) -> Self {
+        ElementData {
+            tag_name,
+            attributes,
+        }
     }
 
-    pub fn with_attributes_ref(tag_name: String, attributes: &std::collections::HashMap<String, String>) -> Self {
-        ElementData { tag_name, attributes: attributes.clone() }
+    pub fn with_attributes_ref(
+        tag_name: String,
+        attributes: &std::collections::HashMap<String, String>,
+    ) -> Self {
+        ElementData {
+            tag_name,
+            attributes: attributes.clone(),
+        }
     }
 
     pub fn has_class(&self, class: &str) -> bool {
-        self.attributes.get("class")
+        self.attributes
+            .get("class")
             .map(|classes| classes.split_whitespace().any(|c| c == class))
             .unwrap_or(false)
     }
@@ -51,7 +64,7 @@ impl SimpleSelector {
 
         if let Some(ref id) = self.id {
             match element.get_id() {
-                Some(elem_id) if elem_id == id => {},
+                Some(elem_id) if elem_id == id => {}
                 _ => return false,
             }
         }
@@ -63,9 +76,9 @@ impl SimpleSelector {
         }
 
         if let Some(ref attr) = self.attribute {
-        let (attr_name, attr_value) = attr;
+            let (attr_name, attr_value) = attr;
             match element.get_attribute(attr_name) {
-                Some(value) if value == attr_value => {},
+                Some(value) if value == attr_value => {}
                 _ => return false,
             }
         }
@@ -85,26 +98,25 @@ impl Selector {
     pub fn matches(&self, element: &ElementData) -> bool {
         match self {
             Selector::Simple(s) => s.matches(element),
-            Selector::Composite(selectors) => {
-                selectors.iter().all(|s| s.matches(element))
-            }
+            Selector::Composite(selectors) => selectors.iter().all(|s| s.matches(element)),
         }
     }
 
     pub fn specificity(&self) -> Specificity {
         match self {
             Selector::Simple(s) => s.specificity(),
-            Selector::Composite(selectors) => {
-                selectors.iter().fold((0, 0, 0), |acc, s| {
-                    let sp = s.specificity();
-                    (acc.0 + sp.0, acc.1 + sp.1, acc.2 + sp.2)
-                })
-            }
+            Selector::Composite(selectors) => selectors.iter().fold((0, 0, 0), |acc, s| {
+                let sp = s.specificity();
+                (acc.0 + sp.0, acc.1 + sp.1, acc.2 + sp.2)
+            }),
         }
     }
 }
 
-pub fn match_element<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Rule, &'a Selector)> {
+pub fn match_element<'a>(
+    element: &ElementData,
+    stylesheet: &'a Stylesheet,
+) -> Vec<(&'a Rule, &'a Selector)> {
     let mut matched = Vec::new();
 
     for rule in &stylesheet.rules {
@@ -124,10 +136,14 @@ pub fn match_element<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> V
     matched
 }
 
-pub fn match_rules<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec<(&'a Vec<Declaration>, Specificity)> {
+pub fn match_rules<'a>(
+    element: &ElementData,
+    stylesheet: &'a Stylesheet,
+) -> Vec<(&'a Vec<Declaration>, Specificity)> {
     let matched = match_element(element, stylesheet);
 
-    matched.iter()
+    matched
+        .iter()
         .map(|(rule, selector)| (&rule.declarations, selector.specificity()))
         .collect()
 }
@@ -135,7 +151,9 @@ pub fn match_rules<'a>(element: &ElementData, stylesheet: &'a Stylesheet) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{self, Declaration, PropertyValue, Rule, Selector, SimpleSelector, Stylesheet};
+    use crate::parser::{
+        self, Declaration, PropertyValue, Rule, Selector, SimpleSelector, Stylesheet,
+    };
 
     fn element_with_attrs(tag: &str, attrs: &[(&str, &str)]) -> ElementData {
         let mut attributes = std::collections::HashMap::new();
@@ -173,9 +191,11 @@ mod tests {
         let stylesheet = Stylesheet {
             rules: vec![parser::Rule {
                 selectors: vec![Selector::Simple(SimpleSelector {
-                    tag_name: None, id: None,
+                    tag_name: None,
+                    id: None,
                     class: vec!["card".into()],
-                    attribute: None, pseudo_class: None,
+                    attribute: None,
+                    pseudo_class: None,
                 })],
                 declarations: vec![],
             }],
@@ -194,7 +214,8 @@ mod tests {
                     tag_name: None,
                     id: Some("nav".into()),
                     class: vec![],
-                    attribute: None, pseudo_class: None,
+                    attribute: None,
+                    pseudo_class: None,
                 })],
                 declarations: vec![],
             }],
@@ -210,8 +231,11 @@ mod tests {
         let stylesheet = Stylesheet {
             rules: vec![parser::Rule {
                 selectors: vec![Selector::Simple(SimpleSelector {
-                    tag_name: Some("div".into()), id: None, class: vec![],
-                    attribute: None, pseudo_class: None,
+                    tag_name: Some("div".into()),
+                    id: None,
+                    class: vec![],
+                    attribute: None,
+                    pseudo_class: None,
                 })],
                 declarations: vec![],
             }],
@@ -228,22 +252,31 @@ mod tests {
             rules: vec![
                 parser::Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: None, id: Some("id".into()), class: vec![],
-                        attribute: None, pseudo_class: None,
+                        tag_name: None,
+                        id: Some("id".into()),
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
                     })],
                     declarations: vec![],
                 },
                 parser::Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: None, id: None, class: vec!["class".into()],
-                        attribute: None, pseudo_class: None,
+                        tag_name: None,
+                        id: None,
+                        class: vec!["class".into()],
+                        attribute: None,
+                        pseudo_class: None,
                     })],
                     declarations: vec![],
                 },
                 parser::Rule {
                     selectors: vec![Selector::Simple(SimpleSelector {
-                        tag_name: Some("div".into()), id: None, class: vec![],
-                        attribute: None, pseudo_class: None,
+                        tag_name: Some("div".into()),
+                        id: None,
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
                     })],
                     declarations: vec![],
                 },

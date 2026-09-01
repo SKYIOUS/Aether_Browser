@@ -578,14 +578,6 @@ mod native_impl {
     }
 
     #[derive(Debug, Clone, Copy, PartialEq)]
-    struct Rect {
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq)]
     struct ComputedStyle {
         margin: [f32; 4], // top, right, bottom, left
         padding: [f32; 4],
@@ -714,7 +706,7 @@ mod native_impl {
             if self.elements[idx].display == CssDisplay::None {
                 return;
             }
-            let style = self.computed_styles[idx].clone();
+            let style = self.computed_styles[idx];
             let margin_top = style.margin[0];
             let margin_right = style.margin[1];
             let margin_bottom = style.margin[2];
@@ -875,7 +867,7 @@ mod native_impl {
             if self.elements[idx].display == CssDisplay::None {
                 return;
             }
-            let style = self.computed_styles[idx].clone();
+            let style = self.computed_styles[idx];
             let margin_top = style.margin[0];
             let margin_right = style.margin[1];
             let margin_bottom = style.margin[2];
@@ -906,11 +898,7 @@ mod native_impl {
                 x: container_x + margin_left,
                 y: container_y + margin_top,
                 width: total_width,
-                height: if style.height.is_some() {
-                    total_height
-                } else {
-                    total_height
-                },
+                height: total_height,
                 lines: Vec::new(),
             };
             let available_height = if style.height.is_some() {
@@ -999,7 +987,7 @@ mod native_impl {
             // CSS semantics: containing block is nearest positioned ancestor's padding edge; child at inset offsets
             if self.elements[idx].position == CssPosition::Absolute {
                 let el = self.elements[idx].clone();
-                let style = self.computed_styles[idx].clone();
+                let style = self.computed_styles[idx];
                 let (cb_x, cb_y) = if let Some(cb_idx) = self.find_containing_block(idx) {
                     // containing block's content origin (output position + padding + border)
                     let cb_style = &self.computed_styles[cb_idx];
@@ -1083,7 +1071,7 @@ mod native_impl {
             }
 
             // Extract needed values before mutable operations
-            let style = self.computed_styles[idx].clone();
+            let style = self.computed_styles[idx];
             let el = self.elements[idx].clone();
             let has_children = !self.children[idx].is_empty();
 
@@ -1306,7 +1294,7 @@ mod native_impl {
                                 x: line_x,
                                 y: 0.0,
                                 width: word_width,
-                                height: height,
+                                height,
                                 baseline,
                                 text: Some(word.to_string()),
                                 font_size: fs,
@@ -1349,7 +1337,7 @@ mod native_impl {
                                 x: line_x,
                                 y: 0.0,
                                 width: word_width,
-                                height: height,
+                                height,
                                 baseline,
                                 text: Some(word.to_string()),
                                 font_size: fs,
@@ -1368,7 +1356,7 @@ mod native_impl {
                                 x: line_x,
                                 y: 0.0,
                                 width: word_width,
-                                height: height,
+                                height,
                                 baseline,
                                 text: Some(word.to_string()),
                                 font_size: fs,
@@ -1384,8 +1372,8 @@ mod native_impl {
                     line_x += mr;
                 } else {
                     // Inline element (not text) - treat as atomic inline box; if its own text empty, look at text children (span+text hierarchy)
-                    let element_width = if el.width.is_some() {
-                        el.width.unwrap()
+                    let element_width = if let Some(w) = el.width {
+                        w
                     } else if !el.text.is_empty() {
                         self.text_cache.measure(&el.text, fs)
                     } else {
@@ -1415,7 +1403,7 @@ mod native_impl {
                             x: line_x + ml,
                             y: 0.0,
                             width: element_width,
-                            height: height,
+                            height,
                             baseline,
                             text: if el.is_text {
                                 Some(el.text.clone())
@@ -1458,7 +1446,7 @@ mod native_impl {
                             x: ml,
                             y: 0.0,
                             width: element_width,
-                            height: height,
+                            height,
                             baseline,
                             text: if el.is_text {
                                 Some(el.text.clone())
@@ -1481,7 +1469,7 @@ mod native_impl {
                             x: line_x + ml,
                             y: 0.0,
                             width: element_width,
-                            height: height,
+                            height,
                             baseline,
                             text: if el.is_text {
                                 Some(el.text.clone())
@@ -1555,8 +1543,8 @@ mod native_impl {
 
     // Flex layout context
     struct FlexLayoutContext<'a> {
-        container_width: f32,
-        container_height: f32,
+        _container_width: f32,
+        _container_height: f32,
         elements: &'a Vec<LayoutElementInput>,
         outputs: &'a mut Vec<LayoutElementOutput>,
         computed_styles: &'a Vec<ComputedStyle>,
@@ -1565,7 +1553,7 @@ mod native_impl {
         available_main: f32,
         available_cross: f32,
         is_row: bool,
-        is_wrap: bool,
+        _is_wrap: bool,
     }
 
     impl<'a> FlexLayoutContext<'a> {
@@ -1585,8 +1573,8 @@ mod native_impl {
             let is_wrap = matches!(flex_wrap, CssFlexWrap::Wrap | CssFlexWrap::WrapReverse);
 
             Self {
-                container_width: ctx.container_width,
-                container_height: ctx.viewport_height,
+                _container_width: ctx.container_width,
+                _container_height: ctx.viewport_height,
                 elements: &ctx.elements,
                 outputs: &mut ctx.outputs,
                 computed_styles: &ctx.computed_styles,
@@ -1595,7 +1583,7 @@ mod native_impl {
                 available_main,
                 available_cross: available_cross.max(0.0),
                 is_row,
-                is_wrap,
+                _is_wrap: is_wrap,
             }
         }
 
@@ -1633,7 +1621,7 @@ mod native_impl {
                     idx: child_idx,
                     flex_grow: self.elements[child_idx].flex_grow,
                     flex_shrink: self.elements[child_idx].flex_shrink,
-                    flex_basis: self.elements[child_idx].flex_basis,
+                    _flex_basis: self.elements[child_idx].flex_basis,
                     main_min: if is_row {
                         self.elements[child_idx].min_width.unwrap_or(0.0)
                     } else {
@@ -1852,11 +1840,7 @@ mod native_impl {
                 false => align_items,
             };
 
-            let item_align = if item.cross_size > 0.0 {
-                align_items
-            } else {
-                align_items
-            };
+            let item_align = align_items;
 
             match item_align {
                 CssAlignItems::FlexStart => 0.0,
@@ -1873,7 +1857,7 @@ mod native_impl {
         idx: usize,
         flex_grow: f32,
         flex_shrink: f32,
-        flex_basis: Option<f32>,
+        _flex_basis: Option<f32>,
         main_size: f32,
         cross_size: f32,
         main_min: f32,
@@ -1981,15 +1965,14 @@ mod native_impl {
                     self.elements[child_idx].grid_row,
                     &mut next_col,
                     &mut next_row,
-                    cols,
-                    rows,
+                    (cols, rows),
                     auto_flow,
                 );
                 placements.push((
-                    cs.min(cols).max(0),
-                    cspan.min(cols - cs.min(cols).max(0)),
-                    rs.min(rows).max(0),
-                    rspan.min(rows - rs.min(rows).max(0)),
+                    cs.min(cols),
+                    cspan.min(cols - cs.min(cols)),
+                    rs.min(rows),
+                    rspan.min(rows - rs.min(rows)),
                 ));
             }
             // Compute track sizes with intrinsic for auto
@@ -2058,12 +2041,11 @@ mod native_impl {
                     placement_row,
                     &mut next_col,
                     &mut next_row,
-                    cols,
-                    rows,
+                    (cols, rows),
                     auto_flow,
                 );
-                let col_start = col_start.min(cols).max(0);
-                let row_start = row_start.min(rows).max(0);
+                let col_start = col_start.min(cols);
+                let row_start = row_start.min(rows);
                 let col_span = col_span.min(cols - col_start);
                 let row_span = row_span.min(rows - row_start);
                 let x = content_x + col_offsets[col_start as usize];
@@ -2103,7 +2085,7 @@ mod native_impl {
             }
         }
 
-        fn compute_track_sizes(&self, tracks: &[GridTrack], available: f32, gap: f32) -> Vec<f32> {
+        fn _compute_track_sizes(&self, tracks: &[GridTrack], available: f32, gap: f32) -> Vec<f32> {
             if tracks.is_empty() {
                 return vec![available];
             }
@@ -2233,8 +2215,7 @@ mod native_impl {
             row: Option<GridPlacement>,
             next_col: &mut u16,
             next_row: &mut u16,
-            cols: u16,
-            rows: u16,
+            (cols, rows): (u16, u16),
             flow: GridAutoFlow,
         ) -> (u16, u16, u16, u16) {
             let col_start = col

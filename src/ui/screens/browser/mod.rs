@@ -1,22 +1,27 @@
-use iced::widget::{button, canvas as iced_canvas, column, container, row, scrollable, text, text_input, Space};
 use iced::keyboard;
+use iced::widget::{
+    button, canvas as iced_canvas, column, container, row, scrollable, text, text_input, Space,
+};
 use iced::{Alignment, Background, Color, Element, Length, Task};
 
-use crate::ui::style::*;
-use crate::ui::screens::settings::VayuSettings;
 use crate::plog;
+use crate::ui::screens::settings::VayuSettings;
+use crate::ui::style::*;
 
-use std::sync::{Arc, Mutex};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use korlang::vm::{VirtualMachine, OpCode};
-use korlang::compile;
+use crate::engine::js::{JSEngine, JsBridge};
 use crate::engine::korlang::register_default_callbacks;
+use crate::engine::pipeline::{
+    apply_taffy_layout, fetch_page_content, load_bookmarks, load_tabs, mark_session_clean_exit,
+    mark_session_started, normalize_nav_url, save_bookmarks, save_tabs, session_was_unclean,
+    Bookmark, StyledElement, Tab,
+};
 use crate::ui::kor_renderer::render_kor_vm;
-use crate::engine::js::{JsBridge, JSEngine};
-use crate::engine::pipeline::{fetch_page_content, apply_taffy_layout, StyledElement, normalize_nav_url, 
-save_tabs, load_tabs, load_bookmarks, save_bookmarks, Bookmark, session_was_unclean, mark_session_started, mark_session_clean_exit, Tab};
+use korlang::compile;
+use korlang::vm::{OpCode, VirtualMachine};
 
 mod canvas;
 mod devtools;
@@ -124,9 +129,15 @@ impl BrowserScreen {
         let default_url = "vayu://design/spatial-minimalism".to_string();
         let mut kor_vm = VirtualMachine::new();
         register_default_callbacks(&mut kor_vm);
-        kor_vm.set_builtin("status_left", korlang::vm::Value::String("Vayu Ready".to_string()));
+        kor_vm.set_builtin(
+            "status_left",
+            korlang::vm::Value::String("Vayu Ready".to_string()),
+        );
         kor_vm.set_builtin("status_mid", korlang::vm::Value::String("Idle".to_string()));
-        kor_vm.set_builtin("status_right", korlang::vm::Value::String("Local shell".to_string()));
+        kor_vm.set_builtin(
+            "status_right",
+            korlang::vm::Value::String("Local shell".to_string()),
+        );
         let status_src = r#"
 Component StatusBar {
     Row(spacing: 8) {
@@ -175,15 +186,25 @@ Component SidebarWS {
         let loaded_tabs = load_tabs();
         let url_history: Vec<String> = loaded_tabs.iter().map(|t| t.url.clone()).collect();
         let (tabs, tab_history, url_val, content_val) = if loaded_tabs.is_empty() {
-            (vec![Tab::new("New Tab", &default_url, 0)],
-             vec![(vec![default_url.clone()], 0)],
-             default_url.clone(),
-             "Welcome to Vayu Browser".to_string())
+            (
+                vec![Tab::new("New Tab", &default_url, 0)],
+                vec![(vec![default_url.clone()], 0)],
+                default_url.clone(),
+                "Welcome to Vayu Browser".to_string(),
+            )
         } else {
             let count = loaded_tabs.len();
-            let history: Vec<(Vec<String>, usize)> = loaded_tabs.iter().map(|t| (vec![t.url.clone()], 0)).collect();
+            let history: Vec<(Vec<String>, usize)> = loaded_tabs
+                .iter()
+                .map(|t| (vec![t.url.clone()], 0))
+                .collect();
             let url = loaded_tabs[0].url.clone();
-            (loaded_tabs, history, url, format!("Restored {} tabs", count))
+            (
+                loaded_tabs,
+                history,
+                url,
+                format!("Restored {} tabs", count),
+            )
         };
         let settings = VayuSettings::load();
         crate::engine::pipeline::set_js_enabled(settings.js_enabled);
@@ -235,7 +256,6 @@ Component SidebarWS {
         }
     }
 
-
     pub fn update(&mut self, msg: BrowserMessage) -> Task<BrowserMessage> {
         // Handle pending korlang side effects before processing messages
         if let Some(url) = crate::engine::korlang::take_navigation_url() {
@@ -258,14 +278,17 @@ Component SidebarWS {
             }
             BrowserMessage::UrlInputChanged(s) => {
                 self.url_input = s.clone();
-                self.show_autocomplete = !s.is_empty() && self.url_history.iter().any(|h| h.contains(&s));
+                self.show_autocomplete =
+                    !s.is_empty() && self.url_history.iter().any(|h| h.contains(&s));
                 self.autocomplete_index = 0;
                 Task::none()
             }
             BrowserMessage::UrlSubmitted => {
                 let input = self.url_input.trim().to_string();
                 self.show_autocomplete = false;
-                if input.is_empty() { return Task::none(); }
+                if input.is_empty() {
+                    return Task::none();
+                }
                 if !self.url_history.contains(&input) {
                     self.url_history.push(input.clone());
                 }
@@ -277,7 +300,9 @@ Component SidebarWS {
                 if let Some(item) = url {
                     self.url_input = item.clone();
                     self.navigate_to(&item)
-                } else { Task::none() }
+                } else {
+                    Task::none()
+                }
             }
             BrowserMessage::AutocompleteDismiss => {
                 self.show_autocomplete = false;
@@ -304,7 +329,10 @@ Component SidebarWS {
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
-                    return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    return Task::perform(
+                        fetch_page_content(url, bw, bh, self.url_history.clone()),
+                        |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
+                    );
                 }
                 Task::none()
             }
@@ -325,7 +353,10 @@ Component SidebarWS {
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
-                    return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                    return Task::perform(
+                        fetch_page_content(url, bw, bh, self.url_history.clone()),
+                        |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
+                    );
                 }
                 Task::none()
             }
@@ -354,32 +385,54 @@ Component SidebarWS {
                 self.is_history_nav = false;
                 self.styled_elements = Arc::new(elements);
                 self.layout_gen += 1;
-                self.page_canvas = Some(canvas::PageCanvas::new(Arc::clone(&self.styled_elements), self.inspect_element, self.bounds.1));
-                crate::ui::screens::browser::canvas::record_canvas_invalidation("navigation_new_canvas");
-                let page_title = bridge_opt.as_ref().and_then(|b| {
-                    b.lock()
-                        .ok()
-                        .map(|guard| guard.doc_title.trim().to_string())
-                        .filter(|title| !title.is_empty())
-                }).unwrap_or_else(|| {
-                    page_url
-                        .split("://")
-                        .nth(1)
-                        .and_then(|rest| rest.split('/').next())
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or(&page_url)
-                        .to_string()
-                });
+                self.page_canvas = Some(canvas::PageCanvas::new(
+                    Arc::clone(&self.styled_elements),
+                    self.inspect_element,
+                    self.bounds.1,
+                ));
+                crate::ui::screens::browser::canvas::record_canvas_invalidation(
+                    "navigation_new_canvas",
+                );
+                let page_title = bridge_opt
+                    .as_ref()
+                    .and_then(|b| {
+                        b.lock()
+                            .ok()
+                            .map(|guard| guard.doc_title.trim().to_string())
+                            .filter(|title| !title.is_empty())
+                    })
+                    .unwrap_or_else(|| {
+                        page_url
+                            .split("://")
+                            .nth(1)
+                            .and_then(|rest| rest.split('/').next())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or(&page_url)
+                            .to_string()
+                    });
                 if let Some(tab) = self.tabs.get_mut(self.active_tab) {
                     tab.title = page_title;
                 }
                 self.bridge = bridge_opt;
                 self.js_engine = Some(JSEngine::new());
-                self.js_errors = self.bridge.as_ref().map(|b| {
-                    b.lock().unwrap_or_else(|e| e.into_inner()).js_errors.clone()
-                }).unwrap_or_default();
-                self.kor_vm.borrow_mut().update_state("status_mid", korlang::vm::Value::String("Loaded".to_string()));
-                self.kor_vm.borrow_mut().update_state("status_right", korlang::vm::Value::String(format!("{} elements", count)));
+                self.js_errors = self
+                    .bridge
+                    .as_ref()
+                    .map(|b| {
+                        b.lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .js_errors
+                            .clone()
+                    })
+                    .unwrap_or_default();
+                self.kor_vm.borrow_mut().update_state(
+                    "status_mid",
+                    korlang::vm::Value::String("Loaded".to_string()),
+                );
+                self.kor_vm.borrow_mut().update_state(
+                    "status_right",
+                    korlang::vm::Value::String(format!("{} elements", count)),
+                );
                 self.content = format!("Loaded ({} elements)", count);
                 Task::none()
             }
@@ -388,9 +441,19 @@ Component SidebarWS {
                 if !self.styled_elements.is_empty() {
                     let content_w = (w - 260.0).max(200.0);
                     let viewport_h = h;
-                    apply_taffy_layout(&mut *Arc::make_mut(&mut self.styled_elements), content_w, viewport_h);
-                    self.page_canvas = Some(canvas::PageCanvas::new(Arc::clone(&self.styled_elements), self.inspect_element, h));
-                    crate::ui::screens::browser::canvas::record_canvas_invalidation("resize_new_canvas");
+                    apply_taffy_layout(
+                        &mut *Arc::make_mut(&mut self.styled_elements),
+                        content_w,
+                        viewport_h,
+                    );
+                    self.page_canvas = Some(canvas::PageCanvas::new(
+                        Arc::clone(&self.styled_elements),
+                        self.inspect_element,
+                        h,
+                    ));
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation(
+                        "resize_new_canvas",
+                    );
                 }
                 Task::none()
             }
@@ -421,7 +484,10 @@ Component SidebarWS {
                         self.loading = true;
                         self.bridge = None;
                         let (bw, bh) = self.bounds;
-                        return Task::perform(fetch_page_content(self.url.clone(), bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                        return Task::perform(
+                            fetch_page_content(self.url.clone(), bw, bh, self.url_history.clone()),
+                            |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
+                        );
                     }
                     let hist_delta = {
                         let mut b = bridge.lock().unwrap_or_else(|e| e.into_inner());
@@ -430,7 +496,8 @@ Component SidebarWS {
                     if let Some(delta) = hist_delta {
                         let url = {
                             let (hist, idx) = &mut self.tab_history[self.active_tab];
-                            let new_idx = (*idx as i32 + delta).clamp(0, hist.len() as i32 - 1) as usize;
+                            let new_idx =
+                                (*idx as i32 + delta).clamp(0, hist.len() as i32 - 1) as usize;
                             if new_idx < hist.len() && new_idx != *idx {
                                 *idx = new_idx;
                                 Some(hist[new_idx].clone())
@@ -442,11 +509,20 @@ Component SidebarWS {
                             self.url = url.clone();
                             self.is_history_nav = true;
                             self.loading = true;
-                            self.kor_vm.borrow_mut().update_state("status_mid", korlang::vm::Value::String("Loading".to_string()));
-                            self.kor_vm.borrow_mut().update_state("status_right", korlang::vm::Value::String(url.clone()));
+                            self.kor_vm.borrow_mut().update_state(
+                                "status_mid",
+                                korlang::vm::Value::String("Loading".to_string()),
+                            );
+                            self.kor_vm.borrow_mut().update_state(
+                                "status_right",
+                                korlang::vm::Value::String(url.clone()),
+                            );
                             self.bridge = None;
                             let (bw, bh) = self.bounds;
-                            return Task::perform(fetch_page_content(url, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b));
+                            return Task::perform(
+                                fetch_page_content(url, bw, bh, self.url_history.clone()),
+                                |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
+                            );
                         }
                     }
                 }
@@ -495,15 +571,13 @@ Component SidebarWS {
                 save_bookmarks(&self.bookmarks);
                 Task::none()
             }
-            BrowserMessage::BookmarkClicked(i) => {
-                match self.bookmarks.get(i) {
-                    Some(b) => {
-                        let url = b.url.clone();
-                        self.navigate_to(&url)
-                    }
-                    None => Task::none(),
+            BrowserMessage::BookmarkClicked(i) => match self.bookmarks.get(i) {
+                Some(b) => {
+                    let url = b.url.clone();
+                    self.navigate_to(&url)
                 }
-            }
+                None => Task::none(),
+            },
             BrowserMessage::DuplicateTab(i) => {
                 if i < self.tabs.len() {
                     let tab = self.tabs[i].clone();
@@ -552,7 +626,10 @@ Component SidebarWS {
                 mark_session_clean_exit();
                 Task::none()
             }
-            BrowserMessage::WorkspaceSelected(i) => { self.active_workspace = i; Task::none() }
+            BrowserMessage::WorkspaceSelected(i) => {
+                self.active_workspace = i;
+                Task::none()
+            }
             BrowserMessage::TabSelected(i) => {
                 if i < self.tabs.len() {
                     if let Some(tab) = self.tabs.get_mut(self.active_tab) {
@@ -587,7 +664,8 @@ Component SidebarWS {
             }
             BrowserMessage::NewTab => {
                 let title = format!("Tab {}", self.tabs.len() + 1);
-                self.tabs.push(Tab::new(&title, "about:blank", self.active_workspace));
+                self.tabs
+                    .push(Tab::new(&title, "about:blank", self.active_workspace));
                 self.active_tab = self.tabs.len() - 1;
                 self.url = "about:blank".to_string();
                 self.content = "New tab".to_string();
@@ -629,7 +707,9 @@ Component SidebarWS {
                 if let Some(pc) = self.page_canvas.as_mut() {
                     pc.focused_index = None;
                     pc.cache.clear();
-                    crate::ui::screens::browser::canvas::record_canvas_invalidation("inspect_toggle");
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation(
+                        "inspect_toggle",
+                    );
                 }
                 Task::none()
             }
@@ -638,7 +718,9 @@ Component SidebarWS {
                 if let Some(pc) = self.page_canvas.as_mut() {
                     pc.focused_index = Some(idx);
                     pc.cache.clear();
-                    crate::ui::screens::browser::canvas::record_canvas_invalidation("inspect_element");
+                    crate::ui::screens::browser::canvas::record_canvas_invalidation(
+                        "inspect_element",
+                    );
                 }
                 Task::none()
             }
@@ -675,17 +757,20 @@ Component SidebarWS {
                 plog!("KOR", "Executing Kor script: {}", script);
                 let mut vm = self.kor_vm.borrow_mut();
                 vm.stack.clear();
-                
+
                 // Set up page context
                 vm.set_builtin("page_url", korlang::vm::Value::String(self.url.clone()));
-                vm.set_builtin("element_count", korlang::vm::Value::Number(self.styled_elements.len() as f64));
-                
+                vm.set_builtin(
+                    "element_count",
+                    korlang::vm::Value::Number(self.styled_elements.len() as f64),
+                );
+
                 // Execute with timeout protection
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     vm.execute(korlang::compile(&script));
                     vm.stack.last().cloned()
                 }));
-                
+
                 match result {
                     Ok(Some(val)) => {
                         let result_str = match val {
@@ -720,13 +805,16 @@ Component SidebarWS {
                         }
                     }
                 "#;
-                
+
                 let mut vm = self.kor_vm.borrow_mut();
                 vm.stack.clear();
                 vm.set_builtin("page_url", korlang::vm::Value::String(self.url.clone()));
-                vm.set_builtin("element_count", korlang::vm::Value::Number(self.styled_elements.len() as f64));
+                vm.set_builtin(
+                    "element_count",
+                    korlang::vm::Value::Number(self.styled_elements.len() as f64),
+                );
                 vm.execute(korlang::compile(default_script));
-                
+
                 self.content = "Kor script executed on page".to_string();
                 Task::none()
             }
@@ -741,22 +829,27 @@ Component SidebarWS {
 
     pub fn subscription(&self) -> iced::Subscription<BrowserMessage> {
         use iced::keyboard::key;
-        let has_timers = self.bridge.as_ref().is_some_and(|b| b.lock().unwrap_or_else(|e| e.into_inner()).has_pending_timers());
+        let has_timers = self.bridge.as_ref().is_some_and(|b| {
+            b.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .has_pending_timers()
+        });
         let timer_sub = if has_timers {
-            iced::time::every(std::time::Duration::from_millis(100)).map(|_| BrowserMessage::TimerTick)
+            iced::time::every(std::time::Duration::from_millis(100))
+                .map(|_| BrowserMessage::TimerTick)
         } else {
             iced::Subscription::none()
         };
-        let key_sub = keyboard::on_key_press(|k, _m| {
-            match k {
-                key::Key::Named(key::Named::F12) => Some(BrowserMessage::ToggleConsole),
-                key::Key::Named(key::Named::Escape) => Some(BrowserMessage::AutocompleteDismiss),
-                key::Key::Character(ref c) if c.chars().next().is_some_and(|ch| !ch.is_control()) => {
-                    c.chars().next().map(BrowserMessage::FormInputKeyPressed)
-                }
-                key::Key::Named(key::Named::Backspace) => Some(BrowserMessage::FormInputKeyPressed('\x08')),
-                _ => None,
+        let key_sub = keyboard::on_key_press(|k, _m| match k {
+            key::Key::Named(key::Named::F12) => Some(BrowserMessage::ToggleConsole),
+            key::Key::Named(key::Named::Escape) => Some(BrowserMessage::AutocompleteDismiss),
+            key::Key::Character(ref c) if c.chars().next().is_some_and(|ch| !ch.is_control()) => {
+                c.chars().next().map(BrowserMessage::FormInputKeyPressed)
             }
+            key::Key::Named(key::Named::Backspace) => {
+                Some(BrowserMessage::FormInputKeyPressed('\x08'))
+            }
+            _ => None,
         });
         iced::Subscription::batch(vec![timer_sub, key_sub])
     }
@@ -783,41 +876,80 @@ Component SidebarWS {
                     text("Loading...").size(20).color(C::page_muted()),
                     text("Fetching page content").size(13).color(C::dim()),
                 ]
-                .align_x(Alignment::Center).spacing(8)
+                .align_x(Alignment::Center)
+                .spacing(8),
             )
-            .width(Length::Fill).height(Length::Fill)
-            .center_x(Length::Fill).center_y(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(C::page_bg())),
+                ..Default::default()
+            })
             .into()
         } else if self.page_canvas.is_some() {
-            let pc = self.page_canvas.as_ref().expect("Expected Some value, found None");
-            let total_h = pc.elements.iter()
+            let pc = self
+                .page_canvas
+                .as_ref()
+                .expect("Expected Some value, found None");
+            let total_h = pc
+                .elements
+                .iter()
                 .filter(|el| el.display != crate::engine::stratus::Display::None)
                 .map(|el| {
                     let ey = if el.y.is_finite() { el.y } else { 0.0 };
-                    let h = if el.height.is_finite() { el.height.max(el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0)) } else { el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0) };
+                    let h = if el.height.is_finite() {
+                        el.height
+                            .max(el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0))
+                    } else {
+                        el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0)
+                    };
                     ey + h + el.margin_bottom
                 })
                 .fold(0.0, f32::max);
-            let total_h = if total_h.is_finite() { total_h.max(100.0) } else { 800.0 };
+            let total_h = if total_h.is_finite() {
+                total_h.max(100.0)
+            } else {
+                800.0
+            };
             let content_w = (self.bounds.0 - 260.0).max(200.0);
             container(
-                scrollable(iced_canvas(pc).width(Length::Fixed(content_w)).height(Length::Fixed(total_h)))
-                    .width(Length::Fill).height(Length::Fill)
-                    .on_scroll(|vp| BrowserMessage::PageScrolled(vp.absolute_offset().y))
+                scrollable(
+                    iced_canvas(pc)
+                        .width(Length::Fixed(content_w))
+                        .height(Length::Fixed(total_h)),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .on_scroll(|vp| BrowserMessage::PageScrolled(vp.absolute_offset().y)),
             )
-            .width(Length::Fill).height(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(C::page_bg())),
+                ..Default::default()
+            })
             .into()
         } else {
             container(
                 scrollable(
-                    column(vec![text(&self.content).size(14).color(C::page_text()).into()]).padding(40).max_width(800)
+                    column(vec![text(&self.content)
+                        .size(14)
+                        .color(C::page_text())
+                        .into()])
+                    .padding(40)
+                    .max_width(800),
                 )
-                .width(Length::Fill).height(Length::Fill)
+                .width(Length::Fill)
+                .height(Length::Fill),
             )
-            .width(Length::Fill).height(Length::Fill)
-            .style(|_| container::Style { background: Some(Background::Color(C::page_bg())), ..Default::default() })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(C::page_bg())),
+                ..Default::default()
+            })
             .into()
         };
         let tabs = tab_bar::tab_bar(self);
@@ -830,105 +962,203 @@ Component SidebarWS {
         }
         let main_col = main_col.push(body).push(status);
         container(main_col)
-            .width(Length::Fill).height(Length::Fill).style(main_area_style()).into()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(main_area_style())
+            .into()
     }
 
     fn top_bar(&self) -> Element<'_, BrowserMessage> {
-        let can_go_back = self.tab_history.get(self.active_tab).map(|(_h, i)| *i > 0).unwrap_or(false);
-        let can_go_forward = self.tab_history.get(self.active_tab).map(|(h, i)| *i + 1 < h.len()).unwrap_or(false);
+        let can_go_back = self
+            .tab_history
+            .get(self.active_tab)
+            .map(|(_h, i)| *i > 0)
+            .unwrap_or(false);
+        let can_go_forward = self
+            .tab_history
+            .get(self.active_tab)
+            .map(|(h, i)| *i + 1 < h.len())
+            .unwrap_or(false);
         let secure_icon = text(secure_indicator(&self.url)).size(14);
 
         let back_btn: Element<'_, BrowserMessage> = if can_go_back {
             button(text("\u{2190}").size(18).color(C::muted()))
-                .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::NavBack).into()
+                .padding([6, 8])
+                .style(nav_icon_button_style())
+                .on_press(BrowserMessage::NavBack)
+                .into()
         } else {
             button(text("\u{2190}").size(18).color(C::dim()))
-                .padding([6, 8]).style(nav_icon_button_style()).into()
+                .padding([6, 8])
+                .style(nav_icon_button_style())
+                .into()
         };
         let fwd_btn: Element<'_, BrowserMessage> = if can_go_forward {
             button(text("\u{2192}").size(18).color(C::muted()))
-                .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::NavForward).into()
+                .padding([6, 8])
+                .style(nav_icon_button_style())
+                .on_press(BrowserMessage::NavForward)
+                .into()
         } else {
             button(text("\u{2192}").size(18).color(C::dim()))
-                .padding([6, 8]).style(nav_icon_button_style()).into()
+                .padding([6, 8])
+                .style(nav_icon_button_style())
+                .into()
         };
         let refresh_btn = button(text("\u{21BB}").size(18).color(C::muted()))
-            .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::Refresh);
+            .padding([6, 8])
+            .style(nav_icon_button_style())
+            .on_press(BrowserMessage::Refresh);
         let url_input_widget = text_input("Search or navigate", &self.url_input)
             .on_input(BrowserMessage::UrlInputChanged)
             .on_submit(BrowserMessage::UrlSubmitted)
-            .size(14).padding(10)
+            .size(14)
+            .padding(10)
             .style(url_input_style())
             .width(Length::Fill);
 
         let url_bar = container(
             row![secure_icon, url_input_widget]
-                .spacing(8).align_y(Alignment::Center).padding([0, 12])
-        ).style(|_| container::Style {
+                .spacing(8)
+                .align_y(Alignment::Center)
+                .padding([0, 12]),
+        )
+        .style(|_| container::Style {
             background: Some(Background::Color(C::surface())),
-            border: iced::Border { color: C::border(), width: 1.0, radius: 999.0.into() },
+            border: iced::Border {
+                color: C::border(),
+                width: 1.0,
+                radius: 999.0.into(),
+            },
             ..Default::default()
-        }).width(Length::Fill);
+        })
+        .width(Length::Fill);
 
         let bookmark_btn = button(text("\u{2606}").size(16).color(C::muted()))
-            .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::Bookmark);
+            .padding([6, 8])
+            .style(nav_icon_button_style())
+            .on_press(BrowserMessage::Bookmark);
         let palette_btn = button(text("\u{229E}").size(16).color(C::muted()))
-            .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::OpenPalette);
-        let inspect_icon = if self.inspect_mode { "\u{25C9}" } else { "\u{25CB}" };
-        let inspect_btn = button(text(inspect_icon).size(14).color(if self.inspect_mode { C::accent() } else { C::muted() }))
-            .padding([6, 8]).style(nav_icon_button_style()).on_press(BrowserMessage::ToggleInspect);
+            .padding([6, 8])
+            .style(nav_icon_button_style())
+            .on_press(BrowserMessage::OpenPalette);
+        let inspect_icon = if self.inspect_mode {
+            "\u{25C9}"
+        } else {
+            "\u{25CB}"
+        };
+        let inspect_btn = button(text(inspect_icon).size(14).color(if self.inspect_mode {
+            C::accent()
+        } else {
+            C::muted()
+        }))
+        .padding([6, 8])
+        .style(nav_icon_button_style())
+        .on_press(BrowserMessage::ToggleInspect);
         let kor_btn = button(text("\u{26A1}").size(14).color(C::accent()))
-            .padding([6, 8]).style(nav_icon_button_style())
+            .padding([6, 8])
+            .style(nav_icon_button_style())
             .on_press(BrowserMessage::RunKorOnPage);
 
         // Autocomplete dropdown
         let matches: Vec<&String> = if self.show_autocomplete && !self.url_input.is_empty() {
-            self.url_history.iter().filter(|h| h.contains(&self.url_input)).take(8).collect()
-        } else { vec![] };
+            self.url_history
+                .iter()
+                .filter(|h| h.contains(&self.url_input))
+                .take(8)
+                .collect()
+        } else {
+            vec![]
+        };
 
         let matched_index = self.autocomplete_index;
         let input_with_dropdown: Element<'_, BrowserMessage> = if matches.is_empty() {
             url_bar.into()
         } else {
-            let items: Vec<Element<'_, BrowserMessage>> = matches.iter().enumerate().map(|(i, h)| {
-                let selected = i == matched_index;
-                let bg_color = if selected { C::accent_dim() } else { Color::TRANSPARENT };
-                let item = container(text(h.as_str()).size(12).color(C::fg()))
-                    .width(Length::Fill).padding([6, 12])
-                    .style(move |_| container::Style {
-                        background: Some(Background::Color(bg_color)),
-                        border: iced::Border { radius: 4.0.into(), ..Default::default() },
-                        ..Default::default()
-                    });
-                button(item).width(Length::Fill).padding(0)
-                    .style(|_, _| iced::widget::button::Style { background: None, text_color: C::fg(), border: iced::Border { radius: 4.0.into(), ..Default::default() }, ..Default::default() })
-                    .on_press(BrowserMessage::AutocompleteSelected(i)).into()
-            }).collect();
+            let items: Vec<Element<'_, BrowserMessage>> = matches
+                .iter()
+                .enumerate()
+                .map(|(i, h)| {
+                    let selected = i == matched_index;
+                    let bg_color = if selected {
+                        C::accent_dim()
+                    } else {
+                        Color::TRANSPARENT
+                    };
+                    let item = container(text(h.as_str()).size(12).color(C::fg()))
+                        .width(Length::Fill)
+                        .padding([6, 12])
+                        .style(move |_| container::Style {
+                            background: Some(Background::Color(bg_color)),
+                            border: iced::Border {
+                                radius: 4.0.into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        });
+                    button(item)
+                        .width(Length::Fill)
+                        .padding(0)
+                        .style(|_, _| iced::widget::button::Style {
+                            background: None,
+                            text_color: C::fg(),
+                            border: iced::Border {
+                                radius: 4.0.into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        })
+                        .on_press(BrowserMessage::AutocompleteSelected(i))
+                        .into()
+                })
+                .collect();
 
             column![
                 url_bar,
                 container(column(items).spacing(0).padding(4).max_width(600.0))
                     .style(autocomplete_dropdown_style())
                     .max_width(600.0),
-            ].spacing(0).into()
+            ]
+            .spacing(0)
+            .into()
         };
 
         let bar = container(
             row![
-                back_btn, fwd_btn, refresh_btn,
+                back_btn,
+                fwd_btn,
+                refresh_btn,
                 Space::with_width(8),
                 input_with_dropdown,
                 Space::with_width(8),
-                kor_btn, inspect_btn, bookmark_btn, palette_btn,
-            ].spacing(4).align_y(Alignment::Center).padding([0, 16])
-        ).height(Length::Fixed(56.0)).width(Length::Fill).center_y(Length::Fixed(56.0))
-        .style(|_| container::Style { background: None, ..Default::default() });
+                kor_btn,
+                inspect_btn,
+                bookmark_btn,
+                palette_btn,
+            ]
+            .spacing(4)
+            .align_y(Alignment::Center)
+            .padding([0, 16]),
+        )
+        .height(Length::Fixed(56.0))
+        .width(Length::Fill)
+        .center_y(Length::Fixed(56.0))
+        .style(|_| container::Style {
+            background: None,
+            ..Default::default()
+        });
 
         container(column![
             bar,
-            container(Space::with_height(1.0)).width(Length::Fill)
-                .style(|_| container::Style { background: Some(Background::Color(C::border())), ..Default::default() }),
-        ]).width(Length::Fill).into()
+            container(Space::with_height(1.0))
+                .width(Length::Fill)
+                .style(|_| container::Style {
+                    background: Some(Background::Color(C::border())),
+                    ..Default::default()
+                }),
+        ])
+        .width(Length::Fill)
+        .into()
     }
 
     fn status_bar(&self) -> Element<'_, BrowserMessage> {
@@ -938,9 +1168,12 @@ Component SidebarWS {
             vm.execute(self.status_bytecode.clone());
         }
         container(render_kor_vm(&self.kor_vm.borrow()))
-            .height(Length::Fixed(40.0)).width(Length::Fill)
-            .center_x(Length::Fill).center_y(Length::Fixed(40.0))
-            .style(status_bar_style()).into()
+            .height(Length::Fixed(40.0))
+            .width(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fixed(40.0))
+            .style(status_bar_style())
+            .into()
     }
 
     // Thin warning strip shown only when the previous run never reached a
@@ -960,7 +1193,9 @@ Component SidebarWS {
         Some(
             container(
                 row![
-                    text("Browser didn't shut down cleanly last time.").size(12).color(C::fg()),
+                    text("Browser didn't shut down cleanly last time.")
+                        .size(12)
+                        .color(C::fg()),
                     Space::with_width(Length::Fill),
                     dismiss,
                     fresh,
@@ -998,19 +1233,24 @@ Component SidebarWS {
             .collect();
         Some(
             container(scrollable(row(items).spacing(2).padding([2, 4])).width(Length::Fill))
-            .width(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Background::Color(C::surface())),
-                border: iced::Border { radius: 0.0.into(), ..Default::default() },
-                ..Default::default()
-            })
-            .into(),
+                .width(Length::Fill)
+                .style(|_| container::Style {
+                    background: Some(Background::Color(C::surface())),
+                    border: iced::Border {
+                        radius: 0.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                })
+                .into(),
         )
     }
 
     fn navigate_to(&mut self, input: &str) -> Task<BrowserMessage> {
         let input = input.trim();
-        if input.is_empty() { return Task::none(); }
+        if input.is_empty() {
+            return Task::none();
+        }
 
         // Check if it's a search query (not a URL)
         let target = if VayuSettings::is_url(input) {
@@ -1027,9 +1267,11 @@ Component SidebarWS {
         self.bridge = None;
         self.is_history_nav = false;
         let (bw, bh) = self.bounds;
-        Task::perform(fetch_page_content(target, bw, bh, self.url_history.clone()), |(u, els, b)| BrowserMessage::PageLoaded(u, els, b))
+        Task::perform(
+            fetch_page_content(target, bw, bh, self.url_history.clone()),
+            |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
+        )
     }
-
 }
 
 // B1: pure toggle - remove by exact URL match, else append preserving order.
@@ -1039,24 +1281,34 @@ fn toggle_bookmark(bookmarks: Vec<Bookmark>, url: &str, title: &str) -> Vec<Book
         bookmarks.into_iter().filter(|b| b.url != url).collect()
     } else {
         let mut next = bookmarks;
-        next.push(Bookmark { url: url.to_string(), title: title.to_string() });
+        next.push(Bookmark {
+            url: url.to_string(),
+            title: title.to_string(),
+        });
         next
     }
 }
 
 fn secure_indicator(url: &str) -> String {
-    if url.starts_with("https://") { "\u{1F512}".to_string() }
-    else if url.starts_with("http://") { "\u{26A0}".to_string() }
-    else { String::new() }
+    if url.starts_with("https://") {
+        "\u{1F512}".to_string()
+    } else if url.starts_with("http://") {
+        "\u{26A0}".to_string()
+    } else {
+        String::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iced::Color;
-    use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url, Bookmark};
     use crate::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
-    use crate::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
+    use crate::engine::pipeline::{apply_taffy_layout, normalize_nav_url, Bookmark};
+    use crate::engine::stratus::{
+        AlignContent, AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent,
+        Position,
+    };
+    use iced::Color;
 
     fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> StyledElement {
         let display = match display {
@@ -1067,27 +1319,60 @@ mod tests {
             _ => Display::Block,
         };
         StyledElement {
-            tag: tag.to_string(), text: text.to_string(), wrapped_lines: vec![],
+            tag: tag.to_string(),
+            text: text.to_string(),
+            wrapped_lines: vec![],
             dom_path: vec![],
-            is_link: false, href: None, indent_level: 0,
-            color: Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal,
-            background_color: None, border_widths: [0.0; 4], border_color: None,
-            image_handle: None, image_url: None,
-            margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None,
-            padding: [0.0; 4], display,
-            flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
-            justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
-            align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
-            flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
-            css_width: None, css_height: None, parent_index: parent,
-            min_width: None, max_width: None, min_height: None, max_height: None,
-            x: 0.0, y: 0.0, width: 0.0, height: 0.0,
-            line_height: 1.4, text_decoration: TextDecor::default(),
+            is_link: false,
+            href: None,
+            indent_level: 0,
+            color: Color::BLACK,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            background_color: None,
+            border_widths: [0.0; 4],
+            border_color: None,
+            image_handle: None,
+            image_url: None,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: None,
+            margin_right: None,
+            padding: [0.0; 4],
+            display,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto,
+            align_content: AlignContent::Stretch,
+            box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            css_width: None,
+            css_height: None,
+            parent_index: parent,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            line_height: 1.4,
+            text_decoration: TextDecor::default(),
             border_radius: [0.0; 4],
-            input_type: String::new(), input_value: String::new(),
-            input_placeholder: String::new(), checked: false,
+            input_type: String::new(),
+            input_value: String::new(),
+            input_placeholder: String::new(),
+            checked: false,
             position: Position::Static,
-            inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+            inset_top: 0.0,
+            inset_right: 0.0,
+            inset_bottom: 0.0,
+            inset_left: 0.0,
         }
     }
 
@@ -1099,8 +1384,15 @@ mod tests {
             make_test("span", "World", "inline", Some(0)),
         ];
         apply_taffy_layout(&mut elements, 800.0, 6000.0);
-        for el in &elements { assert!(el.x.is_finite() && el.x >= 0.0, "x={}", el.x); }
-        assert!(elements[2].x >= elements[1].x, "span1 x={} < span0 x={}", elements[2].x, elements[1].x);
+        for el in &elements {
+            assert!(el.x.is_finite() && el.x >= 0.0, "x={}", el.x);
+        }
+        assert!(
+            elements[2].x >= elements[1].x,
+            "span1 x={} < span0 x={}",
+            elements[2].x,
+            elements[1].x
+        );
     }
 
     #[test]
@@ -1122,7 +1414,9 @@ mod tests {
             make_test("span", "IJKLMNOP", "inline", Some(0)),
         ];
         apply_taffy_layout(&mut elements, 800.0, 6000.0);
-        for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
+        for el in &elements {
+            assert!(el.x.is_finite() && el.y.is_finite());
+        }
     }
 
     #[test]
@@ -1134,7 +1428,9 @@ mod tests {
             make_test("span", "World", "inline", Some(0)),
         ];
         apply_taffy_layout(&mut elements, 800.0, 6000.0);
-        for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
+        for el in &elements {
+            assert!(el.x.is_finite() && el.y.is_finite());
+        }
     }
 
     #[test]
@@ -1145,7 +1441,9 @@ mod tests {
             make_test("span", "Inner", "inline", Some(1)),
         ];
         apply_taffy_layout(&mut elements, 800.0, 6000.0);
-        for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
+        for el in &elements {
+            assert!(el.x.is_finite() && el.y.is_finite());
+        }
     }
 
     #[test]
@@ -1153,14 +1451,19 @@ mod tests {
         let mut elements = vec![
             make_test("div", "", "block", None),
             StyledElement {
-                margin_top: 10.0, margin_bottom: 10.0,
-                css_width: Some(100.0), css_height: Some(50.0),
-                width: 100.0, height: 50.0,
+                margin_top: 10.0,
+                margin_bottom: 10.0,
+                css_width: Some(100.0),
+                css_height: Some(50.0),
+                width: 100.0,
+                height: 50.0,
                 ..make_test("div", "", "inline-block", Some(0))
             },
         ];
         apply_taffy_layout(&mut elements, 800.0, 6000.0);
-        for el in &elements { assert!(el.x.is_finite() && el.y.is_finite()); }
+        for el in &elements {
+            assert!(el.x.is_finite() && el.y.is_finite());
+        }
     }
 
     #[test]
@@ -1177,7 +1480,12 @@ mod tests {
         let style = crate::engine::stratus::resolve_style(&ed, &stylesheet);
         assert_eq!(style.display, crate::engine::stratus::Display::Block);
         assert!(style.color.is_some(), "color should be resolved");
-        let c = style.color.unwrap_or(crate::engine::stratus::Color { r: 0, g: 0, b: 0, a: 255 });
+        let c = style.color.unwrap_or(crate::engine::stratus::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
         assert_eq!(c.r, 255, "r={}", c.r);
     }
 
@@ -1215,19 +1523,29 @@ mod tests {
             Tab::new("C", "https://c.com", 0),
         ];
         screen.active_tab = 2;
-        screen.tab_history = vec![(vec!["https://a.com".into()], 0), (vec!["https://b.com".into()], 0), (vec!["https://c.com".into()], 0)];
+        screen.tab_history = vec![
+            (vec!["https://a.com".into()], 0),
+            (vec!["https://b.com".into()], 0),
+            (vec!["https://c.com".into()], 0),
+        ];
 
         let _ = screen.update(BrowserMessage::CloseTab(0));
 
         assert_eq!(screen.tabs.len(), 2);
         assert_eq!(screen.tabs[0].title, "B");
         assert_eq!(screen.tabs[1].title, "C");
-        assert_eq!(screen.active_tab, 1, "active_tab should shift left after closing tab before it");
+        assert_eq!(
+            screen.active_tab, 1,
+            "active_tab should shift left after closing tab before it"
+        );
     }
 
     // -- B1 bookmarks bar --
     fn bm(url: &str, title: &str) -> Bookmark {
-        Bookmark { url: url.to_string(), title: title.to_string() }
+        Bookmark {
+            url: url.to_string(),
+            title: title.to_string(),
+        }
     }
 
     #[test]
@@ -1248,7 +1566,11 @@ mod tests {
 
     #[test]
     fn b1_toggle_removes_existing_by_url_ignoring_title() {
-        let start = vec![bm("https://a", "A"), bm("https://b", "B"), bm("https://c", "C")];
+        let start = vec![
+            bm("https://a", "A"),
+            bm("https://b", "B"),
+            bm("https://c", "C"),
+        ];
         let b = toggle_bookmark(start, "https://b", "some other title");
         let urls: Vec<&str> = b.iter().map(|x| x.url.as_str()).collect();
         assert_eq!(urls, ["https://a", "https://c"]);

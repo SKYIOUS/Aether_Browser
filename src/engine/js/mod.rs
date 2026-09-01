@@ -1,14 +1,14 @@
-pub mod js_bridge;
-pub mod timers;
 pub mod events;
+pub mod fetch;
+pub mod js_bridge;
 pub mod selector;
 pub mod selector_engine;
-pub mod fetch;
 pub mod storage;
+pub mod timers;
 
-use std::sync::{Arc, Mutex};
-use rquickjs::Runtime as QuickJSRuntime;
 use crate::plog;
+use rquickjs::Runtime as QuickJSRuntime;
+use std::sync::{Arc, Mutex};
 
 pub use js_bridge::JsBridge;
 
@@ -39,18 +39,20 @@ impl Default for JSEngine {
 impl JSEngine {
     pub fn execute(&mut self, code: &str) -> Result<String, String> {
         if let Some(ref ctx) = self.context {
-            ctx.with(|ctx: rquickjs::Ctx<'_>| {
-                match ctx.eval::<String, _>(code) {
-                    Ok(result) => Ok(result),
-                    Err(e) => Err(format!("JS Error: {:?}", e)),
-                }
+            ctx.with(|ctx: rquickjs::Ctx<'_>| match ctx.eval::<String, _>(code) {
+                Ok(result) => Ok(result),
+                Err(e) => Err(format!("JS Error: {:?}", e)),
             })
         } else {
             Err("No JS context".to_string())
         }
     }
 
-    pub fn execute_with_bridge(&mut self, code: &str, bridge: &Arc<Mutex<JsBridge>>) -> Result<String, String> {
+    pub fn execute_with_bridge(
+        &mut self,
+        code: &str,
+        bridge: &Arc<Mutex<JsBridge>>,
+    ) -> Result<String, String> {
         if let Some(ref ctx) = self.context {
             ctx.with(|ctx: rquickjs::Ctx<'_>| {
                 if let Err(e) = js_bridge::register_browser_api(&ctx, bridge) {
@@ -66,13 +68,18 @@ impl JSEngine {
         }
     }
 
-    pub fn execute_source(&mut self, source: &str, bridge: &Arc<Mutex<JsBridge>>) -> Result<(), String> {
+    pub fn execute_source(
+        &mut self,
+        source: &str,
+        bridge: &Arc<Mutex<JsBridge>>,
+    ) -> Result<(), String> {
         if let Some(ref ctx) = self.context {
             ctx.with(|ctx: rquickjs::Ctx<'_>| {
                 if let Err(e) = js_bridge::register_browser_api(&ctx, bridge) {
                     plog!("JS", "register_browser_api failed: {:?}", e);
                 }
-                ctx.eval::<(), _>(source).map_err(|e| format!("JS Error: {:?}", e))
+                ctx.eval::<(), _>(source)
+                    .map_err(|e| format!("JS Error: {:?}", e))
             })
         } else {
             Err("No JS context".to_string())

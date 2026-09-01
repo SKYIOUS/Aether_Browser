@@ -4,21 +4,32 @@
 use super::matcher::{match_rules, ElementData, Specificity};
 use super::parser::{Declaration, PropertyValue, Stylesheet};
 use super::style_value::{
-    AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexWrap,
-    JustifyContent, LengthValue, Position, Transform, Transition, Unit,
+    AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexWrap, JustifyContent,
+    LengthValue, Position, Transform, Transition, Unit,
 };
 
 pub fn resolve_style(element: &ElementData, stylesheet: &Stylesheet) -> ComputedStyle {
     resolve_style_vp(element, stylesheet, 800.0, 600.0)
 }
 
-pub fn resolve_style_vp(element: &ElementData, stylesheet: &Stylesheet, viewport_w: f32, viewport_h: f32) -> ComputedStyle {
+pub fn resolve_style_vp(
+    element: &ElementData,
+    stylesheet: &Stylesheet,
+    viewport_w: f32,
+    viewport_h: f32,
+) -> ComputedStyle {
     let mut style = ComputedStyle::default_style();
 
     let matched = match_rules(element, stylesheet);
 
     for (declarations, specificity) in matched {
-        apply_declarations_vp(&mut style, declarations, specificity, viewport_w, viewport_h);
+        apply_declarations_vp(
+            &mut style,
+            declarations,
+            specificity,
+            viewport_w,
+            viewport_h,
+        );
     }
 
     style
@@ -29,7 +40,13 @@ fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], s
     apply_declarations_vp(style, declarations, spec, 800.0, 600.0)
 }
 
-fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration], _specificity: Specificity, viewport_w: f32, viewport_h: f32) {
+fn apply_declarations_vp(
+    style: &mut ComputedStyle,
+    declarations: &[Declaration],
+    _specificity: Specificity,
+    viewport_w: f32,
+    viewport_h: f32,
+) {
     use super::property_names::CssPropertyName;
     use std::str::FromStr;
 
@@ -40,11 +57,17 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
             match prop {
                 CssPropertyName::Color => {
                     if let Some(v) = parse_color(&decl.value) {
-                        if !v.is_current() { style.color = Some(v); }
+                        if !v.is_current() {
+                            style.color = Some(v);
+                        }
                     }
                 }
-                CssPropertyName::Background => style.background_color = parse_background(&decl.value),
-                CssPropertyName::BackgroundColor => style.background_color = parse_color(&decl.value),
+                CssPropertyName::Background => {
+                    style.background_color = parse_background(&decl.value)
+                }
+                CssPropertyName::BackgroundColor => {
+                    style.background_color = parse_color(&decl.value)
+                }
                 CssPropertyName::FontSize => style.font_size = parse_length_vp(&decl.value, vw, vh),
                 CssPropertyName::FontWeight => style.font_weight = parse_keyword(&decl.value),
                 CssPropertyName::FontFamily => style.font_family = parse_keyword(&decl.value),
@@ -56,7 +79,9 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                 CssPropertyName::Opacity => {
                     style.opacity = match &decl.value {
                         PropertyValue::Number(n) => Some(n.clamp(0.0, 1.0)),
-                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0)),
+                        PropertyValue::Keyword(s) => {
+                            s.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0))
+                        }
                         _ => None,
                     };
                 }
@@ -68,81 +93,169 @@ fn apply_declarations_vp(style: &mut ComputedStyle, declarations: &[Declaration]
                     };
                 }
 
-                CssPropertyName::Margin | CssPropertyName::MarginTop | CssPropertyName::MarginRight | CssPropertyName::MarginBottom | CssPropertyName::MarginLeft => {
-                    apply_sides_vp(&mut style.margin_top, &mut style.margin_right, &mut style.margin_bottom, &mut style.margin_left, &decl.name, &decl.value, vw, vh);
+                CssPropertyName::Margin
+                | CssPropertyName::MarginTop
+                | CssPropertyName::MarginRight
+                | CssPropertyName::MarginBottom
+                | CssPropertyName::MarginLeft => {
+                    apply_sides_vp(
+                        &mut style.margin_top,
+                        &mut style.margin_right,
+                        &mut style.margin_bottom,
+                        &mut style.margin_left,
+                        &decl.name,
+                        &decl.value,
+                        vw,
+                        vh,
+                    );
                 }
-                CssPropertyName::Padding | CssPropertyName::PaddingTop | CssPropertyName::PaddingRight | CssPropertyName::PaddingBottom | CssPropertyName::PaddingLeft => {
-                    apply_sides_vp(&mut style.padding_top, &mut style.padding_right, &mut style.padding_bottom, &mut style.padding_left, &decl.name, &decl.value, vw, vh);
+                CssPropertyName::Padding
+                | CssPropertyName::PaddingTop
+                | CssPropertyName::PaddingRight
+                | CssPropertyName::PaddingBottom
+                | CssPropertyName::PaddingLeft => {
+                    apply_sides_vp(
+                        &mut style.padding_top,
+                        &mut style.padding_right,
+                        &mut style.padding_bottom,
+                        &mut style.padding_left,
+                        &decl.name,
+                        &decl.value,
+                        vw,
+                        vh,
+                    );
                 }
-                CssPropertyName::BorderWidth | CssPropertyName::BorderTopWidth | CssPropertyName::BorderRightWidth | CssPropertyName::BorderBottomWidth | CssPropertyName::BorderLeftWidth => {
-                    apply_sides_vp(&mut style.border_top_width, &mut style.border_right_width, &mut style.border_bottom_width, &mut style.border_left_width, &decl.name, &decl.value, vw, vh);
+                CssPropertyName::BorderWidth
+                | CssPropertyName::BorderTopWidth
+                | CssPropertyName::BorderRightWidth
+                | CssPropertyName::BorderBottomWidth
+                | CssPropertyName::BorderLeftWidth => {
+                    apply_sides_vp(
+                        &mut style.border_top_width,
+                        &mut style.border_right_width,
+                        &mut style.border_bottom_width,
+                        &mut style.border_left_width,
+                        &decl.name,
+                        &decl.value,
+                        vw,
+                        vh,
+                    );
                 }
-                CssPropertyName::BorderColor | CssPropertyName::BorderTopColor | CssPropertyName::BorderRightColor | CssPropertyName::BorderBottomColor | CssPropertyName::BorderLeftColor => {
-                    apply_border_colors(&mut style.border_top_color, &mut style.border_right_color, &mut style.border_bottom_color, &mut style.border_left_color, &decl.name, &decl.value);
+                CssPropertyName::BorderColor
+                | CssPropertyName::BorderTopColor
+                | CssPropertyName::BorderRightColor
+                | CssPropertyName::BorderBottomColor
+                | CssPropertyName::BorderLeftColor => {
+                    apply_border_colors(
+                        &mut style.border_top_color,
+                        &mut style.border_right_color,
+                        &mut style.border_bottom_color,
+                        &mut style.border_left_color,
+                        &decl.name,
+                        &decl.value,
+                    );
                 }
 
                 CssPropertyName::Width => style.width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::Height => style.height = parse_length_vp_vertical(&decl.value, vw, vh),
+                CssPropertyName::Height => {
+                    style.height = parse_length_vp_vertical(&decl.value, vw, vh)
+                }
                 CssPropertyName::MinWidth => style.min_width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::MinHeight => style.min_height = parse_length_vp_vertical(&decl.value, vw, vh),
+                CssPropertyName::MinHeight => {
+                    style.min_height = parse_length_vp_vertical(&decl.value, vw, vh)
+                }
                 CssPropertyName::MaxWidth => style.max_width = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::MaxHeight => style.max_height = parse_length_vp_vertical(&decl.value, vw, vh),
+                CssPropertyName::MaxHeight => {
+                    style.max_height = parse_length_vp_vertical(&decl.value, vw, vh)
+                }
                 CssPropertyName::Top => style.top = parse_length_vp_vertical(&decl.value, vw, vh),
                 CssPropertyName::Right => style.right = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::Bottom => style.bottom = parse_length_vp_vertical(&decl.value, vw, vh),
+                CssPropertyName::Bottom => {
+                    style.bottom = parse_length_vp_vertical(&decl.value, vw, vh)
+                }
                 CssPropertyName::Left => style.left = parse_length_vp(&decl.value, vw, vh),
 
-                CssPropertyName::FlexDirection => style.flex.flex_direction = parse_flex_direction(&decl.value),
+                CssPropertyName::FlexDirection => {
+                    style.flex.flex_direction = parse_flex_direction(&decl.value)
+                }
                 CssPropertyName::FlexWrap => style.flex.flex_wrap = parse_flex_wrap(&decl.value),
-                CssPropertyName::JustifyContent => style.flex.justify_content = parse_justify_content(&decl.value),
-                CssPropertyName::AlignItems => style.flex.align_items = parse_align_items(&decl.value),
+                CssPropertyName::JustifyContent => {
+                    style.flex.justify_content = parse_justify_content(&decl.value)
+                }
+                CssPropertyName::AlignItems => {
+                    style.flex.align_items = parse_align_items(&decl.value)
+                }
                 CssPropertyName::AlignSelf => style.flex.align_self = parse_align_self(&decl.value),
                 CssPropertyName::FlexGrow => {
                     style.flex.flex_grow = match &decl.value {
                         PropertyValue::Number(n) => n.max(0.0),
-                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(0.0),
+                        PropertyValue::Keyword(s) => {
+                            s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(0.0)
+                        }
                         _ => 0.0,
                     };
                 }
                 CssPropertyName::FlexShrink => {
                     style.flex.flex_shrink = match &decl.value {
                         PropertyValue::Number(n) => n.max(0.0),
-                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0),
+                        PropertyValue::Keyword(s) => {
+                            s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0)
+                        }
                         _ => 1.0,
                     };
                 }
-                CssPropertyName::FlexBasis => style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::FlexBasis => {
+                    style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh)
+                }
 
                 CssPropertyName::Transform => style.transform = parse_transform(&decl.value),
                 CssPropertyName::Transition => style.transition = parse_transition(&decl.value),
 
                 CssPropertyName::BoxSizing => style.box_sizing = parse_keyword(&decl.value),
 
-                CssPropertyName::LineHeight => style.line_height = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::TextDecoration => style.text_decoration = parse_keyword(&decl.value),
+                CssPropertyName::LineHeight => {
+                    style.line_height = parse_length_vp(&decl.value, vw, vh)
+                }
+                CssPropertyName::TextDecoration => {
+                    style.text_decoration = parse_keyword(&decl.value)
+                }
                 CssPropertyName::Cursor => style.cursor = parse_keyword(&decl.value),
-                CssPropertyName::BorderRadius => style.border_radius = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::BorderRadius => {
+                    style.border_radius = parse_length_vp(&decl.value, vw, vh)
+                }
             }
         }
     }
 
     let base = style.color.clone().unwrap_or(Color::BLACK);
-    for bc in [&mut style.border_top_color, &mut style.border_right_color,
-               &mut style.border_bottom_color, &mut style.border_left_color] {
+    for bc in [
+        &mut style.border_top_color,
+        &mut style.border_right_color,
+        &mut style.border_bottom_color,
+        &mut style.border_left_color,
+    ] {
         if let Some(c) = bc {
-            if c.is_current() { *bc = Some(base.clone()); }
+            if c.is_current() {
+                *bc = Some(base.clone());
+            }
         }
     }
     if let Some(c) = &mut style.background_color {
-        if c.is_current() { *c = base; }
+        if c.is_current() {
+            *c = base;
+        }
     }
 }
 
 fn parse_color(value: &PropertyValue) -> Option<Color> {
     match value {
         PropertyValue::Color(c) => {
-            if c.is_current() { Some(Color::CURRENT_COLOR) } else { Some(c.clone()) }
-        },
+            if c.is_current() {
+                Some(Color::CURRENT_COLOR)
+            } else {
+                Some(c.clone())
+            }
+        }
         PropertyValue::Keyword(s) => Color::from_named(s),
         _ => None,
     }
@@ -220,8 +333,9 @@ fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f
 fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[Option<f32>; 4]> {
     let parts: Vec<PropertyValue> = match value {
         PropertyValue::Shorthand(parts) => parts.clone(),
-        PropertyValue::Keyword(s) => {
-            s.split_whitespace().map(|p| {
+        PropertyValue::Keyword(s) => s
+            .split_whitespace()
+            .map(|p| {
                 if p == "auto" {
                     PropertyValue::Keyword("auto".to_string())
                 } else if let Some(lv) = LengthValue::from_str(p) {
@@ -231,13 +345,15 @@ fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[O
                 } else {
                     PropertyValue::Keyword(p.to_string())
                 }
-            }).collect()
-        }
+            })
+            .collect(),
         _ => return None,
     };
 
     let len = parts.len();
-    if len == 0 || len > 4 { return None; }
+    if len == 0 || len > 4 {
+        return None;
+    }
 
     let mut vals: Vec<Option<f32>> = Vec::with_capacity(len);
     for (i, part) in parts.iter().enumerate() {
@@ -250,10 +366,8 @@ fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[O
         } else {
             parse_length_vp(part, vw, vh)
         };
-        match px {
-            Some(v) => vals.push(Some(v)),
-            None => return None,
-        }
+        let v = px?;
+        vals.push(Some(v));
     }
 
     Some(match vals.len() {
@@ -354,9 +468,18 @@ fn parse_transition(value: &PropertyValue) -> Option<Transition> {
         PropertyValue::Keyword(s) => {
             let parts: Vec<&str> = s.split_whitespace().collect();
             Some(Transition {
-                property: parts.first().map(|s| s.to_string()).unwrap_or_else(|| "all".to_string()),
-                duration: parts.get(1).and_then(|v| v.trim_end_matches("s").parse().ok()).unwrap_or(0.3),
-                timing_function: parts.get(2).map(|s| s.to_string()).unwrap_or_else(|| "ease".to_string()),
+                property: parts
+                    .first()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "all".to_string()),
+                duration: parts
+                    .get(1)
+                    .and_then(|v| v.trim_end_matches("s").parse().ok())
+                    .unwrap_or(0.3),
+                timing_function: parts
+                    .get(2)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "ease".to_string()),
                 delay: 0.0,
             })
         }
@@ -376,29 +499,53 @@ fn apply_sides_vp(
     vh: f32,
 ) {
     // Determine if this is a vertical or horizontal property
-    let is_vertical = matches!(name,
-        "margin-top" | "margin-bottom" | "padding-top" | "padding-bottom"
-        | "border-top-width" | "border-bottom-width"
+    let is_vertical = matches!(
+        name,
+        "margin-top"
+            | "margin-bottom"
+            | "padding-top"
+            | "padding-bottom"
+            | "border-top-width"
+            | "border-bottom-width"
     );
     // First try single length
-    let maybe_len = if is_vertical { parse_length_vp_vertical(value, vw, vh) } else { parse_length_vp(value, vw, vh) };
+    let maybe_len = if is_vertical {
+        parse_length_vp_vertical(value, vw, vh)
+    } else {
+        parse_length_vp(value, vw, vh)
+    };
     if let Some(len) = maybe_len {
         match name {
             "margin-top" => *top = Some(len),
             "margin-right" => *right = Some(len),
             "margin-bottom" => *bottom = Some(len),
             "margin-left" => *left = Some(len),
-            "margin" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            "margin" => {
+                *top = Some(len);
+                *right = Some(len);
+                *bottom = Some(len);
+                *left = Some(len);
+            }
             "padding-top" => *top = Some(len),
             "padding-right" => *right = Some(len),
             "padding-bottom" => *bottom = Some(len),
             "padding-left" => *left = Some(len),
-            "padding" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            "padding" => {
+                *top = Some(len);
+                *right = Some(len);
+                *bottom = Some(len);
+                *left = Some(len);
+            }
             "border-top-width" => *top = Some(len),
             "border-right-width" => *right = Some(len),
             "border-bottom-width" => *bottom = Some(len),
             "border-left-width" => *left = Some(len),
-            "border-width" => { *top = Some(len); *right = Some(len); *bottom = Some(len); *left = Some(len); }
+            "border-width" => {
+                *top = Some(len);
+                *right = Some(len);
+                *bottom = Some(len);
+                *left = Some(len);
+            }
             _ => {}
         }
         return;
@@ -407,17 +554,41 @@ fn apply_sides_vp(
     // Try shorthand (e.g. "5em auto" → [5em, auto, 5em, auto])
     if let Some(quads) = parse_side_shorthand_vp(value, vw, vh) {
         let is_shorthand = matches!(name, "margin" | "padding" | "border-width");
-        if is_shorthand || name == "margin-top" || name == "padding-top" || name == "border-top-width" {
-            if let Some(v) = quads[0] { *top = Some(v); }
+        if is_shorthand
+            || name == "margin-top"
+            || name == "padding-top"
+            || name == "border-top-width"
+        {
+            if let Some(v) = quads[0] {
+                *top = Some(v);
+            }
         }
-        if is_shorthand || name == "margin-right" || name == "padding-right" || name == "border-right-width" {
-            if let Some(v) = quads[1] { *right = Some(v); }
+        if is_shorthand
+            || name == "margin-right"
+            || name == "padding-right"
+            || name == "border-right-width"
+        {
+            if let Some(v) = quads[1] {
+                *right = Some(v);
+            }
         }
-        if is_shorthand || name == "margin-bottom" || name == "padding-bottom" || name == "border-bottom-width" {
-            if let Some(v) = quads[2] { *bottom = Some(v); }
+        if is_shorthand
+            || name == "margin-bottom"
+            || name == "padding-bottom"
+            || name == "border-bottom-width"
+        {
+            if let Some(v) = quads[2] {
+                *bottom = Some(v);
+            }
         }
-        if is_shorthand || name == "margin-left" || name == "padding-left" || name == "border-left-width" {
-            if let Some(v) = quads[3] { *left = Some(v); }
+        if is_shorthand
+            || name == "margin-left"
+            || name == "padding-left"
+            || name == "border-left-width"
+        {
+            if let Some(v) = quads[3] {
+                *left = Some(v);
+            }
         }
     }
 }
@@ -430,7 +601,9 @@ fn apply_border_colors(
     name: &str,
     value: &PropertyValue,
 ) {
-    let Some(color) = parse_color(value) else { return; };
+    let Some(color) = parse_color(value) else {
+        return;
+    };
 
     match name {
         "border-top-color" => *top = Some(color),
@@ -471,10 +644,13 @@ mod tests {
                     attribute: None,
                     pseudo_class: None,
                 })],
-                declarations: declarations.iter().map(|(n, v)| Declaration {
-                    name: n.to_string(),
-                    value: v.clone(),
-                }).collect(),
+                declarations: declarations
+                    .iter()
+                    .map(|(n, v)| Declaration {
+                        name: n.to_string(),
+                        value: v.clone(),
+                    })
+                    .collect(),
             }],
         }
     }
@@ -485,7 +661,15 @@ mod tests {
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
     }
 
     #[test]
@@ -517,19 +701,45 @@ mod tests {
         let stylesheet = Stylesheet {
             rules: vec![
                 Rule {
-                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
-                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("red".into()) }],
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("div".into()),
+                        id: None,
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".into(),
+                        value: PropertyValue::Keyword("red".into()),
+                    }],
                 },
                 Rule {
-                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
-                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("blue".into()) }],
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("div".into()),
+                        id: None,
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".into(),
+                        value: PropertyValue::Keyword("blue".into()),
+                    }],
                 },
             ],
         };
         let element = ElementData::new("div".to_string());
 
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 255
+            })
+        );
     }
 
     #[test]
@@ -537,12 +747,30 @@ mod tests {
         let stylesheet = Stylesheet {
             rules: vec![
                 Rule {
-                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: Some("div".into()), id: None, class: vec![], attribute: None, pseudo_class: None })],
-                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("red".into()) }],
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: Some("div".into()),
+                        id: None,
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".into(),
+                        value: PropertyValue::Keyword("red".into()),
+                    }],
                 },
                 Rule {
-                    selectors: vec![Selector::Simple(SimpleSelector { tag_name: None, id: Some("id".into()), class: vec![], attribute: None, pseudo_class: None })],
-                    declarations: vec![Declaration { name: "color".into(), value: PropertyValue::Keyword("blue".into()) }],
+                    selectors: vec![Selector::Simple(SimpleSelector {
+                        tag_name: None,
+                        id: Some("id".into()),
+                        class: vec![],
+                        attribute: None,
+                        pseudo_class: None,
+                    })],
+                    declarations: vec![Declaration {
+                        name: "color".into(),
+                        value: PropertyValue::Keyword("blue".into()),
+                    }],
                 },
             ],
         };
@@ -551,12 +779,21 @@ mod tests {
         let element = ElementData::with_attributes("div".to_string(), attrs);
 
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 255
+            })
+        );
     }
 
     #[test]
     fn test_resolve_current_color() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Keyword("currentColor".into()))]);
+        let stylesheet =
+            make_stylesheet(&[("color", PropertyValue::Keyword("currentColor".into()))]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.color, Some(Color::BLACK));
@@ -564,52 +801,143 @@ mod tests {
 
     #[test]
     fn test_resolve_hsl_color() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 255, g: 0, b: 0, a: 255 }))]);
+        let stylesheet = make_stylesheet(&[(
+            "color",
+            PropertyValue::Color(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255,
+            }),
+        )]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
     }
 
     #[test]
     fn test_resolve_color_value() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 128, g: 64, b: 192, a: 255 }))]);
+        let stylesheet = make_stylesheet(&[(
+            "color",
+            PropertyValue::Color(Color {
+                r: 128,
+                g: 64,
+                b: 192,
+                a: 255,
+            }),
+        )]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 128, g: 64, b: 192, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 128,
+                g: 64,
+                b: 192,
+                a: 255
+            })
+        );
     }
 
     #[test]
     fn test_resolve_border_current_color() {
         let stylesheet = make_stylesheet(&[
             ("color", PropertyValue::Keyword("red".into())),
-            ("border-color", PropertyValue::Keyword("currentColor".into())),
+            (
+                "border-color",
+                PropertyValue::Keyword("currentColor".into()),
+            ),
         ]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.border_top_color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
     }
 
     #[test]
     fn test_resolve_rgb_color() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 255, g: 0, b: 0, a: 255 }))]);
+        let stylesheet = make_stylesheet(&[(
+            "color",
+            PropertyValue::Color(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255,
+            }),
+        )]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
     }
 
     #[test]
     fn test_resolve_rgba_color() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 0, g: 255, b: 0, a: 128 }))]);
+        let stylesheet = make_stylesheet(&[(
+            "color",
+            PropertyValue::Color(Color {
+                r: 0,
+                g: 255,
+                b: 0,
+                a: 128,
+            }),
+        )]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 128 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 0,
+                g: 255,
+                b: 0,
+                a: 128
+            })
+        );
     }
 
     #[test]
     fn test_resolve_hsla_color() {
-        let stylesheet = make_stylesheet(&[("color", PropertyValue::Color(Color { r: 0, g: 0, b: 255, a: 64 }))]);
+        let stylesheet = make_stylesheet(&[(
+            "color",
+            PropertyValue::Color(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 64,
+            }),
+        )]);
         let element = ElementData::new("div".to_string());
         let style = resolve_style(&element, &stylesheet);
-        assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 64 }));
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 64
+            })
+        );
     }
 }

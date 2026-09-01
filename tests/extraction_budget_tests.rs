@@ -6,7 +6,17 @@ fn extract(html: &str) -> Vec<vayu_browser::engine::pipeline::extractor::StyledE
     let dom = parse_html(html);
     let sheet = Stylesheet { rules: vec![] };
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
     elements
 }
 
@@ -74,7 +84,8 @@ fn text_node_over_old_limit_is_kept() {
 // byte size and element count over the old caps so this fails on pre-A1 code.
 #[test]
 fn content_beyond_old_1mb_boundary_is_extracted() {
-    let filler_item = "<p>lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod</p>";
+    let filler_item =
+        "<p>lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod</p>";
     let mut html = String::from("<html><body><p class=\"early\">early-marker</p>");
     // ~78 bytes x 14000 ≈ 1.1MB total; element count also far past the old 2000 cap
     for _ in 0..14000 {

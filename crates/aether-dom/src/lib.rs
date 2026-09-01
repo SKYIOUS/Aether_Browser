@@ -40,10 +40,17 @@ impl Node {
         }
     }
 
-    pub fn new_element(tag_name: String, attributes: std::collections::HashMap<String, String>, children: Vec<Node>) -> Self {
+    pub fn new_element(
+        tag_name: String,
+        attributes: std::collections::HashMap<String, String>,
+        children: Vec<Node>,
+    ) -> Self {
         Node {
             children,
-            node_type: NodeType::Element(ElementData { tag_name, attributes }),
+            node_type: NodeType::Element(ElementData {
+                tag_name,
+                attributes,
+            }),
         }
     }
 
@@ -73,13 +80,13 @@ impl Node {
     pub fn text_content(&self) -> String {
         match &self.node_type {
             NodeType::Text(s) => s.clone(),
-            NodeType::Element(_) => {
-                self.children.iter()
-                    .map(|c| c.text_content())
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
+            NodeType::Element(_) => self
+                .children
+                .iter()
+                .map(|c| c.text_content())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
             _ => String::new(),
         }
     }

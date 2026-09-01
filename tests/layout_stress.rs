@@ -1,8 +1,11 @@
-use vayu_browser::engine::pipeline::{apply_taffy_layout, StyledElement};
-use vayu_browser::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
-use vayu_browser::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
-use iced::Color;
+use aether_css::AlignContent;
 use iced::widget::image::Handle;
+use iced::Color;
+use vayu_browser::engine::pipeline::extractor::{BoxSizing, FontWeight, TextDecor};
+use vayu_browser::engine::pipeline::{apply_taffy_layout, StyledElement};
+use vayu_browser::engine::stratus::{
+    AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position,
+};
 
 fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
     StyledElement {
@@ -32,6 +35,7 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         justify_content: JustifyContent::FlexStart,
         align_items: AlignItems::Stretch,
         align_self: AlignSelf::Auto,
+        align_content: AlignContent::Stretch,
         box_sizing: BoxSizing::ContentBox,
         flex_grow: 0.0,
         flex_shrink: 1.0,
@@ -49,7 +53,7 @@ fn make_el(tag: &str, parent: Option<usize>) -> StyledElement {
         height: 0.0,
         line_height: 1.4,
         text_decoration: TextDecor::default(),
-       
+
         border_radius: [0.0; 4],
         input_type: String::new(),
         input_value: String::new(),
@@ -67,8 +71,18 @@ fn check_positions(elements: &[StyledElement]) {
     for (i, el) in elements.iter().enumerate() {
         assert!(el.x.is_finite(), "el[{}] x not finite: {}", i, el.x);
         assert!(el.y.is_finite(), "el[{}] y not finite: {}", i, el.y);
-        assert!(el.width.is_finite() && el.width >= 0.0, "el[{}] bad width: {}", i, el.width);
-        assert!(el.height.is_finite() && el.height >= 0.0, "el[{}] bad height: {}", i, el.height);
+        assert!(
+            el.width.is_finite() && el.width >= 0.0,
+            "el[{}] bad width: {}",
+            i,
+            el.width
+        );
+        assert!(
+            el.height.is_finite() && el.height >= 0.0,
+            "el[{}] bad height: {}",
+            i,
+            el.height
+        );
     }
 }
 
@@ -83,10 +97,7 @@ fn single_block_element() {
 
 #[test]
 fn two_blocks_parent_child() {
-    let mut elements = vec![
-        make_el("div", None),
-        make_el("p", Some(0)),
-    ];
+    let mut elements = vec![make_el("div", None), make_el("p", Some(0))];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     assert!(elements[1].x >= 0.0);
@@ -142,7 +153,11 @@ fn mixed_inline_block() {
     for i in 0..20 {
         let display = if i % 2 == 0 { "inline" } else { "block" };
         let mut el = make_el("child", Some(0));
-        el.display = if display == "inline" { Display::Inline } else { Display::Block };
+        el.display = if display == "inline" {
+            Display::Inline
+        } else {
+            Display::Block
+        };
         if display == "inline" {
             el.text = format!("span{}", i);
         }
@@ -169,7 +184,10 @@ fn large_text_elements() {
 #[test]
 fn all_display_types() {
     let mut elements = vec![make_el("root", None)];
-    for (i, disp) in ["block", "inline", "inline-block", "flex", "none"].iter().enumerate() {
+    for (i, disp) in ["block", "inline", "inline-block", "flex", "none"]
+        .iter()
+        .enumerate()
+    {
         let mut el = make_el("child", Some(0));
         el.display = match *disp {
             "inline" => Display::Inline,
@@ -207,7 +225,10 @@ fn margins_affect_layout() {
         assert!(
             elements[i].y > elements[i - 1].y,
             "el[{}] y={} not > el[{}] y={}",
-            i, elements[i].y, i - 1, elements[i - 1].y
+            i,
+            elements[i].y,
+            i - 1,
+            elements[i - 1].y
         );
     }
 }
@@ -231,8 +252,18 @@ fn padding_contains_children() {
     check_positions(&elements);
     let child = &elements[1];
     let parent = &elements[0];
-    assert!(child.x >= parent.x, "child.x {} < parent.x {}", child.x, parent.x);
-    assert!(child.y >= parent.y, "child.y {} < parent.y {}", child.y, parent.y);
+    assert!(
+        child.x >= parent.x,
+        "child.x {} < parent.x {}",
+        child.x,
+        parent.x
+    );
+    assert!(
+        child.y >= parent.y,
+        "child.y {} < parent.y {}",
+        child.y,
+        parent.y
+    );
 }
 
 #[test]
@@ -275,37 +306,51 @@ fn wide_container() {
     apply_taffy_layout(&mut elements, 2000.0, 6000.0);
     check_positions(&elements);
     for el in &elements {
-        assert!(el.width <= 2000.0, "width {} exceeds container {}", el.width, 2000.0);
+        assert!(
+            el.width <= 2000.0,
+            "width {} exceeds container {}",
+            el.width,
+            2000.0
+        );
     }
 }
 
 #[test]
 fn nested_position_accumulation_child_before_parent() {
-    let mut elements = vec![
-        make_el("child", Some(1)),
-        make_el("parent", None),
-    ];
+    let mut elements = vec![make_el("child", Some(1)), make_el("parent", None)];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
     let child = &elements[0];
     let parent = &elements[1];
-    assert!(child.x >= parent.x, "child.x {} < parent.x {}", child.x, parent.x);
-    assert!(child.y >= parent.y, "child.y {} < parent.y {}", child.y, parent.y);
+    assert!(
+        child.x >= parent.x,
+        "child.x {} < parent.x {}",
+        child.x,
+        parent.x
+    );
+    assert!(
+        child.y >= parent.y,
+        "child.y {} < parent.y {}",
+        child.y,
+        parent.y
+    );
 }
 
 #[test]
 fn image_element_has_content() {
-    let mut elements = vec![
-        StyledElement {
-            image_handle: Some(Handle::from_rgba(10, 10, vec![0; 400])),
-            css_width: Some(200.0),
-            css_height: Some(150.0),
-            ..make_el("img", None)
-        },
-    ];
+    let mut elements = vec![StyledElement {
+        image_handle: Some(Handle::from_rgba(10, 10, vec![0; 400])),
+        css_width: Some(200.0),
+        css_height: Some(150.0),
+        ..make_el("img", None)
+    }];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     check_positions(&elements);
-    assert!(elements[0].height > 1.0, "image should not have minimum 1px height, got {}", elements[0].height);
+    assert!(
+        elements[0].height > 1.0,
+        "image should not have minimum 1px height, got {}",
+        elements[0].height
+    );
 }
 
 #[test]
@@ -322,5 +367,10 @@ fn parent_expands_to_contain_children() {
     let parent = &elements[0];
     let child = &elements[1];
     let child_bottom = child.y + child.height;
-    assert!(parent.height >= child_bottom, "parent height {} < child bottom {}", parent.height, child_bottom);
+    assert!(
+        parent.height >= child_bottom,
+        "parent height {} < child bottom {}",
+        parent.height,
+        child_bottom
+    );
 }

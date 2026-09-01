@@ -2,11 +2,11 @@
 pub mod mock;
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::fmt;
 use std::sync::OnceLock;
+use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
-use std::fmt;
 
 use crate::plog;
 
@@ -21,9 +21,15 @@ pub enum FetchError {
     /// error page can say "certificate problem" without dumping internals.
     Tls(String),
     /// Resource refused by the page's Content-Security-Policy (C3).
-    Csp { resource: String, directive: String },
+    Csp {
+        resource: String,
+        directive: String,
+    },
     EmptyBody,
-    CrossOrigin { target: String, origin: String },
+    CrossOrigin {
+        target: String,
+        origin: String,
+    },
 }
 
 impl fmt::Display for FetchError {
@@ -33,12 +39,19 @@ impl fmt::Display for FetchError {
             Self::Network(msg) => write!(f, "Network: {}", msg),
             Self::Timeout => write!(f, "Request timed out"),
             Self::Tls(msg) => write!(f, "Secure connection failed: {}", msg),
-            Self::Csp { resource, directive } => {
+            Self::Csp {
+                resource,
+                directive,
+            } => {
                 write!(f, "Blocked by CSP {}: {}", directive, resource)
             }
             Self::EmptyBody => write!(f, "Empty response body"),
             Self::CrossOrigin { target, origin } => {
-                write!(f, "Cross-origin fetch blocked: '{}' ? origin '{}'", target, origin)
+                write!(
+                    f,
+                    "Cross-origin fetch blocked: '{}' ? origin '{}'",
+                    target, origin
+                )
             }
         }
     }
@@ -181,7 +194,11 @@ pub enum CspSource {
     UnsafeInline,
     UnsafeEval,
     Scheme(String),
-    Host { host: String, port: Option<u16>, scheme: Option<String> },
+    Host {
+        host: String,
+        port: Option<u16>,
+        scheme: Option<String>,
+    },
     Wildcard,
     StrictDynamic,
     Nonce(String),
@@ -199,46 +216,76 @@ pub struct CspPolicy {
 }
 
 impl CspPolicy {
-    pub fn is_empty(&self) -> bool { self.directives.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.directives.is_empty()
+    }
 
     pub fn sources_for(&self, directive: &CspDirective) -> Option<&[CspSource]> {
-        self.directives.iter().find(|e| e.directive == *directive).map(|e| e.sources.as_slice())
+        self.directives
+            .iter()
+            .find(|e| e.directive == *directive)
+            .map(|e| e.sources.as_slice())
     }
 
     fn effective_sources_for(&self, directive: &CspDirective) -> &[CspSource] {
         self.sources_for(directive)
-            .or_else(|| if *directive != CspDirective::DefaultSrc { self.sources_for(&CspDirective::DefaultSrc) } else { None })
+            .or_else(|| {
+                if *directive != CspDirective::DefaultSrc {
+                    self.sources_for(&CspDirective::DefaultSrc)
+                } else {
+                    None
+                }
+            })
             .unwrap_or(&[])
     }
 
     /// Check if a specific URL is allowed by a directive.
     pub fn allows_url(&self, directive: &CspDirective, url: &str, origin: &str) -> bool {
         let sources = self.effective_sources_for(directive);
-        if sources.is_empty() { return true; }
-        if sources.contains(&CspSource::None) { return false; }
-        if sources.contains(&CspSource::Wildcard) { return true; }
+        if sources.is_empty() {
+            return true;
+        }
+        if sources.contains(&CspSource::None) {
+            return false;
+        }
+        if sources.contains(&CspSource::Wildcard) {
+            return true;
+        }
 
         let parts = parse_simple_url(url);
 
         for s in sources {
             match s {
                 CspSource::Self_ => {
-                    if csp_url_matches_origin(&parts, origin) { return true; }
+                    if csp_url_matches_origin(&parts, origin) {
+                        return true;
+                    }
                 }
                 CspSource::Scheme(scheme) => {
-                    if parts.protocol == scheme.as_str() { return true; }
+                    if parts.protocol == scheme.as_str() {
+                        return true;
+                    }
                 }
                 CspSource::Host { host, port, scheme } => {
                     if let Some(ref s) = scheme {
-                        if parts.protocol.trim_end_matches(':') != s.as_str() { continue; }
+                        if parts.protocol.trim_end_matches(':') != s.as_str() {
+                            continue;
+                        }
                     }
                     if let Some(p) = port {
-                        let url_port = parts.port.parse::<u16>().unwrap_or(if parts.protocol == "http:" { 80 } else { 443 });
-                        if url_port != *p { continue; }
+                        let url_port = parts
+                            .port
+                            .parse::<u16>()
+                            .unwrap_or(if parts.protocol == "http:" { 80 } else { 443 });
+                        if url_port != *p {
+                            continue;
+                        }
                     }
                     if host.starts_with("*.") {
                         let suffix = &host[1..];
-                        if parts.hostname.ends_with(suffix) || parts.hostname == &host[2..] { return true; }
+                        if parts.hostname.ends_with(suffix) || parts.hostname == &host[2..] {
+                            return true;
+                        }
                     } else if parts.hostname == host.as_str() {
                         return true;
                     }
@@ -251,12 +298,14 @@ impl CspPolicy {
 
     /// Check if 'unsafe-inline' is in the directive (allows inline code).
     pub fn allows_inline(&self, directive: &CspDirective) -> bool {
-        self.effective_sources_for(directive).contains(&CspSource::UnsafeInline)
+        self.effective_sources_for(directive)
+            .contains(&CspSource::UnsafeInline)
     }
 
     /// Check if 'unsafe-eval' is allowed for script-src.
     pub fn allows_eval(&self) -> bool {
-        self.effective_sources_for(&CspDirective::ScriptSrc).contains(&CspSource::UnsafeEval)
+        self.effective_sources_for(&CspDirective::ScriptSrc)
+            .contains(&CspSource::UnsafeEval)
     }
 
     /// Returns true if all scripts should be blocked (only 'none' or empty).
@@ -287,9 +336,13 @@ fn parse_csp_source(token: &str) -> Option<CspSource> {
         t => {
             let (scheme, rest) = if let Some(pos) = t.find("://") {
                 (Some(t[..pos].to_string()), &t[pos + 3..])
-            } else { (None, t) };
+            } else {
+                (None, t)
+            };
 
-            if rest.is_empty() || rest == "*" { return None; }
+            if rest.is_empty() || rest == "*" {
+                return None;
+            }
 
             let (host_str, port) = if rest.starts_with('[') {
                 if let Some(br) = rest.find(']') {
@@ -297,16 +350,31 @@ fn parse_csp_source(token: &str) -> Option<CspSource> {
                     if br + 1 < rest.len() && rest.as_bytes()[br + 1] == b':' {
                         let p = rest[br + 2..].parse::<u16>().ok();
                         (ip, p)
-                    } else { (ip, None) }
-                } else { (rest.to_string(), None) }
+                    } else {
+                        (ip, None)
+                    }
+                } else {
+                    (rest.to_string(), None)
+                }
             } else if let Some(pos) = rest.rfind(':') {
                 if let Ok(p) = rest[pos + 1..].parse::<u16>() {
                     (rest[..pos].to_string(), Some(p))
-                } else { (rest.to_string(), None) }
-            } else { (rest.to_string(), None) };
+                } else {
+                    (rest.to_string(), None)
+                }
+            } else {
+                (rest.to_string(), None)
+            };
 
-            if host_str.is_empty() { None }
-            else { Some(CspSource::Host { host: host_str, port, scheme }) }
+            if host_str.is_empty() {
+                None
+            } else {
+                Some(CspSource::Host {
+                    host: host_str,
+                    port,
+                    scheme,
+                })
+            }
         }
     }
 }
@@ -315,12 +383,19 @@ pub fn parse_csp(header: &str) -> CspPolicy {
     let mut policy = CspPolicy::default();
     for part in header.split(';') {
         let trimmed = part.trim();
-        if trimmed.is_empty() { continue; }
+        if trimmed.is_empty() {
+            continue;
+        }
         let mut tokens = trimmed.split_ascii_whitespace();
-        let name = match tokens.next() { Some(n) => n, None => continue };
+        let name = match tokens.next() {
+            Some(n) => n,
+            None => continue,
+        };
         let directive = CspDirective::from_str(name);
         let sources: Vec<CspSource> = tokens.filter_map(parse_csp_source).collect();
-        policy.directives.push(CspDirectiveEntry { directive, sources });
+        policy
+            .directives
+            .push(CspDirectiveEntry { directive, sources });
     }
     policy
 }
@@ -334,8 +409,17 @@ pub fn parse_csp_from_headers(headers: &HashMap<String, String>) -> CspPolicy {
 // ?? CSP Violation Logging ?????????????????????????????????????????????
 
 fn log_violation(directive: &str, resource: &str, origin: &str) {
-    eprintln!("[CSP] Blocked by {}: {} (origin: {})", directive, resource, origin);
-    plog!("csp-violation", "Blocked {} by {} (origin: {})", resource, directive, origin);
+    eprintln!(
+        "[CSP] Blocked by {}: {} (origin: {})",
+        directive, resource, origin
+    );
+    plog!(
+        "csp-violation",
+        "Blocked {} by {} (origin: {})",
+        resource,
+        directive,
+        origin
+    );
 }
 
 // ?? CSP Store (per-origin) ????????????????????????????????????????????
@@ -349,8 +433,11 @@ fn csp_store() -> &'static RwLock<CspStore> {
 
 fn origin_from_url_inner(url: &str) -> String {
     let p = parse_simple_url(url);
-    if p.port.is_empty() { format!("{}//{}", p.protocol, p.hostname) }
-    else { format!("{}//{}:{}", p.protocol, p.hostname, p.port) }
+    if p.port.is_empty() {
+        format!("{}//{}", p.protocol, p.hostname)
+    } else {
+        format!("{}//{}:{}", p.protocol, p.hostname, p.port)
+    }
 }
 
 pub fn store_csp(url: &str, headers: &HashMap<String, String>) {
@@ -365,7 +452,11 @@ pub fn store_csp(url: &str, headers: &HashMap<String, String>) {
 
 pub fn get_csp_for(url: &str) -> CspPolicy {
     let origin = origin_from_url_inner(url);
-    csp_store().read().ok().and_then(|s| s.get(&origin).cloned()).unwrap_or_default()
+    csp_store()
+        .read()
+        .ok()
+        .and_then(|s| s.get(&origin).cloned())
+        .unwrap_or_default()
 }
 
 // ?? Public CSP Check Functions ????????????????????????????????????????
@@ -374,7 +465,9 @@ pub fn get_csp_for(url: &str) -> CspPolicy {
 // ponytail: used for initial page-load fetch; also stores CSP for the origin
 pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
     let policy = parse_csp_from_headers(headers);
-    if policy.is_empty() { return true; }
+    if policy.is_empty() {
+        return true;
+    }
     let origin = origin_from_url_inner(url);
     let allowed = policy.allows_url(&CspDirective::DefaultSrc, url, &origin);
     if !allowed {
@@ -387,25 +480,41 @@ pub fn check_csp(url: &str, headers: &HashMap<String, String>) -> bool {
 /// Returns true if the page's CSP blocks ALL external & inline scripts.
 pub fn csp_blocks_scripts(headers: &HashMap<String, String>) -> bool {
     let policy = parse_csp_from_headers(headers);
-    if policy.is_empty() { return false; }
+    if policy.is_empty() {
+        return false;
+    }
     policy.blocks_all_scripts() && !policy.allows_inline(&CspDirective::ScriptSrc)
 }
 
 /// Returns true if the page's CSP blocks ALL external & inline styles.
 pub fn csp_blocks_styles(headers: &HashMap<String, String>) -> bool {
     let policy = parse_csp_from_headers(headers);
-    if policy.is_empty() { return false; }
+    if policy.is_empty() {
+        return false;
+    }
     policy.blocks_all_styles() && !policy.allows_inline(&CspDirective::StyleSrc)
 }
 
 /// Check if a specific script URL is allowed by the page's CSP policy.
 pub fn csp_allows_script_url(script_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    csp_allows_for(CspDirective::ScriptSrc, "script-src", script_url, page_url, policy)
+    csp_allows_for(
+        CspDirective::ScriptSrc,
+        "script-src",
+        script_url,
+        page_url,
+        policy,
+    )
 }
 
 /// Check if a specific style URL is allowed by the page's CSP policy.
 pub fn csp_allows_style_url(style_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    csp_allows_for(CspDirective::StyleSrc, "style-src", style_url, page_url, policy)
+    csp_allows_for(
+        CspDirective::StyleSrc,
+        "style-src",
+        style_url,
+        page_url,
+        policy,
+    )
 }
 
 /// Resource kinds whose subresource fetches carry CSP authority (C3).
@@ -459,10 +568,14 @@ pub fn csp_allows_image_url(img_url: &str, page_url: &str, policy: &CspPolicy) -
 
 /// Check if a connect/fetch/XHR URL is allowed by the page's CSP policy.
 pub fn csp_allows_connect_url(connect_url: &str, page_url: &str, policy: &CspPolicy) -> bool {
-    if policy.is_empty() { return true; }
+    if policy.is_empty() {
+        return true;
+    }
     let origin = origin_from_url_inner(page_url);
     let allowed = policy.allows_url(&CspDirective::ConnectSrc, connect_url, &origin);
-    if !allowed { log_violation("connect-src", connect_url, &origin); }
+    if !allowed {
+        log_violation("connect-src", connect_url, &origin);
+    }
     allowed
 }
 
@@ -497,17 +610,25 @@ pub fn log_network_request(method: &str, url: &str, status: u16, duration_ms: u1
 }
 
 pub fn take_network_log() -> Vec<String> {
-    network_log().write().map(|mut log| { log.drain(..).collect() }).unwrap_or_default()
+    network_log()
+        .write()
+        .map(|mut log| log.drain(..).collect())
+        .unwrap_or_default()
 }
 
 pub fn get_network_log() -> Vec<String> {
-    network_log().read().map(|log| log.clone()).unwrap_or_default()
+    network_log()
+        .read()
+        .map(|log| log.clone())
+        .unwrap_or_default()
 }
 
 // ?? URL Helpers ???????????????????????????????????????????????????????
 
 fn header_value<'a>(headers: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
-    headers.iter().find_map(|(k, v)| k.eq_ignore_ascii_case(key).then_some(v.as_str()))
+    headers
+        .iter()
+        .find_map(|(k, v)| k.eq_ignore_ascii_case(key).then_some(v.as_str()))
 }
 
 fn csp_url_matches_origin(parts: &UrlParts<'_>, origin: &str) -> bool {
@@ -520,8 +641,14 @@ fn parse_simple_url<'a>(url: &'a str) -> UrlParts<'a> {
     let rest = if let Some(pos) = url.find("://") {
         protocol = &url[..pos + 1];
         &url[pos + 3..]
-    } else { url };
-    let hostname = if let Some(pos) = rest.find('/') { &rest[..pos] } else { rest };
+    } else {
+        url
+    };
+    let hostname = if let Some(pos) = rest.find('/') {
+        &rest[..pos]
+    } else {
+        rest
+    };
     let mut port = "";
     let hostname = if hostname.starts_with('[') {
         if let Some(br) = hostname.find(']') {
@@ -529,15 +656,27 @@ fn parse_simple_url<'a>(url: &'a str) -> UrlParts<'a> {
                 port = &hostname[br + 2..];
             }
             hostname
-        } else { hostname }
+        } else {
+            hostname
+        }
     } else if let Some(pos) = hostname.find(':') {
         port = &hostname[pos + 1..];
         &hostname[..pos]
-    } else { hostname };
-    UrlParts { protocol, hostname, port }
+    } else {
+        hostname
+    };
+    UrlParts {
+        protocol,
+        hostname,
+        port,
+    }
 }
 
-struct UrlParts<'a> { protocol: &'a str, hostname: &'a str, port: &'a str }
+struct UrlParts<'a> {
+    protocol: &'a str,
+    hostname: &'a str,
+    port: &'a str,
+}
 
 pub struct Response {
     pub body: String,
@@ -601,8 +740,16 @@ pub fn fetch_with_redirects(
     initiator: Option<&str>,
     top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
-    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
-    fetch_inner(cl, url, max_redirects, origin, initiator, top_level_navigation)
+    let cl =
+        client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    fetch_inner(
+        cl,
+        url,
+        max_redirects,
+        origin,
+        initiator,
+        top_level_navigation,
+    )
 }
 
 /// Test-only entry: same chain logic against a caller-owned client so the
@@ -616,7 +763,14 @@ pub fn fetch_redirects_with_client(
     initiator: Option<&str>,
     top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
-    fetch_inner(cl, url, max_redirects, origin, initiator, top_level_navigation)
+    fetch_inner(
+        cl,
+        url,
+        max_redirects,
+        origin,
+        initiator,
+        top_level_navigation,
+    )
 }
 
 /// Test-only construction point matching production policy exactly.
@@ -629,7 +783,12 @@ fn is_scheme_downgrade(original_url: &str, redirect_url: &str) -> bool {
     let orig_is_https = original_url.starts_with("https://");
     let redir_is_http = redirect_url.starts_with("http://");
     if orig_is_https && redir_is_http {
-        plog!("net", "Blocked HTTPS?HTTP downgrade redirect: {} ? {}", original_url, redirect_url);
+        plog!(
+            "net",
+            "Blocked HTTPS?HTTP downgrade redirect: {} ? {}",
+            original_url,
+            redirect_url
+        );
         return true;
     }
     false
@@ -646,8 +805,23 @@ pub fn redirect_target(original: &str, location: &str) -> Option<String> {
     }
 }
 
-fn fetch_inner(cl: &reqwest::blocking::Client, url: &str, max_redirects: usize, origin: Option<&str>, initiator: Option<&str>, top_level_navigation: bool) -> Result<Response, FetchError> {
-    fetch_inner_with_csp(cl, url, max_redirects, origin, initiator, top_level_navigation, None)
+fn fetch_inner(
+    cl: &reqwest::blocking::Client,
+    url: &str,
+    max_redirects: usize,
+    origin: Option<&str>,
+    initiator: Option<&str>,
+    top_level_navigation: bool,
+) -> Result<Response, FetchError> {
+    fetch_inner_with_csp(
+        cl,
+        url,
+        max_redirects,
+        origin,
+        initiator,
+        top_level_navigation,
+        None,
+    )
 }
 
 /// Typed-subresource fetch (PLAN C3): the stored page policy gates the initial
@@ -660,7 +834,8 @@ pub fn fetch_resource(
     initiator: Option<&str>,
     top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
-    let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+    let cl =
+        client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
     fetch_resource_with_client(cl, url, page_origin, kind, initiator, top_level_navigation)
 }
 
@@ -676,9 +851,20 @@ pub fn fetch_resource_with_client(
     top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
     if !csp_allows_resource(kind, url, page_origin) {
-        return Err(FetchError::Csp { resource: url.to_string(), directive: kind.directive().1.to_string() });
+        return Err(FetchError::Csp {
+            resource: url.to_string(),
+            directive: kind.directive().1.to_string(),
+        });
     }
-    fetch_inner_with_csp(cl, url, 5, None, initiator, top_level_navigation, Some((kind, page_origin.to_string())))
+    fetch_inner_with_csp(
+        cl,
+        url,
+        5,
+        None,
+        initiator,
+        top_level_navigation,
+        Some((kind, page_origin.to_string())),
+    )
 }
 
 fn fetch_inner_with_csp(
@@ -734,9 +920,7 @@ fn fetch_inner_with_csp(
         req = req.header("Origin", &origin_url);
     }
     let resp = match req.send() {
-        Ok(r) => {
-            r
-        }
+        Ok(r) => r,
         Err(e) => return Err(FetchError::from(e)),
     };
     let status: u16 = resp.status().as_u16();
@@ -763,7 +947,8 @@ fn fetch_inner_with_csp(
     if let Some(origin) = origin {
         let normalized_origin = normalize_url(origin);
         if !is_same_origin(&final_url, &normalized_origin) {
-            let acao = headers.iter()
+            let acao = headers
+                .iter()
                 .find(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-origin"))
                 .map(|(_, v)| v.as_str());
             let allowed = match acao {
@@ -782,7 +967,9 @@ fn fetch_inner_with_csp(
 
     if !check_csp(&final_url, &headers) {
         log_network_request("GET", &final_url, 0, _start.elapsed().as_millis());
-        return Err(FetchError::Network("Blocked by Content-Security-Policy".to_string()));
+        return Err(FetchError::Network(
+            "Blocked by Content-Security-Policy".to_string(),
+        ));
     }
 
     if resp.status().is_redirection() && max_redirects > 0 {
@@ -804,21 +991,39 @@ fn fetch_inner_with_csp(
                     // Drain the body so the connection is released cleanly
                     // before the next hop opens.
                     let _ = resp.text();
-                    return fetch_inner_with_csp(cl, &next, max_redirects - 1, origin, initiator, top_level_navigation, csp);
+                    return fetch_inner_with_csp(
+                        cl,
+                        &next,
+                        max_redirects - 1,
+                        origin,
+                        initiator,
+                        top_level_navigation,
+                        csp,
+                    );
                 }
                 None => {
-                    plog!("net", "HTTPS?HTTP downgrade blocked; returning current response");
+                    plog!(
+                        "net",
+                        "HTTPS?HTTP downgrade blocked; returning current response"
+                    );
                 }
             }
         }
     }
 
-    let body = resp.text().map_err(|e| FetchError::Network(format!("Failed to read body: {}", e)))?;
+    let body = resp
+        .text()
+        .map_err(|e| FetchError::Network(format!("Failed to read body: {}", e)))?;
     plog!("net", "Body length: {}", body.len());
 
     log_network_request("GET", &final_url, status, _start.elapsed().as_millis());
 
-    Ok(Response { body, status, headers, final_url })
+    Ok(Response {
+        body,
+        status,
+        headers,
+        final_url,
+    })
 }
 
 // ── D1: async wrappers for concurrent subresource fetching ──────────────────
@@ -836,7 +1041,13 @@ pub async fn fetch_resource_async(
     top_level_navigation: bool,
 ) -> Result<Response, FetchError> {
     tokio::task::spawn_blocking(move || {
-        fetch_resource(url.trim(), page_origin.trim(), kind, initiator.as_deref(), top_level_navigation)
+        fetch_resource(
+            url.trim(),
+            page_origin.trim(),
+            kind,
+            initiator.as_deref(),
+            top_level_navigation,
+        )
     })
     .await
     .map_err(|e| FetchError::Network(format!("join error: {}", e)))?
@@ -847,23 +1058,37 @@ pub async fn fetch_bytes_async(
     url: String,
     initiator: Option<String>,
 ) -> Result<Vec<u8>, FetchError> {
-    tokio::task::spawn_blocking(move || {
-        fetch_bytes(url.trim(), initiator.as_deref())
-    })
-    .await
-    .map_err(|e| FetchError::Network(format!("join error: {}", e)))?
+    tokio::task::spawn_blocking(move || fetch_bytes(url.trim(), initiator.as_deref()))
+        .await
+        .map_err(|e| FetchError::Network(format!("join error: {}", e)))?
 }
 
 pub fn is_same_origin(a: &str, b: &str) -> bool {
     let pa = parse_simple_url(a);
     let pb = parse_simple_url(b);
-    if pa.protocol != pb.protocol { return false; }
-    if pa.hostname.to_lowercase() != pb.hostname.to_lowercase() { return false; }
+    if pa.protocol != pb.protocol {
+        return false;
+    }
+    if pa.hostname.to_lowercase() != pb.hostname.to_lowercase() {
+        return false;
+    }
     let default_port = |proto: &str| -> &str {
-        if proto == "http:" { "80" } else { "443" }
+        if proto == "http:" {
+            "80"
+        } else {
+            "443"
+        }
     };
-    let port_a = if pa.port.is_empty() { default_port(pa.protocol) } else { pa.port };
-    let port_b = if pb.port.is_empty() { default_port(pb.protocol) } else { pb.port };
+    let port_a = if pa.port.is_empty() {
+        default_port(pa.protocol)
+    } else {
+        pa.port
+    };
+    let port_b = if pb.port.is_empty() {
+        default_port(pb.protocol)
+    } else {
+        pb.port
+    };
     port_a == port_b
 }
 
@@ -893,7 +1118,8 @@ pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchE
     plog!("net", "Fetching binary: {}", current_url);
 
     for _ in 0..5 {
-        let cl = client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
+        let cl =
+            client().ok_or_else(|| FetchError::Network("HTTP client not available".to_string()))?;
         // Images are subresources: cookies follow SameSite/Secure rules with
         // the page as initiator (they were never sent at all pre-C2).
         let cookies = get_cookies_for_request(&current_url, initiator, false);
@@ -926,7 +1152,10 @@ pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchE
                 }
             }
         }
-        let bytes = resp.bytes().map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?.to_vec();
+        let bytes = resp
+            .bytes()
+            .map_err(|e| FetchError::Network(format!("Failed to read bytes: {}", e)))?
+            .to_vec();
         plog!("net", "Fetched {} bytes", bytes.len());
         if let Ok(mut cache) = image_cache().write() {
             if cache.len() > 100 {
@@ -959,20 +1188,31 @@ pub fn resolve_url(url: &str, base_url: &str) -> String {
     }
 
     if url.starts_with("//") {
-        let base_scheme = base_url.find("://").map(|i| &base_url[..i + 1]).unwrap_or("https:");
+        let base_scheme = base_url
+            .find("://")
+            .map(|i| &base_url[..i + 1])
+            .unwrap_or("https:");
         return format!("{}{}", base_scheme, url);
     }
 
     let base = normalize_url(base_url);
 
     let scheme_end = base.find("://").map(|i| i + 3).unwrap_or(0);
-    if scheme_end == 0 { return base; }
+    if scheme_end == 0 {
+        return base;
+    }
     let after_scheme = &base[scheme_end..];
     let host_end = if after_scheme.starts_with('[') {
         // ponytail: assumes well-formed IPv6 like [::1], no nested brackets
-        after_scheme.find("]").map(|i| scheme_end + i + 1).unwrap_or(base.len())
+        after_scheme
+            .find("]")
+            .map(|i| scheme_end + i + 1)
+            .unwrap_or(base.len())
     } else {
-        after_scheme.find('/').map(|i| scheme_end + i).unwrap_or(base.len())
+        after_scheme
+            .find('/')
+            .map(|i| scheme_end + i)
+            .unwrap_or(base.len())
     };
     let origin = &base[..host_end];
 

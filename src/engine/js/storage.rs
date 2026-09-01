@@ -1,4 +1,4 @@
-use super::js_bridge::{JsBridge, CookieEntry};
+use super::js_bridge::{CookieEntry, JsBridge};
 use std::time::Instant;
 
 impl JsBridge {
@@ -12,8 +12,12 @@ impl JsBridge {
             super::js_bridge::sweep_expired_cookies(&mut guard);
             if let Some(cookies) = guard.get(&origin) {
                 for (key, entry) in cookies.iter() {
-                    if entry.http_only { continue; }
-                    if entry.secure && !is_https { continue; }
+                    if entry.http_only {
+                        continue;
+                    }
+                    if entry.secure && !is_https {
+                        continue;
+                    }
                     parts.push(format!("{}={}", key, entry.value));
                 }
             }
@@ -24,7 +28,10 @@ impl JsBridge {
     pub fn set_cookie(&mut self, cookie_str: &str) {
         if let Some(eq_pos) = cookie_str.find('=') {
             let key = cookie_str[..eq_pos].trim().to_string();
-            let value_end = cookie_str[eq_pos + 1..].find(';').map(|p| eq_pos + 1 + p).unwrap_or(cookie_str.len());
+            let value_end = cookie_str[eq_pos + 1..]
+                .find(';')
+                .map(|p| eq_pos + 1 + p)
+                .unwrap_or(cookie_str.len());
             let value = cookie_str[eq_pos + 1..value_end].trim().to_string();
             if !key.is_empty() {
                 let expires = super::js_bridge::parse_cookie_expiry(cookie_str);
@@ -39,9 +46,11 @@ impl JsBridge {
                 let mut same_site = String::new();
                 for part in cookie_str[value_end..].split(';') {
                     let part = part.trim().to_lowercase();
-                    if part == "httponly" { http_only = true; }
-                    else if part == "secure" { secure = true; }
-                    else if let Some(ss) = part.strip_prefix("samesite=") {
+                    if part == "httponly" {
+                        http_only = true;
+                    } else if part == "secure" {
+                        secure = true;
+                    } else if let Some(ss) = part.strip_prefix("samesite=") {
                         same_site = ss.to_string();
                     }
                 }
@@ -50,8 +59,19 @@ impl JsBridge {
                     let origin = self.current_origin();
                     let total: usize = guard.values().map(|m| m.len()).sum();
                     let origin_has_room = guard.get(&origin).map(|m| m.len() < 50).unwrap_or(true);
-                    if !origin_has_room || total >= 500 { return; }
-                    guard.entry(origin).or_default().insert(key, CookieEntry { value, expires, http_only, secure, same_site });
+                    if !origin_has_room || total >= 500 {
+                        return;
+                    }
+                    guard.entry(origin).or_default().insert(
+                        key,
+                        CookieEntry {
+                            value,
+                            expires,
+                            http_only,
+                            secure,
+                            same_site,
+                        },
+                    );
                 }
             }
         }
@@ -61,13 +81,18 @@ impl JsBridge {
 
     pub fn local_storage_get_item(&self, key: &str) -> Option<String> {
         let origin = self.current_origin();
-        super::js_bridge::local_storage_store().read().ok()
+        super::js_bridge::local_storage_store()
+            .read()
+            .ok()
             .and_then(|guard| guard.get(&origin).and_then(|m| m.get(key)).cloned())
     }
 
     pub fn local_storage_set_item(&mut self, key: String, value: String) {
         if let Ok(mut guard) = super::js_bridge::local_storage_store().write() {
-            guard.entry(self.current_origin()).or_default().insert(key, value);
+            guard
+                .entry(self.current_origin())
+                .or_default()
+                .insert(key, value);
         }
         super::js_bridge::save_local_storage();
     }
@@ -92,12 +117,20 @@ impl JsBridge {
         if index < 0 {
             return None;
         }
-        super::js_bridge::local_storage_store().read().ok()
-            .and_then(|guard| guard.get(&self.current_origin()).and_then(|m| m.keys().nth(index as usize).cloned()))
+        super::js_bridge::local_storage_store()
+            .read()
+            .ok()
+            .and_then(|guard| {
+                guard
+                    .get(&self.current_origin())
+                    .and_then(|m| m.keys().nth(index as usize).cloned())
+            })
     }
 
     pub fn local_storage_length(&self) -> i32 {
-        super::js_bridge::local_storage_store().read().ok()
+        super::js_bridge::local_storage_store()
+            .read()
+            .ok()
             .and_then(|guard| guard.get(&self.current_origin()).map(|m| m.len() as i32))
             .unwrap_or(0)
     }

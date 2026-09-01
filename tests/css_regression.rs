@@ -25,31 +25,71 @@ fn resolve_with_attrs(css: &str, tag: &str, attrs: &[(&str, &str)]) -> ComputedS
 #[test]
 fn test_color_hex() {
     let style = resolve("div { color: #ff0000; }", "div");
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_color_named() {
     let style = resolve("div { color: blue; }", "div");
-    assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_color_rgb() {
     let style = resolve("div { color: rgb(0, 255, 0); }", "div");
-    assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 255,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_color_rgba() {
     let style = resolve("div { color: rgba(255, 0, 0, 0.5); }", "div");
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 128 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 128
+        })
+    );
 }
 
 #[test]
 fn test_color_hsl() {
     let style = resolve("div { color: hsl(120, 100%, 50%); }", "div");
-    assert_eq!(style.color, Some(Color { r: 0, g: 255, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 255,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 // ── 2. Background ──
@@ -57,7 +97,15 @@ fn test_color_hsl() {
 #[test]
 fn test_background_color() {
     let style = resolve("div { background-color: #333; }", "div");
-    assert_eq!(style.background_color, Some(Color { r: 51, g: 51, b: 51, a: 255 }));
+    assert_eq!(
+        style.background_color,
+        Some(Color {
+            r: 51,
+            g: 51,
+            b: 51,
+            a: 255
+        })
+    );
 }
 
 // ── 3. Font size ──
@@ -129,7 +177,12 @@ fn test_border_width_and_color() {
     assert_eq!(style.border_left_width, Some(2.0));
     assert_eq!(
         style.border_top_color,
-        Some(Color { r: 255, g: 0, b: 0, a: 255 })
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
     );
 }
 
@@ -212,23 +265,23 @@ fn test_text_decoration() {
 
 #[test]
 fn test_class_selector() {
-    let style = resolve_with_attrs(
-        ".box { color: red; }",
-        "div",
-        &[("class", "box")],
+    let style = resolve_with_attrs(".box { color: red; }", "div", &[("class", "box")]);
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
     );
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
 }
 
 // ── 16. ID selector ──
 
 #[test]
 fn test_id_selector() {
-    let style = resolve_with_attrs(
-        "#main { font-size: 20px; }",
-        "div",
-        &[("id", "main")],
-    );
+    let style = resolve_with_attrs("#main { font-size: 20px; }", "div", &[("id", "main")]);
     assert_eq!(style.font_size, Some(20.0));
 }
 
@@ -240,11 +293,24 @@ fn test_multiple_declarations() {
         "div { color: blue; font-size: 14px; background-color: yellow; }",
         "div",
     );
-    assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255
+        })
+    );
     assert_eq!(style.font_size, Some(14.0));
     assert_eq!(
         style.background_color,
-        Some(Color { r: 255, g: 255, b: 0, a: 255 })
+        Some(Color {
+            r: 255,
+            g: 255,
+            b: 0,
+            a: 255
+        })
     );
 }
 
@@ -263,7 +329,15 @@ fn test_invalid_property_no_crash() {
 #[test]
 fn test_cascade_order() {
     let style = resolve("div { color: red; } div { color: blue; }", "div");
-    assert_eq!(style.color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255
+        })
+    );
 }
 
 // ── 20. color-mix support (Phase 3.3) ──
@@ -278,13 +352,29 @@ fn test_color_mix_basic() {
         }
     }
     let style = resolve("div { color: color-mix(in srgb, red, blue); }", "div");
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_color_mix_with_hex() {
     let style = resolve("div { color: color-mix(in srgb, #ff0, #00f); }", "div");
-    assert_eq!(style.color, Some(Color { r: 255, g: 255, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 255,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 // ── 21. Resource limits (Phase 1.1) ──
@@ -319,18 +409,40 @@ fn test_inline_child_text_inherited() {
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
     vayu_browser::engine::pipeline::extractor::extract_elements(
-        &dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
     );
-    let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
-    assert!(p.text.contains("Hello"), "paragraph should contain direct text");
-    let b = elements.iter().find(|e| e.tag == "b").expect("should find <b>");
+    let p = elements
+        .iter()
+        .find(|e| e.tag == "p")
+        .expect("should find <p>");
+    assert!(
+        p.text.contains("Hello"),
+        "paragraph should contain direct text"
+    );
+    let b = elements
+        .iter()
+        .find(|e| e.tag == "b")
+        .expect("should find <b>");
     assert_eq!(b.text, "bold");
-    let i = elements.iter().find(|e| e.tag == "i").expect("should find <i>");
+    let i = elements
+        .iter()
+        .find(|e| e.tag == "i")
+        .expect("should find <i>");
     assert_eq!(i.text, "italic");
-    let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
+    let a = elements
+        .iter()
+        .find(|e| e.tag == "a")
+        .expect("should find <a>");
     assert_eq!(a.text, "link");
 }
-
 
 // PLAN A1 raised fetcher-side CSS budgets (500KB/source), but stratus::parse
 // silently re-clamped input at 30KB - rules past that byte were dropped
@@ -343,5 +455,9 @@ fn parses_stylesheets_larger_than_30kb() {
     }
     assert!(css.len() > 30_000, "fixture must exceed the old clamp");
     let sheet = vayu_browser::engine::stratus::parse(&css);
-    assert_eq!(sheet.rules.len(), 2500, "rules past 30KB must survive parse");
+    assert_eq!(
+        sheet.rules.len(),
+        2500,
+        "rules past 30KB must survive parse"
+    );
 }

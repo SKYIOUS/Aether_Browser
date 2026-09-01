@@ -8,11 +8,11 @@ fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR must be set by Cargo");
     let dest_path = Path::new(&out_dir).join("css_properties.rs");
 
-    let json = fs::read_to_string("css-properties.json")
-        .expect("Failed to read css-properties.json");
+    let json =
+        fs::read_to_string("css-properties.json").expect("Failed to read css-properties.json");
 
-    let props: serde_json::Value = serde_json::from_str(&json)
-        .expect("css-properties.json is not valid JSON");
+    let props: serde_json::Value =
+        serde_json::from_str(&json).expect("css-properties.json is not valid JSON");
 
     let properties = props["properties"]
         .as_array()

@@ -51,7 +51,11 @@ mod treesink_tests {
             .filter_map(|n| match &n.node_type {
                 NodeType::Text(t) => {
                     let t = t.trim();
-                    if t.is_empty() { None } else { Some(t.to_string()) }
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(t.to_string())
+                    }
                 }
                 _ => None,
             })
@@ -84,7 +88,11 @@ mod treesink_tests {
     fn misnested_formatting_preserves_each_fragment_once() {
         let doc = parse_html("<b>bold<i>both</b>italic</i>tail");
         for frag in ["bold", "both", "italic", "tail"] {
-            assert_eq!(count_text(&doc, frag), 1, "fragment '{frag}' appears wrong number of times");
+            assert_eq!(
+                count_text(&doc, frag),
+                1,
+                "fragment '{frag}' appears wrong number of times"
+            );
         }
     }
 
@@ -96,7 +104,11 @@ mod treesink_tests {
     fn adoption_agency_preserves_text_once_and_nests_per_spec() {
         let doc = parse_html("<b>1<p>2</b>3</p>");
         for frag in ["1", "2", "3"] {
-            assert_eq!(count_text(&doc, frag), 1, "'{frag}' appears wrong number of times");
+            assert_eq!(
+                count_text(&doc, frag),
+                1,
+                "'{frag}' appears wrong number of times"
+            );
         }
         // Spec shape: the <b> is reconstructed INSIDE the <p>, so some <b>
         // must be a descendant of some <p>.
@@ -130,23 +142,67 @@ mod tests {
     #[test]
     fn test_should_skip_tag() {
         let skip_set = [
-            "script", "style", "noscript", "meta", "link", "head",
-            "title", "svg", "path", "br", "hr", "iframe",
-            "option", "template",
+            "script", "style", "noscript", "meta", "link", "head", "title", "svg", "path", "br",
+            "hr", "iframe", "option", "template",
         ];
         let keep_set = [
-            "div", "p", "span", "a", "img", "h1", "h2", "h3", "h4",
-            "body", "html", "ul", "ol", "li", "table", "tr", "td",
-            "input", "button", "textarea", "select", "label", "form", "section", "article",
-            "header", "footer", "nav", "main", "aside", "figure",
-            "figcaption", "blockquote", "pre", "code", "em", "strong",
-            "b", "i", "u", "small", "sub", "sup",
+            "div",
+            "p",
+            "span",
+            "a",
+            "img",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "body",
+            "html",
+            "ul",
+            "ol",
+            "li",
+            "table",
+            "tr",
+            "td",
+            "input",
+            "button",
+            "textarea",
+            "select",
+            "label",
+            "form",
+            "section",
+            "article",
+            "header",
+            "footer",
+            "nav",
+            "main",
+            "aside",
+            "figure",
+            "figcaption",
+            "blockquote",
+            "pre",
+            "code",
+            "em",
+            "strong",
+            "b",
+            "i",
+            "u",
+            "small",
+            "sub",
+            "sup",
         ];
         for tag in &skip_set {
-            assert!(should_skip_tag(tag), "expected should_skip_tag({}) = true", tag);
+            assert!(
+                should_skip_tag(tag),
+                "expected should_skip_tag({}) = true",
+                tag
+            );
         }
         for tag in &keep_set {
-            assert!(!should_skip_tag(tag), "expected should_skip_tag({}) = false", tag);
+            assert!(
+                !should_skip_tag(tag),
+                "expected should_skip_tag({}) = false",
+                tag
+            );
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Stack-based VM that executes Korlang bytecode.
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub type NativeFn = Arc<dyn Fn(&[Value]) -> Value + Send + Sync>;
 
@@ -12,10 +12,22 @@ pub enum OpCode {
     CreateElement(String),
     SetProperty(String),
     AddChild,
-    Add, Sub, Mul, Div,
-    And, Or, Not,
-    Eq, Neq, Lt, Gt, Le, Ge,
-    MakeList(usize), ListLen, ListGet,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    And,
+    Or,
+    Not,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    MakeList(usize),
+    ListLen,
+    ListGet,
     Jump(usize),
     JumpIfFalse(usize),
     Label(String),
@@ -50,16 +62,22 @@ impl Value {
             Value::Object(_) => "[object]".to_string(),
         }
     }
-    
+
     pub fn to_number(&self) -> f64 {
         match self {
             Value::Number(n) => *n,
-            Value::Bool(b) => if *b { 1.0 } else { 0.0 },
+            Value::Bool(b) => {
+                if *b {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             Value::String(s) => s.parse::<f64>().unwrap_or(0.0),
             _ => 0.0,
         }
     }
-    
+
     pub fn to_bool(&self) -> bool {
         match self {
             Value::Bool(b) => *b,
@@ -70,18 +88,20 @@ impl Value {
             Value::Object(_) => true,
         }
     }
-    
+
     pub fn equals(&self, other: &Value) -> bool {
         match (self, other) {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::None, Value::None) => true,
-            (Value::List(a), Value::List(b)) => a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y)),
+            (Value::List(a), Value::List(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
+            }
             _ => false,
         }
     }
-    
+
     /// Fix: Safe property access with proper error handling
     pub fn get_property(&self, name: &str) -> Option<Value> {
         if let Value::Object(obj_arc) = self {
@@ -108,12 +128,12 @@ impl KorObject {
             children: Vec::new(),
         }
     }
-    
+
     /// Fix: Safe child addition with validation
     pub fn add_child(&mut self, child: Value) {
         self.children.push(child);
     }
-    
+
     /// Fix: Safe property setting
     pub fn set_property(&mut self, name: String, value: Value) {
         self.properties.insert(name, value);
@@ -145,57 +165,69 @@ impl VirtualMachine {
             functions: HashMap::new(),
             instruction_pointer: 0,
         };
-        
+
         // Register built-in functions
-        vm.register_native("print", Arc::new(|args| {
-            for arg in args {
-                print!("{} ", arg.to_string_val());
-            }
-            println!();
-            Value::None
-        }));
-        
-        vm.register_native("len", Arc::new(|args| {
-            if let Some(val) = args.first() {
-                match val {
-                    Value::List(l) => Value::Number(l.len() as f64),
-                    Value::String(s) => Value::Number(s.len() as f64),
-                    _ => Value::Number(0.0),
+        vm.register_native(
+            "print",
+            Arc::new(|args| {
+                for arg in args {
+                    print!("{} ", arg.to_string_val());
                 }
-            } else {
-                Value::Number(0.0)
-            }
-        }));
-        
-        vm.register_native("str", Arc::new(|args| {
-            if let Some(val) = args.first() {
-                Value::String(val.to_string_val())
-            } else {
-                Value::String(String::new())
-            }
-        }));
-        
-        vm.register_native("num", Arc::new(|args| {
-            if let Some(val) = args.first() {
-                Value::Number(val.to_number())
-            } else {
-                Value::Number(0.0)
-            }
-        }));
-        
+                println!();
+                Value::None
+            }),
+        );
+
+        vm.register_native(
+            "len",
+            Arc::new(|args| {
+                if let Some(val) = args.first() {
+                    match val {
+                        Value::List(l) => Value::Number(l.len() as f64),
+                        Value::String(s) => Value::Number(s.len() as f64),
+                        _ => Value::Number(0.0),
+                    }
+                } else {
+                    Value::Number(0.0)
+                }
+            }),
+        );
+
+        vm.register_native(
+            "str",
+            Arc::new(|args| {
+                if let Some(val) = args.first() {
+                    Value::String(val.to_string_val())
+                } else {
+                    Value::String(String::new())
+                }
+            }),
+        );
+
+        vm.register_native(
+            "num",
+            Arc::new(|args| {
+                if let Some(val) = args.first() {
+                    Value::Number(val.to_number())
+                } else {
+                    Value::Number(0.0)
+                }
+            }),
+        );
+
         vm
     }
-    
-    pub fn set_builtin(&mut self, name: &str, value: Value) { 
-        self.builtins.insert(name.to_string(), value); 
+
+    pub fn set_builtin(&mut self, name: &str, value: Value) {
+        self.builtins.insert(name.to_string(), value);
     }
-    
-    pub fn get_builtin(&self, name: &str) -> Option<&Value> { 
-        self.builtins.get(name) 
+
+    pub fn get_builtin(&self, name: &str) -> Option<&Value> {
+        self.builtins.get(name)
     }
-    
-    pub fn register_native(&mut self, name: &str, f: NativeFn) { 
-        self.native_funcs.insert(name.to_string(), f); 
+
+    pub fn register_native(&mut self, name: &str, f: NativeFn) {
+        self.native_funcs.insert(name.to_string(), f);
     }
 
     /// Fix: Execute with proper error recovery instead of unwrap
@@ -203,9 +235,9 @@ impl VirtualMachine {
         let mut ip = 0usize;
         while ip < bytecode.len() {
             match bytecode[ip].clone() {
-                OpCode::Push(v) => { 
-                    self.stack.push(v); 
-                    ip += 1; 
+                OpCode::Push(v) => {
+                    self.stack.push(v);
+                    ip += 1;
                 }
                 OpCode::Add => {
                     let b = self.stack.pop().unwrap_or(Value::Number(0.0));
@@ -295,20 +327,20 @@ impl VirtualMachine {
                 }
                 OpCode::MakeList(n) => {
                     let mut items = Vec::with_capacity(n);
-                    for _ in 0..n { 
-                        if let Some(v) = self.stack.pop() { 
-                            items.push(v); 
-                        } 
+                    for _ in 0..n {
+                        if let Some(v) = self.stack.pop() {
+                            items.push(v);
+                        }
                     }
                     items.reverse();
                     self.stack.push(Value::List(items));
                     ip += 1;
                 }
                 OpCode::ListLen => {
-                    if let Some(Value::List(l)) = self.stack.pop() { 
-                        self.stack.push(Value::Number(l.len() as f64)); 
-                    } else { 
-                        self.stack.push(Value::Number(0.0)); 
+                    if let Some(Value::List(l)) = self.stack.pop() {
+                        self.stack.push(Value::Number(l.len() as f64));
+                    } else {
+                        self.stack.push(Value::Number(0.0));
                     }
                     ip += 1;
                 }
@@ -317,29 +349,31 @@ impl VirtualMachine {
                     let list = self.stack.pop().unwrap_or(Value::None);
                     if let (Value::List(l), Value::Number(n)) = (list, idx) {
                         let i = n as usize;
-                        if i < l.len() { 
-                            self.stack.push(l[i].clone()); 
-                        } else { 
-                            self.stack.push(Value::None); 
+                        if i < l.len() {
+                            self.stack.push(l[i].clone());
+                        } else {
+                            self.stack.push(Value::None);
                         }
-                    } else { 
-                        self.stack.push(Value::None); 
+                    } else {
+                        self.stack.push(Value::None);
                     }
                     ip += 1;
                 }
                 OpCode::Load(name) => {
-                    let v = self.heap.get(&name)
+                    let v = self
+                        .heap
+                        .get(&name)
                         .or_else(|| self.builtins.get(&name))
                         .cloned()
                         .unwrap_or(Value::None);
                     self.stack.push(v);
                     ip += 1;
                 }
-                OpCode::Store(name) => { 
-                    if let Some(v) = self.stack.pop() { 
-                        self.heap.insert(name, v); 
-                    } 
-                    ip += 1; 
+                OpCode::Store(name) => {
+                    if let Some(v) = self.stack.pop() {
+                        self.heap.insert(name, v);
+                    }
+                    ip += 1;
                 }
                 OpCode::CreateElement(tag) => {
                     let obj = KorObject::new(tag);
@@ -379,69 +413,67 @@ impl VirtualMachine {
                     }
                     ip += 1;
                 }
-                OpCode::Dup => { 
-                    if let Some(v) = self.stack.last().cloned() { 
-                        self.stack.push(v); 
-                    } 
-                    ip += 1; 
+                OpCode::Dup => {
+                    if let Some(v) = self.stack.last().cloned() {
+                        self.stack.push(v);
+                    }
+                    ip += 1;
                 }
-                OpCode::Pop => { 
-                    self.stack.pop(); 
-                    ip += 1; 
+                OpCode::Pop => {
+                    self.stack.pop();
+                    ip += 1;
                 }
-                OpCode::Jump(target) => { 
-                    ip = target; 
+                OpCode::Jump(target) => {
+                    ip = target;
                 }
                 OpCode::JumpIfFalse(target) => {
                     let cond = self.stack.pop().unwrap_or(Value::Bool(false));
-                    if !cond.to_bool() { 
-                        ip = target; 
-                    } else { 
-                        ip += 1; 
+                    if !cond.to_bool() {
+                        ip = target;
+                    } else {
+                        ip += 1;
                     }
                 }
-                OpCode::Label(_) => { 
-                    ip += 1; 
+                OpCode::Label(_) => {
+                    ip += 1;
                 }
                 OpCode::Call(name, argc) => {
                     let mut args = Vec::with_capacity(argc);
-                    for _ in 0..argc { 
-                        if let Some(v) = self.stack.pop() { 
-                            args.push(v); 
-                        } 
+                    for _ in 0..argc {
+                        if let Some(v) = self.stack.pop() {
+                            args.push(v);
+                        }
                     }
                     args.reverse();
-                    
+
                     if let Some((params, body)) = self.functions.get(&name).cloned() {
                         let old_heap = self.heap.clone();
-                        for (i, p) in params.iter().enumerate() { 
-                            if i < args.len() { 
-                                self.heap.insert(p.clone(), args[i].clone()); 
-                            } 
+                        for (i, p) in params.iter().enumerate() {
+                            if i < args.len() {
+                                self.heap.insert(p.clone(), args[i].clone());
+                            }
                         }
                         self.execute(body);
                         self.heap = old_heap;
                     } else if let Some(cb) = self.native_funcs.get(&name) {
-                        let res = cb(&args); 
+                        let res = cb(&args);
                         self.stack.push(res);
                     } else {
-                        let res = self.builtins.get(&name)
-                            .cloned()
-                            .unwrap_or(Value::None); 
+                        let res = self.builtins.get(&name).cloned().unwrap_or(Value::None);
                         self.stack.push(res);
                     }
                     ip += 1;
                 }
-                OpCode::StoreFn(name, params, body) => { 
-                    self.functions.insert(name, (params, body)); 
-                    ip += 1; 
+                OpCode::StoreFn(name, params, body) => {
+                    self.functions.insert(name, (params, body));
+                    ip += 1;
                 }
                 OpCode::Interpolate(n) => {
                     let mut parts = Vec::new();
-                    for _ in 0..n { 
-                        if let Some(v) = self.stack.pop() { 
-                            parts.push(v.to_string_val()); 
-                        } 
+                    for _ in 0..n {
+                        if let Some(v) = self.stack.pop() {
+                            parts.push(v.to_string_val());
+                        }
                     }
                     parts.reverse();
                     self.stack.push(Value::String(parts.concat()));
@@ -456,7 +488,17 @@ impl VirtualMachine {
                     };
 
                     let key = format!("__fe_{}", var);
-                    let current = self.heap.get(&key).and_then(|v| if let Value::Number(n) = v { Some(*n as usize) } else { None }).unwrap_or(0);
+                    let current = self
+                        .heap
+                        .get(&key)
+                        .and_then(|v| {
+                            if let Value::Number(n) = v {
+                                Some(*n as usize)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(0);
 
                     if current < total_count {
                         self.heap.insert(key, Value::Number((current + 1) as f64));
@@ -473,9 +515,9 @@ impl VirtualMachine {
                             self.stack.pop();
                         }
                         let mut jump_target = None;
-                        for j in (ip + 1)..bytecode.len() {
-                            if let OpCode::Jump(target) = bytecode[j] {
-                                if target == ip {
+                        for (j, op) in bytecode.iter().enumerate().skip(ip + 1) {
+                            if let OpCode::Jump(target) = op {
+                                if *target == ip {
                                     jump_target = Some(j + 1);
                                     break;
                                 }
@@ -494,11 +536,11 @@ impl VirtualMachine {
         }
         self.instruction_pointer = ip;
     }
-    
-    pub fn update_state(&mut self, name: &str, value: Value) { 
-        self.heap.insert(name.to_string(), value); 
+
+    pub fn update_state(&mut self, name: &str, value: Value) {
+        self.heap.insert(name.to_string(), value);
     }
-    
+
     /// Fix: Get root object safely
     pub fn get_root_object(&self) -> Option<Arc<Mutex<KorObject>>> {
         if let Some(Value::Object(obj)) = self.stack.last() {

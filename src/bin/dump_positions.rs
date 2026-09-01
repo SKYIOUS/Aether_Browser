@@ -110,46 +110,57 @@ fn dump(name: &str, html: &str, css: &str) {
             );
         }
     }
-    if name == "inline_siblings" {
-        if native.elements.len() >= 4 {
-            for i in 1..4 {
-                println!(
-                    "  inline {} x={:.1} y={:.1} w={:.1} h={:.1} (taffy x={:.1} y={:.1})",
-                    i,
-                    native.elements[i].x,
-                    native.elements[i].y,
-                    native.elements[i].width,
-                    native.elements[i].height,
-                    taffy_els[i].x,
-                    taffy_els[i].y
-                );
-            }
-            println!("semantic: inline spans should share same y (baseline) and x monotonic");
-        }
-    }
-    if name == "absolute_positioning" {
-        if native.elements.len() >= 2 {
-            let parent = &native.elements[0];
-            let child = &native.elements[1];
-            let exp_x = parent.x + 20.0;
-            let exp_y = parent.y + 10.0;
+    if name == "inline_siblings" && native.elements.len() >= 4 {
+        for (i, (ne, te)) in native.elements[1..4]
+            .iter()
+            .zip(taffy_els[1..4].iter())
+            .enumerate()
+        {
             println!(
-                "semantic: abs child expected x={:.1} y={:.1} got x={:.1} y={:.1} (parent {:?})",
-                exp_x, exp_y, child.x, child.y, parent
-            );
-            println!(
-                "  taffy child x={:.1} y={:.1}",
-                taffy_els[1].x, taffy_els[1].y
+                "  inline {} x={:.1} y={:.1} w={:.1} h={:.1} (taffy x={:.1} y={:.1})",
+                i + 1,
+                ne.x,
+                ne.y,
+                ne.width,
+                ne.height,
+                te.x,
+                te.y
             );
         }
+        println!("semantic: inline spans should share same y (baseline) and x monotonic");
     }
-    if name == "flex_row" {
-        if native.elements.len() >= 4 {
-            for i in 1..4 {
-                println!("  flex child {} native x={:.1} w={:.1} y={:.1} vs taffy x={:.1} w={:.1} y={:.1}", i, native.elements[i].x, native.elements[i].width, native.elements[i].y, taffy_els[i].x, taffy_els[i].width, taffy_els[i].y);
-            }
-            println!("semantic: flex children expected w≈266.7 each, x 0,266.7,533.3 y 0");
+    if name == "absolute_positioning" && native.elements.len() >= 2 {
+        let parent = &native.elements[0];
+        let child = &native.elements[1];
+        let exp_x = parent.x + 20.0;
+        let exp_y = parent.y + 10.0;
+        println!(
+            "semantic: abs child expected x={:.1} y={:.1} got x={:.1} y={:.1} (parent {:?})",
+            exp_x, exp_y, child.x, child.y, parent
+        );
+        println!(
+            "  taffy child x={:.1} y={:.1}",
+            taffy_els[1].x, taffy_els[1].y
+        );
+    }
+    if name == "flex_row" && native.elements.len() >= 4 {
+        for (i, (ne, te)) in native.elements[1..4]
+            .iter()
+            .zip(taffy_els[1..4].iter())
+            .enumerate()
+        {
+            println!(
+                "  flex child {} native x={:.1} w={:.1} y={:.1} vs taffy x={:.1} w={:.1} y={:.1}",
+                i + 1,
+                ne.x,
+                ne.width,
+                ne.y,
+                te.x,
+                te.width,
+                te.y
+            );
         }
+        println!("semantic: flex children expected w≈266.7 each, x 0,266.7,533.3 y 0");
     }
     println!();
 }
@@ -246,7 +257,7 @@ fn main() {
                 inset_left: 0.0,
             }
         }
-        let mut els = vec![
+        let els = vec![
             make_el("parent", None),
             StyledElement {
                 css_height: Some(200.0),

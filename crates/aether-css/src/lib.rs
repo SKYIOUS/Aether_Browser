@@ -10,7 +10,7 @@ pub use parser::{Declaration, PropertyValue, Rule, Selector, SimpleSelector, Sty
 pub use property_names::CssPropertyName;
 pub use resolver::{resolve_style, resolve_style_vp, resolve_styles_for_tree};
 pub use style_value::{
-    AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexOptions,
+    AlignContent, AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexOptions,
     FlexWrap, JustifyContent, LengthValue, Position, Transform, Transition, Unit,
 };
 
@@ -31,8 +31,14 @@ mod tests {
                         pseudo_class: None,
                     })],
                     declarations: vec![
-                        Declaration { name: "margin".into(), value: PropertyValue::Number(0.0) },
-                        Declaration { name: "padding".into(), value: PropertyValue::Number(0.0) },
+                        Declaration {
+                            name: "margin".into(),
+                            value: PropertyValue::Number(0.0),
+                        },
+                        Declaration {
+                            name: "padding".into(),
+                            value: PropertyValue::Number(0.0),
+                        },
                     ],
                 },
                 Rule {
@@ -44,8 +50,14 @@ mod tests {
                         pseudo_class: None,
                     })],
                     declarations: vec![
-                        Declaration { name: "display".into(), value: PropertyValue::Keyword("flex".into()) },
-                        Declaration { name: "flex-direction".into(), value: PropertyValue::Keyword("column".into()) },
+                        Declaration {
+                            name: "display".into(),
+                            value: PropertyValue::Keyword("flex".into()),
+                        },
+                        Declaration {
+                            name: "flex-direction".into(),
+                            value: PropertyValue::Keyword("column".into()),
+                        },
                     ],
                 },
             ],

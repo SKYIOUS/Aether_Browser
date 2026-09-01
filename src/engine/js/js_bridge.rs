@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
-use crate::plog;
 use crate::engine::dom::{ElementData, Node, NodeType};
+use crate::plog;
 
 // ── Flat DOM node representation ────────────────────────────────────
 
@@ -21,13 +21,40 @@ pub(crate) struct FlatNode {
 
 impl FlatNode {
     fn document() -> Self {
-        Self { parent: None, children: vec![], tag: String::new(), attrs: HashMap::new(), text: String::new(), is_text: false, is_document: true, inline_styles: HashMap::new() }
+        Self {
+            parent: None,
+            children: vec![],
+            tag: String::new(),
+            attrs: HashMap::new(),
+            text: String::new(),
+            is_text: false,
+            is_document: true,
+            inline_styles: HashMap::new(),
+        }
     }
     fn element(tag: &str) -> Self {
-        Self { parent: None, children: vec![], tag: tag.to_lowercase(), attrs: HashMap::new(), text: String::new(), is_text: false, is_document: false, inline_styles: HashMap::new() }
+        Self {
+            parent: None,
+            children: vec![],
+            tag: tag.to_lowercase(),
+            attrs: HashMap::new(),
+            text: String::new(),
+            is_text: false,
+            is_document: false,
+            inline_styles: HashMap::new(),
+        }
     }
     fn text(content: &str) -> Self {
-        Self { parent: None, children: vec![], tag: String::new(), attrs: HashMap::new(), text: content.to_string(), is_text: true, is_document: false, inline_styles: HashMap::new() }
+        Self {
+            parent: None,
+            children: vec![],
+            tag: String::new(),
+            attrs: HashMap::new(),
+            text: content.to_string(),
+            is_text: true,
+            is_document: false,
+            inline_styles: HashMap::new(),
+        }
     }
 }
 
@@ -83,12 +110,19 @@ pub(crate) fn parse_cookie_expiry(cookie_str: &str) -> Option<Instant> {
     // ponytail: only Max-Age and RFC 1123 Expires; no obs-date variants
     for part in cookie_str.split(';') {
         let part = part.trim();
-        if let Some(val) = part.strip_prefix("Max-Age=").or_else(|| part.strip_prefix("max-age=")).or_else(|| part.strip_prefix("MAX-AGE=")) {
+        if let Some(val) = part
+            .strip_prefix("Max-Age=")
+            .or_else(|| part.strip_prefix("max-age="))
+            .or_else(|| part.strip_prefix("MAX-AGE="))
+        {
             if let Ok(secs) = val.trim().parse::<u64>() {
                 return Some(Instant::now() + Duration::from_secs(secs));
             }
         }
-        if let Some(val) = part.strip_prefix("Expires=").or_else(|| part.strip_prefix("expires=")) {
+        if let Some(val) = part
+            .strip_prefix("Expires=")
+            .or_else(|| part.strip_prefix("expires="))
+        {
             if let Some(instant) = parse_rfc1123_date(val.trim()) {
                 return Some(instant);
             }
@@ -102,13 +136,20 @@ pub(crate) fn parse_rfc1123_date(s: &str) -> Option<Instant> {
     let s = s.strip_suffix(" GMT")?;
     let (_wkday, rest) = s.split_once(", ")?;
     let parts: Vec<&str> = rest.split_whitespace().collect();
-    if parts.len() != 4 { return None; }
+    if parts.len() != 4 {
+        return None;
+    }
     let day: u32 = parts[0].parse().ok()?;
-    let month_idx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-        .iter().position(|m| m.eq_ignore_ascii_case(parts[1]))? as u32;
+    let month_idx = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    .iter()
+    .position(|m| m.eq_ignore_ascii_case(parts[1]))? as u32;
     let year: i64 = parts[2].parse().ok()?;
     let time: Vec<&str> = parts[3].split(':').collect();
-    if time.len() != 3 { return None; }
+    if time.len() != 3 {
+        return None;
+    }
     let hour: u32 = time[0].parse().ok()?;
     let min: u32 = time[1].parse().ok()?;
     let sec: u32 = time[2].parse().ok()?;
@@ -116,11 +157,22 @@ pub(crate) fn parse_rfc1123_date(s: &str) -> Option<Instant> {
     if year < 1970 {
         return Some(Instant::now()); // pre-1970 = already expired
     }
-    let days = (year - 1970) * 365 + (year - 1969) / 4
-        + [0,31,59,90,120,151,181,212,243,273,304,334][month_idx as usize] as i64
-        + if month_idx > 1 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) { 1 } else { 0 }
-        + day as i64 - 1;
-    Some(Instant::now() + Duration::from_secs((days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64).max(0) as u64))
+    let days = (year - 1970) * 365
+        + (year - 1969) / 4
+        + [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][month_idx as usize] as i64
+        + if month_idx > 1 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+            1
+        } else {
+            0
+        }
+        + day as i64
+        - 1;
+    Some(
+        Instant::now()
+            + Duration::from_secs(
+                (days * 86400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64).max(0) as u64,
+            ),
+    )
 }
 
 pub(crate) fn sweep_expired_cookies(store: &mut CookieOriginStore) {
@@ -138,7 +190,6 @@ pub(crate) fn local_storage_store() -> &'static RwLock<OriginStore> {
     static LOCAL_STORAGE: OnceLock<RwLock<OriginStore>> = OnceLock::new();
     LOCAL_STORAGE.get_or_init(|| RwLock::new(HashMap::new()))
 }
-
 
 pub(crate) fn save_local_storage() {
     if let Ok(store) = local_storage_store().read() {
@@ -162,19 +213,28 @@ pub(crate) fn load_local_storage() {
 
 impl Default for UrlParts {
     fn default() -> Self {
-        Self { protocol: "https:".into(), hostname: String::new(), port: String::new(), pathname: "/".into(), search: String::new(), hash: String::new() }
+        Self {
+            protocol: "https:".into(),
+            hostname: String::new(),
+            port: String::new(),
+            pathname: "/".into(),
+            search: String::new(),
+            hash: String::new(),
+        }
     }
 }
 
 pub(crate) fn parse_url(url: &str) -> UrlParts {
     let mut parts = UrlParts::default();
     let s = url.trim();
-    if s.is_empty() { return parts; }
+    if s.is_empty() {
+        return parts;
+    }
 
     // Protocol
     let rest = if let Some(pos) = s.find("://") {
-        parts.protocol = s[..pos+1].to_string();
-        &s[pos+3..]
+        parts.protocol = s[..pos + 1].to_string();
+        &s[pos + 3..]
     } else if let Some(rest) = s.strip_prefix("//") {
         parts.protocol = "https:".into();
         rest
@@ -187,13 +247,17 @@ pub(crate) fn parse_url(url: &str) -> UrlParts {
     let rest = if let Some(pos) = rest.find('#') {
         parts.hash = rest[pos..].to_string();
         &rest[..pos]
-    } else { rest };
+    } else {
+        rest
+    };
 
     // Search
     let rest = if let Some(pos) = rest.find('?') {
         parts.search = rest[pos..].to_string();
         &rest[..pos]
-    } else { rest };
+    } else {
+        rest
+    };
 
     // Pathname
     let rest = if let Some(pos) = rest.find('/') {
@@ -216,7 +280,7 @@ pub(crate) fn parse_url(url: &str) -> UrlParts {
         }
     } else if let Some(pos) = rest.find(':') {
         parts.hostname = rest[..pos].to_string();
-        parts.port = rest[pos+1..].to_string();
+        parts.port = rest[pos + 1..].to_string();
     } else {
         parts.hostname = rest.to_string();
     }
@@ -290,7 +354,12 @@ impl JsBridge {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let time_str = format!("[{:02}:{:02}:{:02}]", (ts / 3600) % 24, (ts / 60) % 60, ts % 60);
+        let time_str = format!(
+            "[{:02}:{:02}:{:02}]",
+            (ts / 3600) % 24,
+            (ts / 60) % 60,
+            ts % 60
+        );
         self.js_errors.push(format!("{} {}", time_str, msg));
         if self.js_errors.len() > 50 {
             self.js_errors.remove(0);
@@ -308,7 +377,9 @@ impl JsBridge {
     // ── Load DOM tree from crate DOM ────────────────────────────────
 
     fn flatten(node: &Node, nodes: &mut Vec<FlatNode>, depth: usize) -> u32 {
-        if depth > 100 { return 0; }
+        if depth > 100 {
+            return 0;
+        }
         let id = nodes.len() as u32;
         match &node.node_type {
             NodeType::Document => {
@@ -347,7 +418,20 @@ impl JsBridge {
             Self::flatten(root, &mut n, 0);
             n
         };
-        let mut bridge = Self { nodes, body_id: None, write_buffer: String::new(), current_url: url.to_string(), pending_navigation: None, doc_title: String::new(), history_state: String::new(), pending_history_delta: None, next_timer_id: 1, timers: vec![], event_listeners: vec![], js_errors: vec![] };
+        let mut bridge = Self {
+            nodes,
+            body_id: None,
+            write_buffer: String::new(),
+            current_url: url.to_string(),
+            pending_navigation: None,
+            doc_title: String::new(),
+            history_state: String::new(),
+            pending_history_delta: None,
+            next_timer_id: 1,
+            timers: vec![],
+            event_listeners: vec![],
+            js_errors: vec![],
+        };
         bridge.body_id = bridge.find_body();
         bridge
     }
@@ -374,18 +458,47 @@ impl JsBridge {
 
     // ── Convert back to crate DOM tree ──────────────────────────────
 
-    fn to_dom_node(&self, id: u32, visited: &mut std::collections::HashSet<u32>, depth: usize) -> Node {
-        if depth > 100 { return Node::new_document(); }
-        if !visited.insert(id) { return Node::new_document(); }
+    fn to_dom_node(
+        &self,
+        id: u32,
+        visited: &mut std::collections::HashSet<u32>,
+        depth: usize,
+    ) -> Node {
+        if depth > 100 {
+            return Node::new_document();
+        }
+        if !visited.insert(id) {
+            return Node::new_document();
+        }
         let node = &self.nodes[id as usize];
         if node.is_document {
-            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c, visited, depth + 1)).collect();
-            Node { children, node_type: NodeType::Document }
+            let children: Vec<Node> = node
+                .children
+                .iter()
+                .map(|&c| self.to_dom_node(c, visited, depth + 1))
+                .collect();
+            Node {
+                children,
+                node_type: NodeType::Document,
+            }
         } else if node.is_text {
-            Node { children: vec![], node_type: NodeType::Text(node.text.clone()) }
+            Node {
+                children: vec![],
+                node_type: NodeType::Text(node.text.clone()),
+            }
         } else {
-            let children: Vec<Node> = node.children.iter().map(|&c| self.to_dom_node(c, visited, depth + 1)).collect();
-            Node { children, node_type: NodeType::Element(ElementData { tag_name: node.tag.clone(), attributes: node.attrs.clone() }) }
+            let children: Vec<Node> = node
+                .children
+                .iter()
+                .map(|&c| self.to_dom_node(c, visited, depth + 1))
+                .collect();
+            Node {
+                children,
+                node_type: NodeType::Element(ElementData {
+                    tag_name: node.tag.clone(),
+                    attributes: node.attrs.clone(),
+                }),
+            }
         }
     }
 
@@ -412,7 +525,9 @@ impl JsBridge {
     }
 
     pub fn append_child(&mut self, parent_id: u32, child_id: u32) {
-        if parent_id == child_id { return; }
+        if parent_id == child_id {
+            return;
+        }
         if let Some(parent) = self.nodes.get_mut(parent_id as usize) {
             parent.children.push(child_id);
         }
@@ -424,21 +539,81 @@ impl JsBridge {
     fn is_event_handler(name: &str) -> bool {
         let name = name.to_lowercase();
         name.starts_with("on")
-            && matches!(&name[2..], "load" | "click" | "dblclick" | "mousedown" | "mouseup"
-                | "mouseover" | "mousemove" | "mouseout" | "mouseenter" | "mouseleave"
-                | "focus" | "blur" | "keydown" | "keyup" | "keypress"
-                | "submit" | "reset" | "change" | "select" | "input" | "invalid"
-                | "error" | "abort" | "contextmenu" | "resize" | "scroll" | "wheel"
-                | "drag" | "dragend" | "dragenter" | "dragexit" | "dragleave" | "dragover" | "dragstart" | "drop"
-                | "pointerdown" | "pointerup" | "pointermove" | "pointerover" | "pointerout"
-                | "pointerenter" | "pointerleave" | "pointercancel"
-                | "touchstart" | "touchend" | "touchmove" | "touchcancel"
-                | "play" | "pause" | "playing" | "ended" | "volumechange" | "waiting"
-                | "canplay" | "canplaythrough" | "seeked" | "seeking" | "stalled"
-                | "suspend" | "emptied" | "ratechange" | "durationchange"
-                | "animationstart" | "animationend" | "animationiteration"
-                | "transitionstart" | "transitionend" | "transitionrun" | "transitioncancel"
-                | "visibilitychange" | "fullscreenchange" | "fullscreenerror")
+            && matches!(
+                &name[2..],
+                "load"
+                    | "click"
+                    | "dblclick"
+                    | "mousedown"
+                    | "mouseup"
+                    | "mouseover"
+                    | "mousemove"
+                    | "mouseout"
+                    | "mouseenter"
+                    | "mouseleave"
+                    | "focus"
+                    | "blur"
+                    | "keydown"
+                    | "keyup"
+                    | "keypress"
+                    | "submit"
+                    | "reset"
+                    | "change"
+                    | "select"
+                    | "input"
+                    | "invalid"
+                    | "error"
+                    | "abort"
+                    | "contextmenu"
+                    | "resize"
+                    | "scroll"
+                    | "wheel"
+                    | "drag"
+                    | "dragend"
+                    | "dragenter"
+                    | "dragexit"
+                    | "dragleave"
+                    | "dragover"
+                    | "dragstart"
+                    | "drop"
+                    | "pointerdown"
+                    | "pointerup"
+                    | "pointermove"
+                    | "pointerover"
+                    | "pointerout"
+                    | "pointerenter"
+                    | "pointerleave"
+                    | "pointercancel"
+                    | "touchstart"
+                    | "touchend"
+                    | "touchmove"
+                    | "touchcancel"
+                    | "play"
+                    | "pause"
+                    | "playing"
+                    | "ended"
+                    | "volumechange"
+                    | "waiting"
+                    | "canplay"
+                    | "canplaythrough"
+                    | "seeked"
+                    | "seeking"
+                    | "stalled"
+                    | "suspend"
+                    | "emptied"
+                    | "ratechange"
+                    | "durationchange"
+                    | "animationstart"
+                    | "animationend"
+                    | "animationiteration"
+                    | "transitionstart"
+                    | "transitionend"
+                    | "transitionrun"
+                    | "transitioncancel"
+                    | "visibilitychange"
+                    | "fullscreenchange"
+                    | "fullscreenerror"
+            )
     }
 
     fn is_dangerous_url(value: &str) -> bool {
@@ -449,17 +624,26 @@ impl JsBridge {
     pub fn set_attribute(&mut self, node_id: u32, name: &str, value: &str) {
         if let Some(node) = self.nodes.get_mut(node_id as usize) {
             if !node.is_text && !node.is_document {
-                if Self::is_event_handler(name) { return; }
+                if Self::is_event_handler(name) {
+                    return;
+                }
                 if (name.to_lowercase() == "href" || name.to_lowercase() == "src")
-                    && Self::is_dangerous_url(value) { return; }
-                if name.to_lowercase() == "srcdoc" { return; }
+                    && Self::is_dangerous_url(value)
+                {
+                    return;
+                }
+                if name.to_lowercase() == "srcdoc" {
+                    return;
+                }
                 node.attrs.insert(name.to_string(), value.to_string());
             }
         }
     }
 
     pub fn get_attribute(&self, node_id: u32, name: &str) -> Option<String> {
-        self.nodes.get(node_id as usize).and_then(|n| n.attrs.get(name).cloned())
+        self.nodes
+            .get(node_id as usize)
+            .and_then(|n| n.attrs.get(name).cloned())
     }
 
     pub fn get_text_content(&self, node_id: u32) -> String {
@@ -482,8 +666,13 @@ impl JsBridge {
 
     // ponytail: simple HTML serialization — skips void elements, no attr escaping for special chars
     fn serialize_node(&self, id: u32) -> String {
-        let node = match self.nodes.get(id as usize) { Some(n) => n, None => return String::new() };
-        if node.is_text { return node.text.clone(); }
+        let node = match self.nodes.get(id as usize) {
+            Some(n) => n,
+            None => return String::new(),
+        };
+        if node.is_text {
+            return node.text.clone();
+        }
         let mut html = String::new();
         html.push('<');
         html.push_str(&node.tag);
@@ -505,8 +694,13 @@ impl JsBridge {
     }
 
     pub fn get_inner_html(&self, node_id: u32) -> String {
-        let node = match self.nodes.get(node_id as usize) { Some(n) => n, None => return String::new() };
-        if node.is_text || node.is_document { return String::new(); }
+        let node = match self.nodes.get(node_id as usize) {
+            Some(n) => n,
+            None => return String::new(),
+        };
+        if node.is_text || node.is_document {
+            return String::new();
+        }
         let mut html = String::new();
         for &child in &node.children {
             html.push_str(&self.serialize_node(child));
@@ -518,7 +712,9 @@ impl JsBridge {
         {
             let node = self.nodes.get_mut(node_id as usize);
             if let Some(node) = node {
-                if node.is_text || node.is_document { return; }
+                if node.is_text || node.is_document {
+                    return;
+                }
                 node.children.clear();
             }
         }
@@ -540,7 +736,10 @@ impl JsBridge {
         let mut stack = vec![start];
         while let Some(id) = stack.pop() {
             if let Some(node) = self.nodes.get(id as usize) {
-                if !node.is_text && !node.is_document && node.attrs.get(attr).is_some_and(|v| v == value) {
+                if !node.is_text
+                    && !node.is_document
+                    && node.attrs.get(attr).is_some_and(|v| v == value)
+                {
                     return Some(id);
                 }
                 for &child in &node.children {
@@ -553,9 +752,13 @@ impl JsBridge {
 
     pub fn get_tag_name(&self, node_id: u32) -> Option<String> {
         self.nodes.get(node_id as usize).map(|n| {
-            if n.is_document { "document".to_string() }
-            else if n.is_text { "text".to_string() }
-            else { n.tag.to_uppercase() }
+            if n.is_document {
+                "document".to_string()
+            } else if n.is_text {
+                "text".to_string()
+            } else {
+                n.tag.to_uppercase()
+            }
         })
     }
 
@@ -563,7 +766,9 @@ impl JsBridge {
 
     pub fn set_inner_html(&mut self, node_id: u32, html: &str) {
         if let Some(node) = self.nodes.get_mut(node_id as usize) {
-            if node.is_text || node.is_document { return; }
+            if node.is_text || node.is_document {
+                return;
+            }
             node.children.clear();
         }
         let children = self.parse_html_fragment(html);
@@ -579,9 +784,17 @@ impl JsBridge {
 
     fn sanitize_attrs(attrs: &mut HashMap<String, String>) {
         attrs.retain(|k, v| {
-            if Self::is_event_handler(k) { return false; }
-            if k.to_lowercase() == "srcdoc" { return false; }
-            if (k.to_lowercase() == "href" || k.to_lowercase() == "src") && Self::is_dangerous_url(v) { return false; }
+            if Self::is_event_handler(k) {
+                return false;
+            }
+            if k.to_lowercase() == "srcdoc" {
+                return false;
+            }
+            if (k.to_lowercase() == "href" || k.to_lowercase() == "src")
+                && Self::is_dangerous_url(v)
+            {
+                return false;
+            }
             true
         });
     }
@@ -591,10 +804,14 @@ impl JsBridge {
     }
 
     fn parse_html_fragment_depth(&mut self, html: &str, depth: usize) -> Vec<u32> {
-        if depth > 100 { return vec![]; }
+        if depth > 100 {
+            return vec![];
+        }
         let mut result = vec![];
         let html = html.trim();
-        if html.is_empty() { return result; }
+        if html.is_empty() {
+            return result;
+        }
 
         let mut pos = 0;
         let bytes = html.as_bytes();
@@ -623,12 +840,21 @@ impl JsBridge {
                 }
                 let tag_end = html[pos..].find(['>', ' ', '\t', '\n']);
                 if let Some(tag_end) = tag_end {
-                    let tag_name = html[pos+1..pos+tag_end].to_lowercase();
-                    if tag_name == "script" || tag_name == "style" || tag_name == "iframe" || tag_name == "object" || tag_name == "embed" {
+                    let tag_name = html[pos + 1..pos + tag_end].to_lowercase();
+                    if tag_name == "script"
+                        || tag_name == "style"
+                        || tag_name == "iframe"
+                        || tag_name == "object"
+                        || tag_name == "embed"
+                    {
                         let closing = format!("</{}>", tag_name);
-                        if let Some(closing_pos) = html[pos..].to_lowercase().find(&closing.to_lowercase()) {
+                        if let Some(closing_pos) =
+                            html[pos..].to_lowercase().find(&closing.to_lowercase())
+                        {
                             pos += closing_pos + closing.len();
-                        } else { pos = byte_len; }
+                        } else {
+                            pos = byte_len;
+                        }
                         continue;
                     }
                     let is_self_closing = ["br", "hr", "img", "input", "meta", "link"];
@@ -641,9 +867,11 @@ impl JsBridge {
                         }
                         attr_end += 1;
                     }
-                    if pos + attr_end >= byte_len { break; }
+                    if pos + attr_end >= byte_len {
+                        break;
+                    }
 
-                    let attrs_part = &html[pos+tag_end..pos+attr_end];
+                    let attrs_part = &html[pos + tag_end..pos + attr_end];
                     let mut attrs = self.parse_attributes(attrs_part);
                     Self::sanitize_attrs(&mut attrs);
 
@@ -668,7 +896,8 @@ impl JsBridge {
                                     }
                                 }
                             } else {
-                                let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
+                                let inner_children =
+                                    self.parse_html_fragment_depth(inner, depth + 1);
                                 for child_id in inner_children {
                                     if let Some(child) = self.nodes.get_mut(child_id as usize) {
                                         child.parent = Some(el_id);
@@ -689,7 +918,8 @@ impl JsBridge {
                                     }
                                 }
                             } else {
-                                let inner_children = self.parse_html_fragment_depth(inner, depth + 1);
+                                let inner_children =
+                                    self.parse_html_fragment_depth(inner, depth + 1);
                                 for child_id in inner_children {
                                     if let Some(child) = self.nodes.get_mut(child_id as usize) {
                                         child.parent = Some(el_id);
@@ -720,7 +950,9 @@ impl JsBridge {
     fn parse_attributes(&self, s: &str) -> HashMap<String, String> {
         let mut attrs = HashMap::new();
         let s = s.trim();
-        if s.is_empty() { return attrs; }
+        if s.is_empty() {
+            return attrs;
+        }
         let mut key = String::new();
         let mut value = String::new();
         let mut in_quote = false;
@@ -775,21 +1007,35 @@ impl JsBridge {
     }
 
     pub fn get_children(&self, node_id: u32) -> Vec<u32> {
-        self.nodes.get(node_id as usize).map(|n|
-            n.children.iter().filter(|&&id| self.nodes.get(id as usize).is_some_and(|c| !c.is_text)).copied().collect()
-        ).unwrap_or_default()
+        self.nodes
+            .get(node_id as usize)
+            .map(|n| {
+                n.children
+                    .iter()
+                    .filter(|&&id| self.nodes.get(id as usize).is_some_and(|c| !c.is_text))
+                    .copied()
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn get_child_nodes(&self, node_id: u32) -> Vec<u32> {
-        self.nodes.get(node_id as usize).map(|n| n.children.clone()).unwrap_or_default()
+        self.nodes
+            .get(node_id as usize)
+            .map(|n| n.children.clone())
+            .unwrap_or_default()
     }
 
     pub fn get_first_child(&self, node_id: u32) -> Option<u32> {
-        self.nodes.get(node_id as usize).and_then(|n| n.children.first().copied())
+        self.nodes
+            .get(node_id as usize)
+            .and_then(|n| n.children.first().copied())
     }
 
     pub fn get_last_child(&self, node_id: u32) -> Option<u32> {
-        self.nodes.get(node_id as usize).and_then(|n| n.children.last().copied())
+        self.nodes
+            .get(node_id as usize)
+            .and_then(|n| n.children.last().copied())
     }
 
     pub fn get_next_sibling(&self, node_id: u32) -> Option<u32> {
@@ -803,7 +1049,11 @@ impl JsBridge {
         let parent_id = self.nodes.get(node_id as usize)?.parent?;
         let siblings = &self.nodes.get(parent_id as usize)?.children;
         let idx = siblings.iter().position(|&id| id == node_id)?;
-        if idx > 0 { siblings.get(idx - 1).copied() } else { None }
+        if idx > 0 {
+            siblings.get(idx - 1).copied()
+        } else {
+            None
+        }
     }
 
     pub fn get_child_element_count(&self, node_id: u32) -> u32 {
@@ -815,13 +1065,15 @@ impl JsBridge {
     pub fn set_style_property(&mut self, node_id: u32, property: &str, value: &str) {
         if let Some(node) = self.nodes.get_mut(node_id as usize) {
             if !node.is_text && !node.is_document {
-                node.inline_styles.insert(property.to_string(), value.to_string());
+                node.inline_styles
+                    .insert(property.to_string(), value.to_string());
             }
         }
     }
 
     pub fn get_style_property(&self, node_id: u32, property: &str) -> String {
-        self.nodes.get(node_id as usize)
+        self.nodes
+            .get(node_id as usize)
             .and_then(|n| n.inline_styles.get(property))
             .cloned()
             .unwrap_or_default()
@@ -875,14 +1127,23 @@ impl JsBridge {
 
     // ── Get elements at a point (for click dispatch) ────────────────
 
-    pub fn element_at_point(&self, x: f32, y: f32, elements: &[crate::engine::pipeline::StyledElement]) -> Option<u32> {
+    pub fn element_at_point(
+        &self,
+        x: f32,
+        y: f32,
+        elements: &[crate::engine::pipeline::StyledElement],
+    ) -> Option<u32> {
         let mut best_id = None;
         let mut best_area = f32::MAX;
         for el in elements.iter() {
             let ex = el.x.max(0.0);
             let ey = el.y.max(0.0);
             let ew = el.width.max(1.0);
-            let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { 30.0 };
+            let eh = if el.height > 0.0 && el.height.is_finite() {
+                el.height
+            } else {
+                30.0
+            };
             if x >= ex && x <= ex + ew && y >= ey && y <= ey + eh {
                 let area = ew * eh;
                 if area < best_area {
@@ -907,7 +1168,9 @@ impl JsBridge {
         if let Some(body) = self.body_id {
             let candidates = self.query_selector_all(body, tag);
             candidates.into_iter().next().unwrap_or(body)
-        } else { 0 }
+        } else {
+            0
+        }
     }
 }
 
@@ -1460,35 +1723,47 @@ pub fn register_browser_api(
     bridge: &Arc<Mutex<JsBridge>>,
 ) -> Result<(), rquickjs::Error> {
     use rquickjs::function::{Func, Rest};
-    use rquickjs::{Object, Function};
+    use rquickjs::{Function, Object};
 
     let globals = ctx.globals();
 
     // ── console ─────────────────────────────────────────────────────
     let console = Object::new(ctx.clone())?;
-    console.set("log", Func::new(|args: Rest<String>| {
-        let msg = args.into_inner().join(" ");
-        plog!("JS", "{}", msg);
-    }))?;
-    console.set("warn", Func::new(|args: Rest<String>| {
-        let msg = args.into_inner().join(" ");
-        plog!("JS", "WARN: {}", msg);
-    }))?;
-    console.set("error", Func::new(|args: Rest<String>| {
-        let msg = args.into_inner().join(" ");
-        plog!("JS", "ERROR: {}", msg);
-    }))?;
+    console.set(
+        "log",
+        Func::new(|args: Rest<String>| {
+            let msg = args.into_inner().join(" ");
+            plog!("JS", "{}", msg);
+        }),
+    )?;
+    console.set(
+        "warn",
+        Func::new(|args: Rest<String>| {
+            let msg = args.into_inner().join(" ");
+            plog!("JS", "WARN: {}", msg);
+        }),
+    )?;
+    console.set(
+        "error",
+        Func::new(|args: Rest<String>| {
+            let msg = args.into_inner().join(" ");
+            plog!("JS", "ERROR: {}", msg);
+        }),
+    )?;
     globals.set("console", console)?;
 
     // ── document (base) + document.write ────────────────────────────
     let document = Object::new(ctx.clone())?;
     {
         let bridge_clone = Arc::clone(bridge);
-        document.set("write", Func::new(move |text: String| {
-            if let Ok(mut b) = bridge_clone.lock() {
-                b.document_write(&text);
-            }
-        }))?;
+        document.set(
+            "write",
+            Func::new(move |text: String| {
+                if let Ok(mut b) = bridge_clone.lock() {
+                    b.document_write(&text);
+                }
+            }),
+        )?;
     }
     globals.set("document", document)?;
 
@@ -1498,7 +1773,9 @@ pub fn register_browser_api(
     let fn_create = Function::new(ctx.clone(), move |tag: String| -> i32 {
         if let Ok(mut b) = b1.lock() {
             b.create_element(&tag) as i32
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_create.set_name("__dom_createElement")?;
     globals.set("__dom_createElement", fn_create)?;
@@ -1507,7 +1784,9 @@ pub fn register_browser_api(
     let fn_create_text = Function::new(ctx.clone(), move |text: String| -> i32 {
         if let Ok(mut b) = b1.lock() {
             b.create_text_node(&text) as i32
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_create_text.set_name("__dom_createTextNode")?;
     globals.set("__dom_createTextNode", fn_create_text)?;
@@ -1522,20 +1801,28 @@ pub fn register_browser_api(
     globals.set("__dom_appendChild", fn_append)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_set_attr = Function::new(ctx.clone(), move |node_id: i32, name: String, value: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.set_attribute(node_id as u32, &name, &value);
-        }
-    })?;
+    let fn_set_attr = Function::new(
+        ctx.clone(),
+        move |node_id: i32, name: String, value: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.set_attribute(node_id as u32, &name, &value);
+            }
+        },
+    )?;
     fn_set_attr.set_name("__dom_setAttribute")?;
     globals.set("__dom_setAttribute", fn_set_attr)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_get_attr = Function::new(ctx.clone(), move |node_id: i32, name: String| -> Option<String> {
-        if let Ok(b) = b1.lock() {
-            b.get_attribute(node_id as u32, &name)
-        } else { None }
-    })?;
+    let fn_get_attr = Function::new(
+        ctx.clone(),
+        move |node_id: i32, name: String| -> Option<String> {
+            if let Ok(b) = b1.lock() {
+                b.get_attribute(node_id as u32, &name)
+            } else {
+                None
+            }
+        },
+    )?;
     fn_get_attr.set_name("__dom_getAttribute")?;
     globals.set("__dom_getAttribute", fn_get_attr)?;
 
@@ -1543,7 +1830,9 @@ pub fn register_browser_api(
     let fn_get_text = Function::new(ctx.clone(), move |node_id: i32| -> String {
         if let Ok(b) = b1.lock() {
             b.get_text_content(node_id as u32)
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_get_text.set_name("__dom_getTextContent")?;
     globals.set("__dom_getTextContent", fn_get_text)?;
@@ -1561,7 +1850,9 @@ pub fn register_browser_api(
     let fn_get_html = Function::new(ctx.clone(), move |node_id: i32| -> String {
         if let Ok(b) = b1.lock() {
             b.get_inner_html(node_id as u32)
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_get_html.set_name("__dom_getInnerHTML")?;
     globals.set("__dom_getInnerHTML", fn_get_html)?;
@@ -1579,7 +1870,9 @@ pub fn register_browser_api(
     let fn_get_by_id = Function::new(ctx.clone(), move |id: String| -> i32 {
         if let Ok(b) = b1.lock() {
             b.get_element_by_id(&id).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_get_by_id.set_name("__dom_getElementById")?;
     globals.set("__dom_getElementById", fn_get_by_id)?;
@@ -1588,7 +1881,9 @@ pub fn register_browser_api(
     let fn_body_id = Function::new(ctx.clone(), move || -> i32 {
         if let Ok(b) = b1.lock() {
             b.body_id.map(|v| v as i32).unwrap_or(0)
-        } else { 0 }
+        } else {
+            0
+        }
     })?;
     fn_body_id.set_name("__dom_bodyId")?;
     globals.set("__dom_bodyId", fn_body_id)?;
@@ -1597,7 +1892,9 @@ pub fn register_browser_api(
     let fn_tag_name = Function::new(ctx.clone(), move |node_id: i32| -> String {
         if let Ok(b) = b1.lock() {
             b.get_tag_name(node_id as u32).unwrap_or_default()
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_tag_name.set_name("__dom_getTagName")?;
     globals.set("__dom_getTagName", fn_tag_name)?;
@@ -1606,8 +1903,12 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_qs = Function::new(ctx.clone(), move |node_id: i32, sel: String| -> i32 {
         if let Ok(b) = b1.lock() {
-            b.query_selector(node_id as u32, &sel).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+            b.query_selector(node_id as u32, &sel)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
     })?;
     fn_qs.set_name("__dom_querySelector")?;
     globals.set("__dom_querySelector", fn_qs)?;
@@ -1615,8 +1916,13 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_qsa = Function::new(ctx.clone(), move |node_id: i32, sel: String| -> Vec<i32> {
         if let Ok(b) = b1.lock() {
-            b.query_selector_all(node_id as u32, &sel).into_iter().map(|v| v as i32).collect()
-        } else { vec![] }
+            b.query_selector_all(node_id as u32, &sel)
+                .into_iter()
+                .map(|v| v as i32)
+                .collect()
+        } else {
+            vec![]
+        }
     })?;
     fn_qsa.set_name("__dom_querySelectorAll")?;
     globals.set("__dom_querySelectorAll", fn_qsa)?;
@@ -1626,7 +1932,9 @@ pub fn register_browser_api(
     let fn_parent = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
             b.get_parent(node_id as u32).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_parent.set_name("__dom_getParent")?;
     globals.set("__dom_getParent", fn_parent)?;
@@ -1634,8 +1942,13 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_children = Function::new(ctx.clone(), move |node_id: i32| -> Vec<i32> {
         if let Ok(b) = b1.lock() {
-            b.get_children(node_id as u32).into_iter().map(|v| v as i32).collect()
-        } else { vec![] }
+            b.get_children(node_id as u32)
+                .into_iter()
+                .map(|v| v as i32)
+                .collect()
+        } else {
+            vec![]
+        }
     })?;
     fn_children.set_name("__dom_getChildren")?;
     globals.set("__dom_getChildren", fn_children)?;
@@ -1643,8 +1956,13 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_child_nodes = Function::new(ctx.clone(), move |node_id: i32| -> Vec<i32> {
         if let Ok(b) = b1.lock() {
-            b.get_child_nodes(node_id as u32).into_iter().map(|v| v as i32).collect()
-        } else { vec![] }
+            b.get_child_nodes(node_id as u32)
+                .into_iter()
+                .map(|v| v as i32)
+                .collect()
+        } else {
+            vec![]
+        }
     })?;
     fn_child_nodes.set_name("__dom_getChildNodes")?;
     globals.set("__dom_getChildNodes", fn_child_nodes)?;
@@ -1652,8 +1970,12 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_first = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
-            b.get_first_child(node_id as u32).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+            b.get_first_child(node_id as u32)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
     })?;
     fn_first.set_name("__dom_getFirstChild")?;
     globals.set("__dom_getFirstChild", fn_first)?;
@@ -1661,8 +1983,12 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_last = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
-            b.get_last_child(node_id as u32).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+            b.get_last_child(node_id as u32)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
     })?;
     fn_last.set_name("__dom_getLastChild")?;
     globals.set("__dom_getLastChild", fn_last)?;
@@ -1670,8 +1996,12 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_next = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
-            b.get_next_sibling(node_id as u32).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+            b.get_next_sibling(node_id as u32)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
     })?;
     fn_next.set_name("__dom_getNextSibling")?;
     globals.set("__dom_getNextSibling", fn_next)?;
@@ -1679,8 +2009,12 @@ pub fn register_browser_api(
     let b1 = Arc::clone(bridge);
     let fn_prev = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
-            b.get_previous_sibling(node_id as u32).map(|v| v as i32).unwrap_or(-1)
-        } else { -1 }
+            b.get_previous_sibling(node_id as u32)
+                .map(|v| v as i32)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
     })?;
     fn_prev.set_name("__dom_getPreviousSibling")?;
     globals.set("__dom_getPreviousSibling", fn_prev)?;
@@ -1689,7 +2023,9 @@ pub fn register_browser_api(
     let fn_cec = Function::new(ctx.clone(), move |node_id: i32| -> i32 {
         if let Ok(b) = b1.lock() {
             b.get_child_element_count(node_id as u32) as i32
-        } else { 0 }
+        } else {
+            0
+        }
     })?;
     fn_cec.set_name("__dom_getChildElementCount")?;
     globals.set("__dom_getChildElementCount", fn_cec)?;
@@ -1699,7 +2035,9 @@ pub fn register_browser_api(
     let fn_set_timeout = Function::new(ctx.clone(), move |source: String, delay: i32| -> i32 {
         if let Ok(mut b) = b1.lock() {
             b.set_timeout(source, delay.max(0) as u64) as i32
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_set_timeout.set_name("__setTimeout")?;
     globals.set("__setTimeout", fn_set_timeout)?;
@@ -1708,7 +2046,9 @@ pub fn register_browser_api(
     let fn_set_interval = Function::new(ctx.clone(), move |source: String, delay: i32| -> i32 {
         if let Ok(mut b) = b1.lock() {
             b.set_interval(source, delay.max(0) as u64) as i32
-        } else { -1 }
+        } else {
+            -1
+        }
     })?;
     fn_set_interval.set_name("__setInterval")?;
     globals.set("__setInterval", fn_set_interval)?;
@@ -1724,20 +2064,26 @@ pub fn register_browser_api(
 
     // ── Event listener functions ────────────────────────────────────
     let b1 = Arc::clone(bridge);
-    let fn_add_el = Function::new(ctx.clone(), move |node_id: i32, event_type: String, source: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.add_event_listener(node_id as u32, event_type, source);
-        }
-    })?;
+    let fn_add_el = Function::new(
+        ctx.clone(),
+        move |node_id: i32, event_type: String, source: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.add_event_listener(node_id as u32, event_type, source);
+            }
+        },
+    )?;
     fn_add_el.set_name("__addEventListener")?;
     globals.set("__addEventListener", fn_add_el)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_remove_el = Function::new(ctx.clone(), move |node_id: i32, event_type: String, source: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.remove_event_listener(node_id as u32, event_type, source);
-        }
-    })?;
+    let fn_remove_el = Function::new(
+        ctx.clone(),
+        move |node_id: i32, event_type: String, source: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.remove_event_listener(node_id as u32, event_type, source);
+            }
+        },
+    )?;
     fn_remove_el.set_name("__removeEventListener")?;
     globals.set("__removeEventListener", fn_remove_el)?;
 
@@ -1746,94 +2092,135 @@ pub fn register_browser_api(
     let fn_get_style = Function::new(ctx.clone(), move |node_id: i32, prop: String| -> String {
         if let Ok(b) = b1.lock() {
             b.get_style_property(node_id as u32, &prop)
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_get_style.set_name("__getStyleProperty")?;
     globals.set("__getStyleProperty", fn_get_style)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_set_style = Function::new(ctx.clone(), move |node_id: i32, prop: String, value: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.set_style_property(node_id as u32, &prop, &value);
-        }
-    })?;
+    let fn_set_style = Function::new(
+        ctx.clone(),
+        move |node_id: i32, prop: String, value: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.set_style_property(node_id as u32, &prop, &value);
+            }
+        },
+    )?;
     fn_set_style.set_name("__setStyleProperty")?;
     globals.set("__setStyleProperty", fn_set_style)?;
 
     // ── Location functions ──────────────────────────────────────────
     let b1 = Arc::clone(bridge);
     let fn_loc_href = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_href() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_href()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_href.set_name("__getLocationHref")?;
     globals.set("__getLocationHref", fn_loc_href)?;
 
     let b1 = Arc::clone(bridge);
     let fn_set_loc_href = Function::new(ctx.clone(), move |href: String| {
-        if let Ok(mut b) = b1.lock() { b.set_location_href(href); }
+        if let Ok(mut b) = b1.lock() {
+            b.set_location_href(href);
+        }
     })?;
     fn_set_loc_href.set_name("__setLocationHref")?;
     globals.set("__setLocationHref", fn_set_loc_href)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_hostname = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_hostname() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_hostname()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_hostname.set_name("__getLocationHostname")?;
     globals.set("__getLocationHostname", fn_loc_hostname)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_pathname = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_pathname() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_pathname()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_pathname.set_name("__getLocationPathname")?;
     globals.set("__getLocationPathname", fn_loc_pathname)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_protocol = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_protocol() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_protocol()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_protocol.set_name("__getLocationProtocol")?;
     globals.set("__getLocationProtocol", fn_loc_protocol)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_port = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_port() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_port()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_port.set_name("__getLocationPort")?;
     globals.set("__getLocationPort", fn_loc_port)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_search = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_search() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_search()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_search.set_name("__getLocationSearch")?;
     globals.set("__getLocationSearch", fn_loc_search)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_hash = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.get_location_hash() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.get_location_hash()
+        } else {
+            String::new()
+        }
     })?;
     fn_loc_hash.set_name("__getLocationHash")?;
     globals.set("__getLocationHash", fn_loc_hash)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_reload = Function::new(ctx.clone(), move || {
-        if let Ok(mut b) = b1.lock() { b.location_reload(); }
+        if let Ok(mut b) = b1.lock() {
+            b.location_reload();
+        }
     })?;
     fn_loc_reload.set_name("__locationReload")?;
     globals.set("__locationReload", fn_loc_reload)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_assign = Function::new(ctx.clone(), move |url: String| {
-        if let Ok(mut b) = b1.lock() { b.location_assign(url); }
+        if let Ok(mut b) = b1.lock() {
+            b.location_assign(url);
+        }
     })?;
     fn_loc_assign.set_name("__locationAssign")?;
     globals.set("__locationAssign", fn_loc_assign)?;
 
     let b1 = Arc::clone(bridge);
     let fn_loc_replace = Function::new(ctx.clone(), move |url: String| {
-        if let Ok(mut b) = b1.lock() { b.location_replace(url); }
+        if let Ok(mut b) = b1.lock() {
+            b.location_replace(url);
+        }
     })?;
     fn_loc_replace.set_name("__locationReplace")?;
     globals.set("__locationReplace", fn_loc_replace)?;
@@ -1843,7 +2230,9 @@ pub fn register_browser_api(
     let fn_fetch = Function::new(ctx.clone(), move |url: String| -> String {
         if let Ok(b) = b1.lock() {
             b.fetch_url(&url)
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_fetch.set_name("__fetch")?;
     globals.set("__fetch", fn_fetch)?;
@@ -1853,7 +2242,9 @@ pub fn register_browser_api(
     let fn_fetch_xhr = Function::new(ctx.clone(), move |url: String| -> String {
         if let Ok(b) = bx.lock() {
             b.fetch_url_xhr(&url)
-        } else { String::new() }
+        } else {
+            String::new()
+        }
     })?;
     fn_fetch_xhr.set_name("__fetchXhr")?;
     globals.set("__fetchXhr", fn_fetch_xhr)?;
@@ -1943,14 +2334,20 @@ pub fn register_browser_api(
     // ── document.title ──────────────────────────────────────────────
     let b1 = Arc::clone(bridge);
     let fn_get_title = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.doc_title.clone() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.doc_title.clone()
+        } else {
+            String::new()
+        }
     })?;
     fn_get_title.set_name("_getTitle")?;
     globals.set("_getTitle", fn_get_title)?;
 
     let b1 = Arc::clone(bridge);
     let fn_set_title = Function::new(ctx.clone(), move |title: String| {
-        if let Ok(mut b) = b1.lock() { b.doc_title = title; }
+        if let Ok(mut b) = b1.lock() {
+            b.doc_title = title;
+        }
     })?;
     fn_set_title.set_name("_setTitle")?;
     globals.set("_setTitle", fn_set_title)?;
@@ -1958,48 +2355,68 @@ pub fn register_browser_api(
     // ── window.history ─────────────────────────────────────────────
     let b1 = Arc::clone(bridge);
     let fn_get_history_state = Function::new(ctx.clone(), move || -> String {
-        if let Ok(b) = b1.lock() { b.history_state.clone() } else { String::new() }
+        if let Ok(b) = b1.lock() {
+            b.history_state.clone()
+        } else {
+            String::new()
+        }
     })?;
     fn_get_history_state.set_name("_getHistoryState")?;
     globals.set("_getHistoryState", fn_get_history_state)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_push_state = Function::new(ctx.clone(), move |state: String, _title: String, url: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.history_state = state;
-            if !url.is_empty() { b.pending_navigation = Some(url); }
-        }
-    })?;
+    let fn_push_state = Function::new(
+        ctx.clone(),
+        move |state: String, _title: String, url: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.history_state = state;
+                if !url.is_empty() {
+                    b.pending_navigation = Some(url);
+                }
+            }
+        },
+    )?;
     fn_push_state.set_name("_pushState")?;
     globals.set("_pushState", fn_push_state)?;
 
     let b1 = Arc::clone(bridge);
-    let fn_replace_state = Function::new(ctx.clone(), move |state: String, _title: String, url: String| {
-        if let Ok(mut b) = b1.lock() {
-            b.history_state = state;
-            if !url.is_empty() { b.current_url = url; }
-        }
-    })?;
+    let fn_replace_state = Function::new(
+        ctx.clone(),
+        move |state: String, _title: String, url: String| {
+            if let Ok(mut b) = b1.lock() {
+                b.history_state = state;
+                if !url.is_empty() {
+                    b.current_url = url;
+                }
+            }
+        },
+    )?;
     fn_replace_state.set_name("_replaceState")?;
     globals.set("_replaceState", fn_replace_state)?;
 
     let b1 = Arc::clone(bridge);
     let fn_history_back = Function::new(ctx.clone(), move || {
-        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(-1); }
+        if let Ok(mut b) = b1.lock() {
+            b.pending_history_delta = Some(-1);
+        }
     })?;
     fn_history_back.set_name("_historyBack")?;
     globals.set("_historyBack", fn_history_back)?;
 
     let b1 = Arc::clone(bridge);
     let fn_history_forward = Function::new(ctx.clone(), move || {
-        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(1); }
+        if let Ok(mut b) = b1.lock() {
+            b.pending_history_delta = Some(1);
+        }
     })?;
     fn_history_forward.set_name("_historyForward")?;
     globals.set("_historyForward", fn_history_forward)?;
 
     let b1 = Arc::clone(bridge);
     let fn_history_go = Function::new(ctx.clone(), move |delta: i32| {
-        if let Ok(mut b) = b1.lock() { b.pending_history_delta = Some(delta); }
+        if let Ok(mut b) = b1.lock() {
+            b.pending_history_delta = Some(delta);
+        }
     })?;
     fn_history_go.set_name("_historyGo")?;
     globals.set("_historyGo", fn_history_go)?;
@@ -2009,7 +2426,11 @@ pub fn register_browser_api(
         let bridge_clone = Arc::clone(bridge);
         let fn_report = Function::new(ctx.clone(), move |msg: String, line: i32| {
             if let Ok(mut b) = bridge_clone.lock() {
-                let entry = if line > 0 { format!("Error: {} (line {})", msg, line) } else { format!("Error: {}", msg) };
+                let entry = if line > 0 {
+                    format!("Error: {} (line {})", msg, line)
+                } else {
+                    format!("Error: {}", msg)
+                };
                 b.report_js_error(entry);
             }
         })?;
@@ -2022,7 +2443,6 @@ pub fn register_browser_api(
         plog!("JS", "SHIM_JS eval failed: {:?}", e);
     }
 
-
     // ── Korlang integration ──────────────────────────────────────────
     let fn_eval_korlang = Function::new(ctx.clone(), move |code: String| -> String {
         crate::engine::korlang::eval_korlang(&code).unwrap_or_else(|e| e)
@@ -2031,5 +2451,5 @@ pub fn register_browser_api(
     globals.set("__evalKorlang", fn_eval_korlang)?;
 
     // ponytail: __vault_savePassword removed — would need encrypted storage, add when login forms are supported
-Ok(())
+    Ok(())
 }

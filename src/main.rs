@@ -1,10 +1,10 @@
-mod ui;
 pub mod engine;
 mod logging;
+mod ui;
 
-use ui::VayuApp;
-use ui::get_app_theme;
 use iced::{window, Size};
+use ui::get_app_theme;
+use ui::VayuApp;
 
 pub fn main() -> iced::Result {
     iced::application("Vayu Browser", VayuApp::update, VayuApp::view)

@@ -1,9 +1,8 @@
-﻿
 pub mod kor_renderer;
 pub mod screens;
 pub mod style;
 
-use iced::{Element, Task, Subscription, Event, Theme};
+use iced::{Element, Event, Subscription, Task, Theme};
 use screens::browser::{BrowserMessage, BrowserScreen};
 use screens::palette::{PaletteMessage, PaletteScreen};
 use screens::settings::{SettingsMessage, SettingsScreen};
@@ -14,7 +13,6 @@ static APP_THEME: Mutex<Theme> = Mutex::new(Theme::Light);
 pub fn get_app_theme() -> Theme {
     APP_THEME.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -54,46 +52,42 @@ impl VayuApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Noop => Task::none(),
-            Message::Browser(msg) => {
-                match msg {
-                    BrowserMessage::OpenSettings => {
-                        self.current_screen = Screen::Settings;
-                        Task::none()
-                    }
-                    BrowserMessage::OpenPalette => {
-                        self.current_screen = Screen::Palette;
-                        self.palette.reset();
-                        Task::none()
-                    }
-                    other => {
-                        self.browser.update(other).map(Message::Browser)
-                    }
+            Message::Browser(msg) => match msg {
+                BrowserMessage::OpenSettings => {
+                    self.current_screen = Screen::Settings;
+                    Task::none()
                 }
-            }
-            Message::Settings(msg) => {
-                match msg {
-                    SettingsMessage::Back => {
-                        self.current_screen = Screen::Browser;
-                        Task::none()
-                    },
-                    other => self.settings.update(other).map(Message::Settings)
+                BrowserMessage::OpenPalette => {
+                    self.current_screen = Screen::Palette;
+                    self.palette.reset();
+                    Task::none()
                 }
-            }
-            Message::Palette(msg) => {
-                match msg {
-                    PaletteMessage::Close => {
-                        self.current_screen = Screen::Browser;
-                        Task::none()
-                    }
-                    other => {
-                        self.palette.update(other).map(Message::Palette)
-                    }
+                other => self.browser.update(other).map(Message::Browser),
+            },
+            Message::Settings(msg) => match msg {
+                SettingsMessage::Back => {
+                    self.current_screen = Screen::Browser;
+                    Task::none()
                 }
-            }
+                other => self.settings.update(other).map(Message::Settings),
+            },
+            Message::Palette(msg) => match msg {
+                PaletteMessage::Close => {
+                    self.current_screen = Screen::Browser;
+                    Task::none()
+                }
+                other => self.palette.update(other).map(Message::Palette),
+            },
             Message::Event(event) => {
                 if let Event::Window(iced::window::Event::Resized(size)) = event {
                     self.browser.bounds = (size.width, size.height);
-                    return self.browser.update(crate::ui::screens::browser::BrowserMessage::WindowResized(size.width, size.height)).map(Message::Browser);
+                    return self
+                        .browser
+                        .update(crate::ui::screens::browser::BrowserMessage::WindowResized(
+                            size.width,
+                            size.height,
+                        ))
+                        .map(Message::Browser);
                 }
                 // Clean-exit hook: sentinel cleanup must run BEFORE the close
                 // task, so a crash mid-shutdown still leaves the lock behind.
@@ -104,12 +98,10 @@ impl VayuApp {
                         .browser
                         .update(crate::ui::screens::browser::BrowserMessage::SessionEnding)
                         .map(|_| Message::Noop);
-                    return cleanup.chain(
-                        iced::window::get_latest().then(|id| match id {
-                            Some(id) => iced::window::close::<Message>(id),
-                            None => iced::Task::none(),
-                        }),
-                    );
+                    return cleanup.chain(iced::window::get_latest().then(|id| match id {
+                        Some(id) => iced::window::close::<Message>(id),
+                        None => iced::Task::none(),
+                    }));
                 }
                 Task::none()
             }
@@ -143,4 +135,3 @@ impl VayuApp {
         }
     }
 }
-

@@ -1,14 +1,15 @@
+use aether_css::AlignContent;
 use std::collections::HashMap;
+use vayu_browser::engine::parser::parse_html;
+use vayu_browser::engine::pipeline::extractor::{
+    decode_html_entities, extract_elements, should_skip_content, should_skip_tag, BoxSizing,
+    FontWeight, StyledElement, TextDecor,
+};
+use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 use vayu_browser::engine::stratus::{
     self, Color, ComputedStyle, Display, ElementData, FlexDirection, JustifyContent,
 };
-use vayu_browser::engine::pipeline::extractor::{
-    should_skip_tag, should_skip_content, extract_elements, StyledElement, decode_html_entities,
-    BoxSizing, FontWeight, TextDecor,
-};
 use vayu_browser::engine::stratus::{AlignItems, AlignSelf, FlexWrap, Position};
-use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
-use vayu_browser::engine::parser::parse_html;
 
 fn resolve(css: &str, tag: &str) -> ComputedStyle {
     let sheet = stratus::parse(css);
@@ -28,27 +29,66 @@ fn resolve_with_attrs(css: &str, tag: &str, attrs: &[(&str, &str)]) -> ComputedS
 
 fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> StyledElement {
     StyledElement {
-        tag: tag.to_string(), text: text.to_string(), wrapped_lines: vec![],
+        tag: tag.to_string(),
+        text: text.to_string(),
+        wrapped_lines: vec![],
         dom_path: vec![],
-        is_link: false, href: None, indent_level: 0,
-        color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal,
-        background_color: None, border_widths: [0.0; 4], border_color: None,
-        image_handle: None, image_url: None,
-        margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None,
-        padding: [0.0; 4], display: match display { "inline" => Display::Inline, "flex" => Display::Flex, "grid" => Display::Grid, "none" => Display::None, _ => Display::Block },
-        flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap,
-        justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch,
-        align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox,
-        flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None,
-        css_width: None, css_height: None, parent_index: parent,
-        min_width: None, max_width: None, min_height: None, max_height: None,
-        x: 0.0, y: 0.0, width: 0.0, height: 0.0,
-        line_height: 1.4, text_decoration: TextDecor::default(),
+        is_link: false,
+        href: None,
+        indent_level: 0,
+        color: iced::Color::BLACK,
+        font_size: 16.0,
+        font_weight: FontWeight::Normal,
+        background_color: None,
+        border_widths: [0.0; 4],
+        border_color: None,
+        image_handle: None,
+        image_url: None,
+        margin_top: 0.0,
+        margin_bottom: 0.0,
+        margin_left: None,
+        margin_right: None,
+        padding: [0.0; 4],
+        display: match display {
+            "inline" => Display::Inline,
+            "flex" => Display::Flex,
+            "grid" => Display::Grid,
+            "none" => Display::None,
+            _ => Display::Block,
+        },
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::NoWrap,
+        justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Auto,
+        align_content: AlignContent::Stretch,
+        box_sizing: BoxSizing::ContentBox,
+        flex_grow: 0.0,
+        flex_shrink: 1.0,
+        flex_basis: None,
+        css_width: None,
+        css_height: None,
+        parent_index: parent,
+        min_width: None,
+        max_width: None,
+        min_height: None,
+        max_height: None,
+        x: 0.0,
+        y: 0.0,
+        width: 0.0,
+        height: 0.0,
+        line_height: 1.4,
+        text_decoration: TextDecor::default(),
         border_radius: [0.0; 4],
-        input_type: String::new(), input_value: String::new(),
-        input_placeholder: String::new(), checked: false,
+        input_type: String::new(),
+        input_value: String::new(),
+        input_placeholder: String::new(),
+        checked: false,
         position: Position::Static,
-        inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0,
+        inset_top: 0.0,
+        inset_right: 0.0,
+        inset_bottom: 0.0,
+        inset_left: 0.0,
     }
 }
 
@@ -59,13 +99,29 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
 #[test]
 fn test_css_parse_color_hex() {
     let style = resolve("div { color: #ff0000; }", "div");
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_css_parse_color_named() {
     let style = resolve("div { color: green; }", "div");
-    assert_eq!(style.color, Some(Color { r: 0, g: 128, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 0,
+            g: 128,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
@@ -115,7 +171,15 @@ fn test_css_parse_border_width() {
     let style = resolve("div { border-width: 3px; border-color: blue; }", "div");
     assert_eq!(style.border_top_width, Some(3.0));
     assert_eq!(style.border_bottom_width, Some(3.0));
-    assert_eq!(style.border_top_color, Some(Color { r: 0, g: 0, b: 255, a: 255 }));
+    assert_eq!(
+        style.border_top_color,
+        Some(Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255
+        })
+    );
 }
 
 #[test]
@@ -139,14 +203,30 @@ fn test_computed_style_inline_to_block_for_block_tags() {
 fn test_computed_style_class_overrides_tag() {
     let css = "p { color: black; } .red { color: red; }";
     let style = resolve_with_attrs(css, "p", &[("class", "red")]);
-    assert_eq!(style.color, Some(Color { r: 255, g: 0, b: 0, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255
+        })
+    );
 }
 
 #[test]
 fn test_computed_style_id_overrides_class() {
     let css = ".box { color: green; } #special { color: purple; }";
     let style = resolve_with_attrs(css, "div", &[("class", "box"), ("id", "special")]);
-    assert_eq!(style.color, Some(Color { r: 128, g: 0, b: 128, a: 255 }));
+    assert_eq!(
+        style.color,
+        Some(Color {
+            r: 128,
+            g: 0,
+            b: 128,
+            a: 255
+        })
+    );
 }
 
 #[test]
@@ -157,7 +237,10 @@ fn test_computed_style_flex_direction() {
 
 #[test]
 fn test_computed_style_justify_content() {
-    let style = resolve("div { display: flex; justify-content: space-between; }", "div");
+    let style = resolve(
+        "div { display: flex; justify-content: space-between; }",
+        "div",
+    );
     assert_eq!(style.flex.justify_content, JustifyContent::SpaceBetween);
 }
 
@@ -236,7 +319,17 @@ fn test_extract_elements_from_simple_html() {
     let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
     assert!(!elements.is_empty());
 }
 
@@ -246,7 +339,17 @@ fn test_extract_elements_no_script_content() {
     let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
     assert!(!elements.iter().any(|e| e.text.contains("var x")));
 }
 
@@ -256,7 +359,17 @@ fn test_extract_elements_script_content_skipped() {
     let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
     assert!(elements.iter().any(|e| e.text.contains("safe")));
     assert!(!elements.iter().any(|e| e.text.contains("alert")));
 }
@@ -267,9 +380,21 @@ fn test_extract_elements_head_content_hidden() {
     let dom = parse_html(&html);
     let sheet = stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
     assert!(elements.iter().any(|e| e.text.contains("body")));
-    assert!(!elements.iter().any(|e| e.text.contains("T") && e.tag == "text"));
+    assert!(!elements
+        .iter()
+        .any(|e| e.text.contains("T") && e.tag == "text"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -284,7 +409,12 @@ fn test_block_elements_stack_vertically() {
         make_test("p", "Paragraph", "block", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].y > elements[1].y, "p.y={} should be > h1.y={}", elements[2].y, elements[1].y);
+    assert!(
+        elements[2].y > elements[1].y,
+        "p.y={} should be > h1.y={}",
+        elements[2].y,
+        elements[1].y
+    );
 }
 
 #[test]
@@ -315,7 +445,10 @@ fn test_nested_block_elements() {
         make_test("p", "Nested", "block", Some(1)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].y >= elements[1].y, "nested p should be below parent div");
+    assert!(
+        elements[2].y >= elements[1].y,
+        "nested p should be below parent div"
+    );
 }
 
 #[test]
@@ -340,7 +473,11 @@ fn test_block_with_margin_top() {
     el.margin_top = 20.0;
     let mut elements = vec![parent, el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y >= 19.0, "p.y={} should be >= 20 (with padding)", elements[1].y);
+    assert!(
+        elements[1].y >= 19.0,
+        "p.y={} should be >= 20 (with padding)",
+        elements[1].y
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -355,7 +492,12 @@ fn test_inline_siblings_flow_horizontally() {
         make_test("span", "World", "inline", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].x >= elements[1].x, "second span x={} >= first span x={}", elements[2].x, elements[1].x);
+    assert!(
+        elements[2].x >= elements[1].x,
+        "second span x={} >= first span x={}",
+        elements[2].x,
+        elements[1].x
+    );
 }
 
 #[test]
@@ -373,10 +515,18 @@ fn test_inline_in_block() {
 fn test_inline_wraps_when_long() {
     let mut elements = vec![
         make_test("div", "", "block", None),
-        make_test("span", "AAAAAAAAAA BBBBBBBBBB CCCCCCCCCC DDDDDDDDDD", "inline", Some(0)),
+        make_test(
+            "span",
+            "AAAAAAAAAA BBBBBBBBBB CCCCCCCCCC DDDDDDDDDD",
+            "inline",
+            Some(0),
+        ),
     ];
     apply_taffy_layout(&mut elements, 200.0, 600.0);
-    assert!(elements[1].height > elements[1].font_size, "long text should wrap to multiple lines");
+    assert!(
+        elements[1].height > elements[1].font_size,
+        "long text should wrap to multiple lines"
+    );
 }
 
 #[test]
@@ -398,10 +548,7 @@ fn test_inline_block_element() {
     let mut el = make_test("div", "", "inline-block", Some(0));
     el.css_width = Some(100.0);
     el.css_height = Some(50.0);
-    let mut elements = vec![
-        make_test("div", "", "block", None),
-        el,
-    ];
+    let mut elements = vec![make_test("div", "", "block", None), el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0);
 }
@@ -429,14 +576,20 @@ fn test_flex_row_direction() {
         StyledElement {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
-            css_width: Some(400.0), css_height: Some(100.0),
+            css_width: Some(400.0),
+            css_height: Some(100.0),
             ..make_test("div", "", "flex", None)
         },
         make_test("span", "A", "flex", Some(0)),
         make_test("span", "B", "flex", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].x >= elements[1].x, "flex row: B.x={} >= A.x={}", elements[2].x, elements[1].x);
+    assert!(
+        elements[2].x >= elements[1].x,
+        "flex row: B.x={} >= A.x={}",
+        elements[2].x,
+        elements[1].x
+    );
 }
 
 #[test]
@@ -445,14 +598,20 @@ fn test_flex_column_direction() {
         StyledElement {
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
-            css_width: Some(400.0), css_height: Some(200.0),
+            css_width: Some(400.0),
+            css_height: Some(200.0),
             ..make_test("div", "", "flex", None)
         },
         make_test("p", "First", "flex", Some(0)),
         make_test("p", "Second", "flex", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].y > elements[1].y, "flex col: Second.y={} > First.y={}", elements[2].y, elements[1].y);
+    assert!(
+        elements[2].y > elements[1].y,
+        "flex col: Second.y={} > First.y={}",
+        elements[2].y,
+        elements[1].y
+    );
 }
 
 #[test]
@@ -461,13 +620,17 @@ fn test_flex_justify_center() {
         StyledElement {
             display: Display::Flex,
             justify_content: JustifyContent::Center,
-            css_width: Some(400.0), css_height: Some(100.0),
+            css_width: Some(400.0),
+            css_height: Some(100.0),
             ..make_test("div", "", "flex", None)
         },
         make_test("span", "X", "flex", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].x > 0.0, "flex centered child should not be at x=0");
+    assert!(
+        elements[1].x > 0.0,
+        "flex centered child should not be at x=0"
+    );
 }
 
 #[test]
@@ -476,13 +639,17 @@ fn test_flex_align_items_center() {
         StyledElement {
             display: Display::Flex,
             align_items: AlignItems::Center,
-            css_width: Some(400.0), css_height: Some(200.0),
+            css_width: Some(400.0),
+            css_height: Some(200.0),
             ..make_test("div", "", "flex", None)
         },
         make_test("span", "X", "flex", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y > 0.0, "flex aligned child should not be at y=0");
+    assert!(
+        elements[1].y > 0.0,
+        "flex aligned child should not be at y=0"
+    );
 }
 
 #[test]
@@ -491,7 +658,8 @@ fn test_flex_wrap_nowrap() {
         StyledElement {
             display: Display::Flex,
             flex_wrap: FlexWrap::NoWrap,
-            css_width: Some(100.0), css_height: Some(50.0),
+            css_width: Some(100.0),
+            css_height: Some(50.0),
             ..make_test("div", "", "flex", None)
         },
         make_test("span", "AAAA", "flex", Some(0)),
@@ -513,10 +681,12 @@ fn test_flex_grow() {
     let mut elements = vec![
         StyledElement {
             display: Display::Flex,
-            css_width: Some(400.0), css_height: Some(50.0),
+            css_width: Some(400.0),
+            css_height: Some(50.0),
             ..make_test("div", "", "flex", None)
         },
-        el_a, el_b,
+        el_a,
+        el_b,
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[1].width > 0.0);
@@ -525,12 +695,16 @@ fn test_flex_grow() {
 
 #[test]
 fn test_flex_column_stretch_empty_block_child() {
-    let mut elements = vec![
-        make_test("div", "", "block", None),
-    ];
+    let mut elements = vec![make_test("div", "", "block", None)];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    println!("Empty block child: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
-    assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
+    println!(
+        "Empty block child: x={:.1} y={:.1} w={:.1} h={:.1}",
+        elements[0].x, elements[0].y, elements[0].width, elements[0].height
+    );
+    assert_eq!(
+        elements[0].width, 800.0,
+        "Empty block child should stretch to container width"
+    );
 }
 
 #[test]
@@ -540,9 +714,18 @@ fn test_flex_column_stretch_empty_block_child_with_sibling() {
         make_test("p", "Hello", "block", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    println!("Empty block: x={:.1} y={:.1} w={:.1} h={:.1}", elements[0].x, elements[0].y, elements[0].width, elements[0].height);
-    println!("P element: x={:.1} y={:.1} w={:.1} h={:.1}", elements[1].x, elements[1].y, elements[1].width, elements[1].height);
-    assert_eq!(elements[0].width, 800.0, "Empty block child should stretch to container width");
+    println!(
+        "Empty block: x={:.1} y={:.1} w={:.1} h={:.1}",
+        elements[0].x, elements[0].y, elements[0].width, elements[0].height
+    );
+    println!(
+        "P element: x={:.1} y={:.1} w={:.1} h={:.1}",
+        elements[1].x, elements[1].y, elements[1].width, elements[1].height
+    );
+    assert_eq!(
+        elements[0].width, 800.0,
+        "Empty block child should stretch to container width"
+    );
     assert!(elements[1].width > 0.0, "P element should have width");
 }
 
@@ -561,7 +744,8 @@ fn test_grid_children_in_grid_container() {
     let mut elements = vec![
         StyledElement {
             display: Display::Grid,
-            css_width: Some(400.0), css_height: Some(200.0),
+            css_width: Some(400.0),
+            css_height: Some(200.0),
             ..make_test("div", "", "grid", None)
         },
         make_test("div", "A", "block", Some(0)),
@@ -578,7 +762,8 @@ fn test_grid_single_column() {
     let mut elements = vec![
         StyledElement {
             display: Display::Grid,
-            css_width: Some(400.0), css_height: Some(300.0),
+            css_width: Some(400.0),
+            css_height: Some(300.0),
             ..make_test("div", "", "grid", None)
         },
         make_test("div", "1", "block", Some(0)),
@@ -595,7 +780,8 @@ fn test_grid_item_sizes() {
     let mut elements = vec![
         StyledElement {
             display: Display::Grid,
-            css_width: Some(400.0), css_height: Some(200.0),
+            css_width: Some(400.0),
+            css_height: Some(200.0),
             ..make_test("div", "", "grid", None)
         },
         make_test("div", "Cell", "block", Some(0)),
@@ -607,13 +793,12 @@ fn test_grid_item_sizes() {
 
 #[test]
 fn test_grid_empty_container() {
-    let mut elements = vec![
-        StyledElement {
-            display: Display::Grid,
-            css_width: Some(400.0), css_height: Some(200.0),
-            ..make_test("div", "", "grid", None)
-        },
-    ];
+    let mut elements = vec![StyledElement {
+        display: Display::Grid,
+        css_width: Some(400.0),
+        css_height: Some(200.0),
+        ..make_test("div", "", "grid", None)
+    }];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].width > 0.0);
 }
@@ -661,7 +846,10 @@ fn test_float_does_not_affect_siblings_positioning() {
         make_test("p", "Second", "block", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[2].y > elements[1].y, "non-floated siblings should stack vertically");
+    assert!(
+        elements[2].y > elements[1].y,
+        "non-floated siblings should stack vertically"
+    );
 }
 
 #[test]
@@ -684,7 +872,8 @@ fn test_multiple_floats() {
     el2.css_height = Some(50.0);
     let mut elements = vec![
         make_test("div", "", "block", None),
-        el1, el2,
+        el1,
+        el2,
         make_test("p", "After", "block", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
@@ -706,7 +895,11 @@ fn test_margin_top_on_first_element() {
     el.margin_top = 30.0;
     let mut elements = vec![parent, el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y >= 29.0, "p.y={} should be >= margin_top=30 (with padding)", elements[1].y);
+    assert!(
+        elements[1].y >= 29.0,
+        "p.y={} should be >= margin_top=30 (with padding)",
+        elements[1].y
+    );
 }
 
 #[test]
@@ -718,7 +911,11 @@ fn test_margin_bottom_spacing() {
     let mut elements = vec![el1, el2];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     let gap = elements[1].y - (elements[0].y + elements[0].height);
-    assert!(gap >= 10.0, "gap between elements should be at least 10, got {}", gap);
+    assert!(
+        gap >= 10.0,
+        "gap between elements should be at least 10, got {}",
+        gap
+    );
 }
 
 #[test]
@@ -740,7 +937,11 @@ fn test_large_margin_top() {
     el.margin_top = 100.0;
     let mut elements = vec![parent, el];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y >= 99.0, "p.y={} should be >= 100 (with padding)", elements[1].y);
+    assert!(
+        elements[1].y >= 99.0,
+        "p.y={} should be >= 100 (with padding)",
+        elements[1].y
+    );
 }
 
 #[test]
@@ -748,12 +949,17 @@ fn test_margins_on_nested_elements() {
     let mut elements = vec![
         make_test("div", "", "block", None),
         StyledElement {
-            margin_top: 20.0, margin_bottom: 20.0,
+            margin_top: 20.0,
+            margin_bottom: 20.0,
             ..make_test("p", "Nested", "block", Some(0))
         },
     ];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y >= 20.0, "nested p y={} should be >= 20", elements[1].y);
+    assert!(
+        elements[1].y >= 20.0,
+        "nested p y={} should be >= 20",
+        elements[1].y
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -762,12 +968,10 @@ fn test_margins_on_nested_elements() {
 
 #[test]
 fn test_border_widths_applied() {
-    let mut elements = vec![
-        StyledElement {
-            border_widths: [2.0, 2.0, 2.0, 2.0],
-            ..make_test("div", "Bordered", "block", None)
-        },
-    ];
+    let mut elements = vec![StyledElement {
+        border_widths: [2.0, 2.0, 2.0, 2.0],
+        ..make_test("div", "Bordered", "block", None)
+    }];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!(elements[0].border_widths[0] == 2.0);
 }
@@ -795,9 +999,7 @@ fn test_border_color_set() {
 
 #[test]
 fn test_no_border_no_padding() {
-    let mut elements = vec![
-        make_test("p", "Clean", "block", None),
-    ];
+    let mut elements = vec![make_test("p", "Clean", "block", None)];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert_eq!(elements[0].border_widths, [0.0; 4]);
     assert_eq!(elements[0].padding, [0.0; 4]);
@@ -847,7 +1049,10 @@ fn test_very_narrow_container() {
         make_test("p", "Hello World", "block", Some(0)),
     ];
     apply_taffy_layout(&mut elements, 50.0, 600.0);
-    assert!(elements[1].height > elements[1].font_size, "text should wrap in narrow container");
+    assert!(
+        elements[1].height > elements[1].font_size,
+        "text should wrap in narrow container"
+    );
 }
 
 #[test]
@@ -912,7 +1117,10 @@ fn test_font_size_affects_height() {
     el_large.font_size = 32.0;
     let mut elements = vec![el_small, el_large];
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].height > elements[0].height, "larger font should produce taller element");
+    assert!(
+        elements[1].height > elements[0].height,
+        "larger font should produce taller element"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -985,8 +1193,21 @@ fn test_decode_in_extracted_text() {
     let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
-    let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
+    let p = elements
+        .iter()
+        .find(|e| e.tag == "p")
+        .expect("should find <p>");
     assert_eq!(p.text, "hello & goodbye", "&amp; should decode to &");
 }
 
@@ -996,9 +1217,26 @@ fn test_decode_href_attribute() {
     let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
-    let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
-    assert_eq!(a.href.as_deref(), Some("https://example.com?a=1&b=2"), "href &amp; should decode");
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
+    let a = elements
+        .iter()
+        .find(|e| e.tag == "a")
+        .expect("should find <a>");
+    assert_eq!(
+        a.href.as_deref(),
+        Some("https://example.com?a=1&b=2"),
+        "href &amp; should decode"
+    );
 }
 
 #[test]
@@ -1007,8 +1245,21 @@ fn test_decode_alt_attribute() {
     let dom = parse_html(&html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
-    let img = elements.iter().find(|e| e.tag == "img").expect("should find <img>");
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
+    let img = elements
+        .iter()
+        .find(|e| e.tag == "img")
+        .expect("should find <img>");
     assert_eq!(img.text, "photo & picture", "alt &amp; should decode");
 }
 
@@ -1021,9 +1272,18 @@ fn test_inline_child_offset_prevents_overlap() {
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     let parent = &elements[0];
     let child = &elements[1];
-    assert!(child.x > parent.x + 1.0,
-        "inline child x={} should be offset from parent x={}", child.x, parent.x);
-    assert!(child.y >= parent.y - 1.0, "inline child y={} should align with parent y={}", child.y, parent.y);
+    assert!(
+        child.x > parent.x + 1.0,
+        "inline child x={} should be offset from parent x={}",
+        child.x,
+        parent.x
+    );
+    assert!(
+        child.y >= parent.y - 1.0,
+        "inline child y={} should align with parent y={}",
+        child.y,
+        parent.y
+    );
 }
 
 #[test]
@@ -1032,14 +1292,39 @@ fn test_inline_formatting_tags_inside_paragraph() {
     let dom = vayu_browser::engine::parser::parse_html(html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 800.0, 600.0);
-    let p = elements.iter().find(|e| e.tag == "p").expect("should find <p>");
-    assert!(p.text.contains("Hello"), "paragraph should contain direct text");
-    let b = elements.iter().find(|e| e.tag == "b").expect("should find <b>");
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
+    let p = elements
+        .iter()
+        .find(|e| e.tag == "p")
+        .expect("should find <p>");
+    assert!(
+        p.text.contains("Hello"),
+        "paragraph should contain direct text"
+    );
+    let b = elements
+        .iter()
+        .find(|e| e.tag == "b")
+        .expect("should find <b>");
     assert_eq!(b.text, "bold");
-    let i = elements.iter().find(|e| e.tag == "i").expect("should find <i>");
+    let i = elements
+        .iter()
+        .find(|e| e.tag == "i")
+        .expect("should find <i>");
     assert_eq!(i.text, "italic");
-    let a = elements.iter().find(|e| e.tag == "a").expect("should find <a>");
+    let a = elements
+        .iter()
+        .find(|e| e.tag == "a")
+        .expect("should find <a>");
     assert_eq!(a.text, "link");
 }
 
@@ -1048,7 +1333,8 @@ fn test_margin_auto_centers_block() {
     let mut elements = vec![
         make_test("div", "", "block", None),
         StyledElement {
-            margin_left: None, margin_right: None,
+            margin_left: None,
+            margin_right: None,
             css_width: Some(100.0),
             ..make_test("div", "", "block", Some(0))
         },
@@ -1056,7 +1342,10 @@ fn test_margin_auto_centers_block() {
     elements[1].margin_left = Some(0.0);
     elements[1].margin_right = Some(0.0);
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].x.is_finite(), "centered element x should be finite");
+    assert!(
+        elements[1].x.is_finite(),
+        "centered element x should be finite"
+    );
 }
 
 #[test]
@@ -1065,21 +1354,43 @@ fn test_inline_link_has_text_width() {
     let dom = vayu_browser::engine::parser::parse_html(html);
     let sheet = vayu_browser::engine::stratus::parse("");
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &sheet, None, None, vec![], 1440.0, 900.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        1440.0,
+        900.0,
+    );
     apply_taffy_layout(&mut elements, 1440.0, 900.0);
-    let h1 = elements.iter().find(|e| e.tag == "h1").expect("should find h1");
-    let p = elements.iter().find(|e| e.tag == "p").expect("should find p");
-    let a = elements.iter().find(|e| e.tag == "a").expect("should find a");
+    let h1 = elements
+        .iter()
+        .find(|e| e.tag == "h1")
+        .expect("should find h1");
+    let p = elements
+        .iter()
+        .find(|e| e.tag == "p")
+        .expect("should find p");
+    let a = elements
+        .iter()
+        .find(|e| e.tag == "a")
+        .expect("should find a");
     assert_eq!(h1.width, 1440.0, "h1 should fill container width");
     assert_eq!(p.width, 1440.0, "p should fill container width");
-    assert!(a.width < 1440.0, "inline a should have text width, not container width, got {}", a.width);
+    assert!(
+        a.width < 1440.0,
+        "inline a should have text width, not container width, got {}",
+        a.width
+    );
     assert!(a.width > 0.0, "inline a should have positive width");
 }
 
 // -- PLAN A4: wrap-once invariants -------------------------------------------
 
-const A4_LONG_TEXT: &str =
-    "the quick brown fox jumps over the lazy dog again and again until the \
+const A4_LONG_TEXT: &str = "the quick brown fox jumps over the lazy dog again and again until the \
      line surely wraps somewhere around here and then it keeps going well \
      past the first wrap so that even a wide container must break it into \
      several distinct painted lines for sure";
@@ -1104,12 +1415,18 @@ fn a4_flex_narrowing_keeps_height_and_lines_consistent() {
     let el = &elements[1];
     let unit = a4_wrap_unit(el.font_size);
     // Estimate pass wraps at container width; fixture must produce >1 line there.
-    assert!(el.height / unit >= 1.5, "fixture: estimate pass must see a multi-line span");
+    assert!(
+        el.height / unit >= 1.5,
+        "fixture: estimate pass must see a multi-line span"
+    );
     let from_lines = unit * el.wrapped_lines.len() as f32;
     assert!(
         (el.height - from_lines).abs() <= 1.0,
         "height {} disagrees with painted lines {} ({} x {}) - two wrap passes diverged",
-        el.height, el.wrapped_lines.len(), unit, el.wrapped_lines.len()
+        el.height,
+        el.wrapped_lines.len(),
+        unit,
+        el.wrapped_lines.len()
     );
 }
 
@@ -1145,7 +1462,10 @@ fn a4_explicit_height_still_gets_wrapped_lines() {
     elements[1].css_height = Some(50.0);
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     assert!((elements[1].height - 50.0).abs() <= 1.0);
-    assert!(elements[1].wrapped_lines.len() >= 2, "declared height must not skip wrapping");
+    assert!(
+        elements[1].wrapped_lines.len() >= 2,
+        "declared height must not skip wrapping"
+    );
 }
 
 // Re-layout replaces lines wholesale - no stale lines survive a width change.
@@ -1159,5 +1479,8 @@ fn a4_relayout_replaces_stale_lines() {
     let wide = elements[1].wrapped_lines.clone();
     apply_taffy_layout(&mut elements, 300.0, 600.0);
     let narrow = elements[1].wrapped_lines.clone();
-    assert!(narrow.len() > wide.len(), "narrower container must produce more lines");
+    assert!(
+        narrow.len() > wide.len(),
+        "narrower container must produce more lines"
+    );
 }

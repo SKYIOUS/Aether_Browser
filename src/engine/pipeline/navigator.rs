@@ -1,5 +1,5 @@
 use crate::plog;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,10 +30,10 @@ impl<'de> Deserialize<'de> for Tab {
             #[serde(default)]
             workspace_id: usize,
         }
-        
+
         let helper = Helper::deserialize(deserializer)?;
         let now = Instant::now();
-        
+
         Ok(Tab {
             title: helper.title,
             url: helper.url,
@@ -74,11 +74,11 @@ impl Tab {
             hover_started: None,
         }
     }
-    
+
     pub fn update_accessed(&mut self) {
         self.last_accessed = Instant::now();
     }
-    
+
     pub fn set_hover(&mut self, hovered: bool) {
         if hovered && !self.is_hovered {
             self.hover_started = Some(Instant::now());
@@ -87,15 +87,20 @@ impl Tab {
         }
         self.is_hovered = hovered;
     }
-    
+
     pub fn should_switch_on_hover(&self) -> bool {
-        self.is_hovered && self.hover_started.is_some_and(|start| start.elapsed().as_millis() >= 300)
+        self.is_hovered
+            && self
+                .hover_started
+                .is_some_and(|start| start.elapsed().as_millis() >= 300)
     }
 }
 
 pub fn normalize_nav_url(url: &str) -> String {
     let s = url.trim();
-    if s.is_empty() { return "about:blank".to_string(); }
+    if s.is_empty() {
+        return "about:blank".to_string();
+    }
     if s.starts_with("vayu://") || s.starts_with("about:") {
         return s.to_string();
     }
@@ -114,7 +119,6 @@ pub fn save_tabs(tabs: &[Tab]) {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bookmark {

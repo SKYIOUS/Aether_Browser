@@ -11,12 +11,12 @@ use selectors::context::{
 use selectors::matching::{matches_selector_list, ElementSelectorFlags};
 use selectors::parser::{
     NonTSPseudoClass, ParseRelative, Parser as SelectorParser, PseudoElement, SelectorImpl,
-    SelectorParseErrorKind, SelectorList,
+    SelectorList, SelectorParseErrorKind,
 };
 use selectors::{Element, OpaqueElement};
 
-use super::JsBridge;
 use super::js_bridge::FlatNode;
+use super::JsBridge;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Default)]
 pub struct SelStr(String);
@@ -206,18 +206,12 @@ impl<'a> Element for FlatElement<'a> {
         true
     }
 
-    fn has_local_name(
-        &self,
-        local_name: &<Self::Impl as SelectorImpl>::BorrowedLocalName,
-    ) -> bool {
+    fn has_local_name(&self, local_name: &<Self::Impl as SelectorImpl>::BorrowedLocalName) -> bool {
         let node = self.nodes.get(self.id as usize);
         node.is_some_and(|n| n.tag == local_name)
     }
 
-    fn has_namespace(
-        &self,
-        ns: &<Self::Impl as SelectorImpl>::BorrowedNamespaceUrl,
-    ) -> bool {
+    fn has_namespace(&self, ns: &<Self::Impl as SelectorImpl>::BorrowedNamespaceUrl) -> bool {
         ns.is_empty()
     }
 
@@ -301,13 +295,11 @@ impl<'a> Element for FlatElement<'a> {
     ) -> bool {
         let node = self.nodes.get(self.id as usize);
         node.is_some_and(|n| {
-            n.attrs
-                .get("class")
-                .is_some_and(|class_attr| {
-                    class_attr.split_whitespace().any(|c| {
-                        case_sensitivity.eq(c.as_bytes(), name.as_ref().as_bytes())
-                    })
-                })
+            n.attrs.get("class").is_some_and(|class_attr| {
+                class_attr
+                    .split_whitespace()
+                    .any(|c| case_sensitivity.eq(c.as_bytes(), name.as_ref().as_bytes()))
+            })
         })
     }
 
@@ -396,7 +388,10 @@ impl JsBridge {
             .unwrap_or_default();
 
         while let Some(id) = stack.pop() {
-            let element = FlatElement { nodes: &self.nodes, id };
+            let element = FlatElement {
+                nodes: &self.nodes,
+                id,
+            };
             if matches_selector_parsed(&selector_list, &element, &mut caches) {
                 results.push(id);
                 if !all {

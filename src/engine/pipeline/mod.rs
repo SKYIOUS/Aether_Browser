@@ -1,12 +1,16 @@
 pub mod extractor;
 pub mod fetcher;
 pub mod layout;
+pub mod layout_adapter;
 pub mod navigator;
 
 pub use extractor::StyledElement;
 pub use fetcher::fetch_page_content;
-pub use layout::apply_taffy_layout;
-pub use navigator::{normalize_nav_url, save_tabs, load_tabs, Tab, load_bookmarks, save_bookmarks, Bookmark, session_was_unclean, mark_session_started, mark_session_clean_exit};
+pub use layout_adapter::apply_taffy_layout;
+pub use navigator::{
+    load_bookmarks, load_tabs, mark_session_clean_exit, mark_session_started, normalize_nav_url,
+    save_bookmarks, save_tabs, session_was_unclean, Bookmark, Tab,
+};
 
 /// Fuzz-target surface (PLAN C4): real budget helpers + the element ceiling,
 /// hidden from docs.

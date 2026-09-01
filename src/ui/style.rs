@@ -84,7 +84,11 @@ static PALETTE: OnceLock<RwLock<Palette>> = OnceLock::new();
 /// The only mutation path (ADR-0004). Call once at startup before first
 /// render, then from explicit user actions paired with VayuSettings::save().
 pub fn set_palette(dark: bool, accent: &AccentColor) {
-    let next = if dark { Palette::dark(accent) } else { Palette::light(accent) };
+    let next = if dark {
+        Palette::dark(accent)
+    } else {
+        Palette::light(accent)
+    };
     let lock = PALETTE.get_or_init(|| RwLock::new(next));
     *lock.write().unwrap_or_else(|e| e.into_inner()) = next;
 }
@@ -101,25 +105,55 @@ fn read_palette() -> RwLockReadGuard<'static, Palette> {
 // ── Color Palette accessors (was: Light Theme constants) ────────────────────
 pub struct C;
 impl C {
-    pub fn bg() -> Color { read_palette().bg }
-    pub fn sidebar() -> Color { read_palette().sidebar }
-    pub fn surface() -> Color { read_palette().surface }
-    pub fn card() -> Color { read_palette().card }
+    pub fn bg() -> Color {
+        read_palette().bg
+    }
+    pub fn sidebar() -> Color {
+        read_palette().sidebar
+    }
+    pub fn surface() -> Color {
+        read_palette().surface
+    }
+    pub fn card() -> Color {
+        read_palette().card
+    }
 
-    pub fn fg() -> Color { read_palette().fg }
-    pub fn muted() -> Color { read_palette().muted }
-    pub fn dim() -> Color { read_palette().dim }
+    pub fn fg() -> Color {
+        read_palette().fg
+    }
+    pub fn muted() -> Color {
+        read_palette().muted
+    }
+    pub fn dim() -> Color {
+        read_palette().dim
+    }
 
-    pub fn accent() -> Color { read_palette().accent }
-    pub fn accent_dim() -> Color { read_palette().accent_dim }
-    pub fn accent_border() -> Color { read_palette().accent_border }
+    pub fn accent() -> Color {
+        read_palette().accent
+    }
+    pub fn accent_dim() -> Color {
+        read_palette().accent_dim
+    }
+    pub fn accent_border() -> Color {
+        read_palette().accent_border
+    }
 
-    pub fn page_bg() -> Color { read_palette().page_bg }
-    pub fn page_text() -> Color { read_palette().page_text }
-    pub fn page_muted() -> Color { read_palette().page_muted }
+    pub fn page_bg() -> Color {
+        read_palette().page_bg
+    }
+    pub fn page_text() -> Color {
+        read_palette().page_text
+    }
+    pub fn page_muted() -> Color {
+        read_palette().page_muted
+    }
 
-    pub fn border() -> Color { read_palette().border }
-    pub fn border_mid() -> Color { read_palette().border_mid }
+    pub fn border() -> Color {
+        read_palette().border
+    }
+    pub fn border_mid() -> Color {
+        read_palette().border_mid
+    }
 
     // Misc - theme-independent by definition.
     pub const TRANSPARENT: Color = Color::from_rgba(0.0, 0.0, 0.0, 0.0);
@@ -238,7 +272,9 @@ pub fn nav_icon_button_style() -> impl Fn(&iced::Theme, button::Status) -> butto
     }
 }
 
-pub fn sidebar_item_button_style(active: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
+pub fn sidebar_item_button_style(
+    active: bool,
+) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
     move |_, status| {
         let bg = if active {
             Some(Background::Color(Color::from_rgba(0.25, 0.50, 0.90, 0.10)))
@@ -276,7 +312,11 @@ pub fn pill_button_style(active: bool) -> impl Fn(&iced::Theme, button::Status) 
             }
         };
         let text_color = if active { C::accent() } else { C::muted() };
-        let border_color = if active { C::accent_border() } else { Color::TRANSPARENT };
+        let border_color = if active {
+            C::accent_border()
+        } else {
+            Color::TRANSPARENT
+        };
         button::Style {
             background: bg,
             text_color,
@@ -298,7 +338,11 @@ pub fn card_button_style() -> impl Fn(&iced::Theme, button::Status) -> button::S
         };
         button::Style {
             background: Some(Background::Color(bg)),
-            border: iced::Border { color: C::border(), width: 1.0, radius: 16.0.into() },
+            border: iced::Border {
+                color: C::border(),
+                width: 1.0,
+                radius: 16.0.into(),
+            },
             text_color: C::fg(),
             ..Default::default()
         }
@@ -325,7 +369,11 @@ pub fn url_input_style() -> impl Fn(&iced::Theme, text_input::Status) -> text_in
 pub fn autocomplete_dropdown_style() -> impl Fn(&iced::Theme) -> container::Style {
     |_| container::Style {
         background: Some(Background::Color(C::surface())),
-        border: iced::Border { color: C::border_mid(), width: 1.0, radius: 8.0.into() },
+        border: iced::Border {
+            color: C::border_mid(),
+            width: 1.0,
+            radius: 8.0.into(),
+        },
         ..Default::default()
     }
 }
@@ -345,11 +393,10 @@ pub fn palette_input_style() -> impl Fn(&iced::Theme, text_input::Status) -> tex
     }
 }
 
-
 // ?? B2 palette tests ????????????????????????????????????????????????????????
 #[cfg(test)]
 mod palette_tests {
-    use super::{Palette, set_palette, C};
+    use super::{set_palette, Palette, C};
     use crate::ui::screens::settings::{AccentColor, VayuSettings};
 
     fn accent(r: f32, g: f32, b: f32) -> AccentColor {
@@ -388,12 +435,22 @@ mod palette_tests {
         let a = accent(0.90, 0.40, 0.20);
         let light = Palette::light(&AccentColor::default());
         let d = Palette::dark(&a);
-        assert_eq!(d.accent, rgb(0.90, 0.40, 0.20), "accent identical across modes");
+        assert_eq!(
+            d.accent,
+            rgb(0.90, 0.40, 0.20),
+            "accent identical across modes"
+        );
         assert_eq!(d.accent_dim, rgba(0.90, 0.40, 0.20, 0.10));
         assert_eq!(d.accent_border, rgba(0.90, 0.40, 0.20, 0.25));
-        assert!(d.bg.r < 0.2 && d.sidebar.r < 0.3 && d.card.r < 0.3, "chrome goes dark");
+        assert!(
+            d.bg.r < 0.2 && d.sidebar.r < 0.3 && d.card.r < 0.3,
+            "chrome goes dark"
+        );
         assert!(d.fg.r > 0.8 && d.muted.r > 0.4, "text goes light");
-        assert_eq!(d.page_bg, light.page_bg, "web content colors are not chrome");
+        assert_eq!(
+            d.page_bg, light.page_bg,
+            "web content colors are not chrome"
+        );
         assert_eq!(d.page_text, light.page_text);
         assert_eq!(d.page_muted, light.page_muted);
     }

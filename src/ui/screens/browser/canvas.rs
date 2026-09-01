@@ -1,13 +1,13 @@
-﻿use iced::widget::canvas::{Cache, Geometry, Image as CanvasImage};
-use iced::mouse;
-use iced::{Point, Rectangle, Size};
-use std::sync::Arc;
-use std::time::Instant;
-use crate::engine::text::measure_text_width;
-use crate::plog;
 use super::BrowserMessage;
 use crate::engine::pipeline::extractor::{FontWeight, StyledElement, TextDecor};
 use crate::engine::stratus as css;
+use crate::engine::text::measure_text_width;
+use crate::plog;
+use iced::mouse;
+use iced::widget::canvas::{Cache, Geometry, Image as CanvasImage};
+use iced::{Point, Rectangle, Size};
+use std::sync::Arc;
+use std::time::Instant;
 
 // D3-A/B/C: Paint/animation profiling instrumentation
 #[derive(Default, Clone, Copy)]
@@ -34,10 +34,12 @@ fn record_paint(profile: PaintProfile) {
     LAST_PAINT.with(|lp| *lp.borrow_mut() = Some(Instant::now()));
     PAINT_COUNT.with(|c| *c.borrow_mut() += 1);
     let count = PAINT_COUNT.with(|c| *c.borrow());
-    
+
     if count % 60 == 1 || profile.total_ms > 16.0 {
         let idle_ms = LAST_PAINT.with(|lp| {
-            lp.borrow().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
+            lp.borrow()
+                .map(|t| t.elapsed().as_millis() as u64)
+                .unwrap_or(0)
         });
         plog!("D3", "paint #{:>5} cache={} total={:.2}ms geom={:.2}ms text={:.2}ms img={:.2}ms box={:.2}ms form={:.2}ms drawn={} culled={} idle={}ms",
             count,
@@ -71,11 +73,26 @@ pub struct PageCanvas {
 }
 
 impl PageCanvas {
-    pub fn new(elements: Arc<Vec<StyledElement>>, focused_index: Option<usize>, viewport_h: f32) -> Self {
+    pub fn new(
+        elements: Arc<Vec<StyledElement>>,
+        focused_index: Option<usize>,
+        viewport_h: f32,
+    ) -> Self {
         let cull = CullIndex::from_spans(
-            elements.iter().map(painted_vertical_span).collect::<Vec<_>>().as_slice(),
+            elements
+                .iter()
+                .map(painted_vertical_span)
+                .collect::<Vec<_>>()
+                .as_slice(),
         );
-        Self { elements, cache: Cache::new(), focused_index, scroll_top: 0.0, viewport_h, cull }
+        Self {
+            elements,
+            cache: Cache::new(),
+            focused_index,
+            scroll_top: 0.0,
+            viewport_h,
+            cull,
+        }
     }
 
     // Single source of truth for visibility: both paint and hit-test iterate
@@ -89,7 +106,9 @@ impl PageCanvas {
 // Half-open band [top, bottom): an element ending exactly at top or starting
 // exactly at bottom is culled. Non-finite coordinates never match.
 fn in_band(sy: f32, ey: f32, top: f32, bottom: f32) -> bool {
-    if !sy.is_finite() || !ey.is_finite() { return false; }
+    if !sy.is_finite() || !ey.is_finite() {
+        return false;
+    }
     sy < bottom && ey > top
 }
 
@@ -98,14 +117,29 @@ fn in_band(sy: f32, ey: f32, top: f32, bottom: f32) -> bool {
 // Wrapped-line overflow past the box is covered by the lines term.
 fn painted_vertical_span(el: &StyledElement) -> (f32, f32) {
     let sy = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
-    let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
+    let fs = if el.font_size.is_finite() {
+        el.font_size.clamp(6.0, 200.0)
+    } else {
+        16.0
+    };
     let lh = el.line_height.max(1.0);
-    let box_h = if el.height > 0.0 && el.height.is_finite() { el.height } else { fs * lh };
-    let form_min = if matches!(el.tag.as_str(), "input" | "textarea" | "select" | "button") { 32.0 } else { 0.0 };
+    let box_h = if el.height > 0.0 && el.height.is_finite() {
+        el.height
+    } else {
+        fs * lh
+    };
+    let form_min = if matches!(el.tag.as_str(), "input" | "textarea" | "select" | "button") {
+        32.0
+    } else {
+        0.0
+    };
     let img_min = if el.image_handle.is_some() { 50.0 } else { 0.0 };
     let link_h = if el.is_link { fs + 4.0 } else { 0.0 };
     let lines = el.wrapped_lines.len().max(1) as f32;
-    (sy, sy + box_h.max(form_min).max(img_min).max(link_h).max(lines * lh))
+    (
+        sy,
+        sy + box_h.max(form_min).max(img_min).max(link_h).max(lines * lh),
+    )
 }
 
 // Spatial index over elements sorted by painted start-y, with a prefix-max of
@@ -135,13 +169,19 @@ impl CullIndex {
             running_max = running_max.max(sanitize(e));
             prefix_max_ends.push(running_max);
         }
-        Self { order, starts, prefix_max_ends }
+        Self {
+            order,
+            starts,
+            prefix_max_ends,
+        }
     }
 
     // Superset [lo, end) of band members: everything before lo provably ends
     // above the band; everything from end on provably starts below it.
     pub(crate) fn window(&self, top: f32, bottom: f32) -> std::ops::Range<usize> {
-        if !(top.is_finite() && bottom.is_finite()) || top >= bottom { return 0..0; }
+        if !(top.is_finite() && bottom.is_finite()) || top >= bottom {
+            return 0..0;
+        }
         let end = self.starts.partition_point(|&s| s < bottom);
         let lo = self.prefix_max_ends.partition_point(|&p| p <= top);
         lo..end.max(lo)
@@ -149,7 +189,11 @@ impl CullIndex {
 }
 
 fn sanitize(v: f32) -> f32 {
-    if v.is_finite() { v } else { f32::INFINITY }
+    if v.is_finite() {
+        v
+    } else {
+        f32::INFINITY
+    }
 }
 
 impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
@@ -166,60 +210,111 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         let size = bounds.size();
         let band_top = self.scroll_top;
         let band_bottom = self.scroll_top + self.viewport_h;
-        
+
         let total_start = Instant::now();
         let mut profile = PaintProfile::default();
-        
+
         // Detect cache miss by checking if closure executes
         let cache_miss = std::cell::RefCell::new(true);
-        
+
         let geometry = self.cache.draw(renderer, size, |frame| {
             cache_miss.replace(false);
             let geom_start = Instant::now();
-            
+
             frame.fill_rectangle(Point::new(0.0, 0.0), size, iced::Color::WHITE);
-            
+
             let window = self.band_window(band_top, band_bottom);
             profile.elements_culled = self.elements.len().saturating_sub(window.len());
-            
+
             for pos in window {
                 let i = self.cull.order[pos] as usize;
                 let el = &self.elements[i];
                 let (sy, ey) = painted_vertical_span(el);
-                if !in_band(sy, ey, band_top, band_bottom) { continue; }
-                if el.display == css::Display::None { continue; }
-                
+                if !in_band(sy, ey, band_top, band_bottom) {
+                    continue;
+                }
+                if el.display == css::Display::None {
+                    continue;
+                }
+
                 profile.elements_drawn += 1;
-                
+
                 if let Some(ref handle) = el.image_handle {
                     let img_start = Instant::now();
-                    let iw = if el.width.is_finite() && el.width > 0.0 { el.width } else { 50.0 };
-                    let ih = if el.height.is_finite() && el.height > 0.0 { el.height } else { 50.0 };
+                    let iw = if el.width.is_finite() && el.width > 0.0 {
+                        el.width
+                    } else {
+                        50.0
+                    };
+                    let ih = if el.height.is_finite() && el.height > 0.0 {
+                        el.height
+                    } else {
+                        50.0
+                    };
                     let ix = el.x.max(0.0);
                     let iy = el.y.max(0.0);
                     if ix.is_finite() && iy.is_finite() && iw.is_finite() && ih.is_finite() {
-                        frame.draw_image(Rectangle::new(Point::new(ix, iy), Size::new(iw, ih)), CanvasImage::new(handle.clone()));
+                        frame.draw_image(
+                            Rectangle::new(Point::new(ix, iy), Size::new(iw, ih)),
+                            CanvasImage::new(handle.clone()),
+                        );
                     }
                     profile.image_ms += img_start.elapsed().as_secs_f64() * 1000.0;
                 } else if matches!(el.tag.as_str(), "input" | "textarea" | "select" | "button") {
                     let form_start = Instant::now();
                     let ex = if el.x.is_finite() { el.x.max(0.0) } else { 0.0 };
                     let ey = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
-                    let ew = if el.width.is_finite() { el.width.max(60.0) } else { 200.0 };
-                    let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { 32.0 };
-                    let border_col = el.border_color.unwrap_or(iced::Color::from_rgb(0.7, 0.7, 0.7));
-                    let bg_col = if el.tag == "button" { iced::Color::from_rgb(0.92, 0.92, 0.92) } else { iced::Color::WHITE };
+                    let ew = if el.width.is_finite() {
+                        el.width.max(60.0)
+                    } else {
+                        200.0
+                    };
+                    let eh = if el.height > 0.0 && el.height.is_finite() {
+                        el.height
+                    } else {
+                        32.0
+                    };
+                    let border_col = el
+                        .border_color
+                        .unwrap_or(iced::Color::from_rgb(0.7, 0.7, 0.7));
+                    let bg_col = if el.tag == "button" {
+                        iced::Color::from_rgb(0.92, 0.92, 0.92)
+                    } else {
+                        iced::Color::WHITE
+                    };
                     frame.fill_rectangle(Point::new(ex, ey), Size::new(ew, eh), bg_col);
-                    frame.stroke_rectangle(Point::new(ex, ey), Size::new(ew, eh), iced::widget::canvas::Stroke::default().with_color(border_col).with_width(1.0));
+                    frame.stroke_rectangle(
+                        Point::new(ex, ey),
+                        Size::new(ew, eh),
+                        iced::widget::canvas::Stroke::default()
+                            .with_color(border_col)
+                            .with_width(1.0),
+                    );
                     if self.focused_index == Some(i) {
-                        frame.stroke_rectangle(Point::new(ex - 2.0, ey - 2.0), Size::new(ew + 4.0, eh + 4.0), iced::widget::canvas::Stroke::default().with_color(iced::Color::from_rgb(0.2, 0.5, 1.0)).with_width(2.0));
+                        frame.stroke_rectangle(
+                            Point::new(ex - 2.0, ey - 2.0),
+                            Size::new(ew + 4.0, eh + 4.0),
+                            iced::widget::canvas::Stroke::default()
+                                .with_color(iced::Color::from_rgb(0.2, 0.5, 1.0))
+                                .with_width(2.0),
+                        );
                     }
-                    let fs = if el.font_size.is_finite() { el.font_size.clamp(8.0, 64.0) } else { 14.0 };
+                    let fs = if el.font_size.is_finite() {
+                        el.font_size.clamp(8.0, 64.0)
+                    } else {
+                        14.0
+                    };
                     let label = if el.text.is_empty() {
-                        if el.tag == "button" { "Button".to_string() }
-                        else if el.tag == "select" { "â–¾ Select".to_string() }
-                        else { "".to_string() }
-                    } else { el.text.clone() };
+                        if el.tag == "button" {
+                            "Button".to_string()
+                        } else if el.tag == "select" {
+                            "â–¾ Select".to_string()
+                        } else {
+                            "".to_string()
+                        }
+                    } else {
+                        el.text.clone()
+                    };
                     if !label.is_empty() {
                         frame.fill_text(iced::widget::canvas::Text {
                             content: label,
@@ -232,35 +327,76 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     profile.form_ms += form_start.elapsed().as_secs_f64() * 1000.0;
                 } else {
                     let box_start = Instant::now();
-                    let bg = if matches!(el.tag.as_str(), "body" | "html") { None } else { el.background_color };
+                    let bg = if matches!(el.tag.as_str(), "body" | "html") {
+                        None
+                    } else {
+                        el.background_color
+                    };
                     let bw = el.border_widths;
                     let bc = el.border_color;
                     let ex = if el.x.is_finite() { el.x.max(0.0) } else { 0.0 };
                     let ey = if el.y.is_finite() { el.y.max(0.0) } else { 0.0 };
-                    let ew = if el.width.is_finite() { el.width.max(1.0) } else { 1.0 };
-                    let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { let f = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 }; f * el.line_height.max(1.0) };
+                    let ew = if el.width.is_finite() {
+                        el.width.max(1.0)
+                    } else {
+                        1.0
+                    };
+                    let eh = if el.height > 0.0 && el.height.is_finite() {
+                        el.height
+                    } else {
+                        let f = if el.font_size.is_finite() {
+                            el.font_size.clamp(6.0, 200.0)
+                        } else {
+                            16.0
+                        };
+                        f * el.line_height.max(1.0)
+                    };
                     if bg.is_some() || bc.is_some() {
                         let fill = bg.unwrap_or(iced::Color::TRANSPARENT);
                         frame.fill_rectangle(Point::new(ex, ey), Size::new(ew, eh), fill);
                     }
                     if let Some(color) = bc {
-                        if bw[0] > 0.0 { frame.fill_rectangle(Point::new(ex, ey), Size::new(ew, bw[0]), color); }
-                        if bw[2] > 0.0 { frame.fill_rectangle(Point::new(ex, ey + eh - bw[2]), Size::new(ew, bw[2]), color); }
-                        if bw[3] > 0.0 { frame.fill_rectangle(Point::new(ex, ey), Size::new(bw[3], eh), color); }
-                        if bw[1] > 0.0 { frame.fill_rectangle(Point::new(ex + ew - bw[1], ey), Size::new(bw[1], eh), color); }
+                        if bw[0] > 0.0 {
+                            frame.fill_rectangle(Point::new(ex, ey), Size::new(ew, bw[0]), color);
+                        }
+                        if bw[2] > 0.0 {
+                            frame.fill_rectangle(
+                                Point::new(ex, ey + eh - bw[2]),
+                                Size::new(ew, bw[2]),
+                                color,
+                            );
+                        }
+                        if bw[3] > 0.0 {
+                            frame.fill_rectangle(Point::new(ex, ey), Size::new(bw[3], eh), color);
+                        }
+                        if bw[1] > 0.0 {
+                            frame.fill_rectangle(
+                                Point::new(ex + ew - bw[1], ey),
+                                Size::new(bw[1], eh),
+                                color,
+                            );
+                        }
                     }
                     profile.box_ms += box_start.elapsed().as_secs_f64() * 1000.0;
-                    
+
                     let text_start = Instant::now();
                     let weight = match el.font_weight {
                         FontWeight::Bold => iced::font::Weight::Bold,
                         FontWeight::Normal => iced::font::Weight::Normal,
                     };
-                    let fs = if el.font_size.is_finite() { el.font_size.clamp(6.0, 200.0) } else { 16.0 };
+                    let fs = if el.font_size.is_finite() {
+                        el.font_size.clamp(6.0, 200.0)
+                    } else {
+                        16.0
+                    };
                     let line_h = fs * el.line_height.max(1.0);
                     let px0 = el.x.max(0.0) + bw[3];
                     let py0 = el.y.max(0.0) + bw[0];
-                    let lines: Vec<&str> = if el.wrapped_lines.is_empty() { vec![&el.text] } else { el.wrapped_lines.iter().map(|s| s.as_str()).collect() };
+                    let lines: Vec<&str> = if el.wrapped_lines.is_empty() {
+                        vec![&el.text]
+                    } else {
+                        el.wrapped_lines.iter().map(|s| s.as_str()).collect()
+                    };
                     for (li, line) in lines.iter().enumerate() {
                         let py = py0 + li as f32 * line_h;
                         if fs.is_finite() && px0.is_finite() && py.is_finite() && !line.is_empty() {
@@ -269,7 +405,10 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                                 position: Point::new(px0, py),
                                 color: el.color,
                                 size: iced::Pixels(fs),
-                                font: iced::Font { weight, ..Default::default() },
+                                font: iced::Font {
+                                    weight,
+                                    ..Default::default()
+                                },
                                 shaping: iced::widget::text::Shaping::Advanced,
                                 ..Default::default()
                             });
@@ -277,29 +416,41 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                             let deco_h = (fs * 0.06).max(1.0);
                             let deco_w = measure_text_width(line, fs);
                             if el.text_decoration.contains(TextDecor::UNDERLINE) {
-                                frame.fill_rectangle(Point::new(px0, deco_y + fs * 0.1), Size::new(deco_w, deco_h), el.color);
+                                frame.fill_rectangle(
+                                    Point::new(px0, deco_y + fs * 0.1),
+                                    Size::new(deco_w, deco_h),
+                                    el.color,
+                                );
                             }
                             if el.text_decoration.contains(TextDecor::LINE_THROUGH) {
-                                frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.35), Size::new(deco_w, deco_h), el.color);
+                                frame.fill_rectangle(
+                                    Point::new(px0, deco_y - fs * 0.35),
+                                    Size::new(deco_w, deco_h),
+                                    el.color,
+                                );
                             }
                             if el.text_decoration.contains(TextDecor::OVERLINE) {
-                                frame.fill_rectangle(Point::new(px0, deco_y - fs * 0.75), Size::new(deco_w, deco_h), el.color);
+                                frame.fill_rectangle(
+                                    Point::new(px0, deco_y - fs * 0.75),
+                                    Size::new(deco_w, deco_h),
+                                    el.color,
+                                );
                             }
                         }
                     }
                     profile.text_ms += text_start.elapsed().as_secs_f64() * 1000.0;
                 }
             }
-            
+
             profile.geometry_ms = geom_start.elapsed().as_secs_f64() * 1000.0;
         });
-        
+
         let geometry = vec![geometry];
-        
+
         profile.cache_hit = *cache_miss.borrow();
         profile.total_ms = total_start.elapsed().as_secs_f64() * 1000.0;
         record_paint(profile);
-        
+
         geometry
     }
 
@@ -311,7 +462,10 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
         cursor: mouse::Cursor,
     ) -> (iced::widget::canvas::event::Status, Option<BrowserMessage>) {
         use iced::widget::canvas::event;
-        if let iced::widget::canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
+        if let iced::widget::canvas::Event::Mouse(mouse::Event::ButtonPressed(
+            mouse::Button::Left,
+        )) = event
+        {
             if let Some(pos) = cursor.position_in(bounds) {
                 plog!("CLICK", "Click at pos=({:.0},{:.0})", pos.x, pos.y);
                 let band_top = self.scroll_top;
@@ -320,28 +474,58 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                     let i = self.cull.order[pos_idx] as usize;
                     let el = &self.elements[i];
                     let (sy, ey) = painted_vertical_span(el);
-                    if !in_band(sy, ey, band_top, band_bottom) { continue; }
-                    if el.display == css::Display::None { continue; }
+                    if !in_band(sy, ey, band_top, band_bottom) {
+                        continue;
+                    }
+                    if el.display == css::Display::None {
+                        continue;
+                    }
                     if el.is_link {
                         let text_w = el.width.max(el.font_size);
                         let ex = el.x.max(0.0);
                         let ey = el.y.max(0.0);
-                        let hit = Rectangle::new(Point::new(ex, ey), Size::new(text_w, el.font_size + 4.0));
+                        let hit = Rectangle::new(
+                            Point::new(ex, ey),
+                            Size::new(text_w, el.font_size + 4.0),
+                        );
                         if hit.contains(pos) {
                             plog!("CLICK", "Link hit at element {} href={:?}", i, el.href);
                             if let Some(ref href) = el.href {
-                                return (event::Status::Captured, Some(BrowserMessage::LinkClicked(href.clone())));
+                                return (
+                                    event::Status::Captured,
+                                    Some(BrowserMessage::LinkClicked(href.clone())),
+                                );
                             }
                         }
                     }
                     let ex = el.x.max(0.0);
                     let ey = el.y.max(0.0);
-                    let ew = if el.width.is_finite() { el.width.max(1.0) } else { 200.0 };
-                    let eh = if el.height > 0.0 && el.height.is_finite() { el.height } else { el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0) };
+                    let ew = if el.width.is_finite() {
+                        el.width.max(1.0)
+                    } else {
+                        200.0
+                    };
+                    let eh = if el.height > 0.0 && el.height.is_finite() {
+                        el.height
+                    } else {
+                        el.font_size.clamp(6.0, 200.0) * el.line_height.max(1.0)
+                    };
                     let hit = Rectangle::new(Point::new(ex, ey), Size::new(ew, eh));
                     if hit.contains(pos) {
-                        plog!("CLICK", "Element {} hit at [{:.0},{:.0} {:.0}x{:.0}] tag={}", i, ex, ey, ew, eh, el.tag);
-                        let msg = if matches!(el.tag.as_str(), "input" | "textarea" | "select" | "button") {
+                        plog!(
+                            "CLICK",
+                            "Element {} hit at [{:.0},{:.0} {:.0}x{:.0}] tag={}",
+                            i,
+                            ex,
+                            ey,
+                            ew,
+                            eh,
+                            el.tag
+                        );
+                        let msg = if matches!(
+                            el.tag.as_str(),
+                            "input" | "textarea" | "select" | "button"
+                        ) {
                             BrowserMessage::FormElementClicked(i)
                         } else {
                             BrowserMessage::ElementClicked(i)
@@ -424,7 +608,7 @@ mod cull_tests {
         assert!(!in_band(100.0, f32::INFINITY, TOP, BOTTOM));
     }
 
-// The window returned by the index must be a superset of the exact
+    // The window returned by the index must be a superset of the exact
     // predicate over ALL spans — including the hard case of a tall early
     // container followed by short spans above the viewport.
     #[test]
@@ -454,20 +638,22 @@ mod cull_tests {
     // D3 profiling infrastructure test
     #[test]
     fn d3_profiling_infrastructure() {
-        use crate::ui::screens::browser::canvas::{record_canvas_invalidation, CACHE_INVALIDATIONS, LAST_INVALIDATION_REASON};
-        
+        use crate::ui::screens::browser::canvas::{
+            record_canvas_invalidation, CACHE_INVALIDATIONS, LAST_INVALIDATION_REASON,
+        };
+
         // Reset thread-local state
         CACHE_INVALIDATIONS.with(|c| *c.borrow_mut() = 0);
         LAST_INVALIDATION_REASON.with(|r| *r.borrow_mut() = None);
-        
+
         // Record some invalidations
         record_canvas_invalidation("test_reason_1");
         record_canvas_invalidation("test_reason_2");
         record_canvas_invalidation("test_reason_1");
-        
+
         let count = CACHE_INVALIDATIONS.with(|c| *c.borrow());
         assert_eq!(count, 3);
-        
+
         let reason = LAST_INVALIDATION_REASON.with(|r| *r.borrow());
         assert_eq!(reason, Some("test_reason_1"));
     }

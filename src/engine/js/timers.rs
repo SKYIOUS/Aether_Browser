@@ -6,7 +6,13 @@ impl JsBridge {
         let id = self.next_timer_id;
         self.next_timer_id += 1;
         let fire_at = std::time::Instant::now() + Duration::from_millis(delay_ms);
-        self.timers.push(TimerEntry { id, source, delay_ms, is_interval: false, fire_at });
+        self.timers.push(TimerEntry {
+            id,
+            source,
+            delay_ms,
+            is_interval: false,
+            fire_at,
+        });
         id
     }
 
@@ -15,7 +21,13 @@ impl JsBridge {
         let id = self.next_timer_id;
         self.next_timer_id += 1;
         let fire_at = std::time::Instant::now() + Duration::from_millis(delay_ms);
-        self.timers.push(TimerEntry { id, source, delay_ms, is_interval: true, fire_at });
+        self.timers.push(TimerEntry {
+            id,
+            source,
+            delay_ms,
+            is_interval: true,
+            fire_at,
+        });
         id
     }
 
@@ -42,7 +54,13 @@ impl JsBridge {
                     self.next_timer_id += 1;
                     let delay_ms = entry.delay_ms.max(1);
                     let fire_at = now + Duration::from_millis(delay_ms);
-                    self.timers.push(TimerEntry { id: new_id, source: entry.source, delay_ms: entry.delay_ms, is_interval: true, fire_at });
+                    self.timers.push(TimerEntry {
+                        id: new_id,
+                        source: entry.source,
+                        delay_ms: entry.delay_ms,
+                        is_interval: true,
+                        fire_at,
+                    });
                 }
             } else {
                 i += 1;

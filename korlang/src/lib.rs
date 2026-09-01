@@ -17,7 +17,7 @@ pub mod compiler;
 pub mod vm;
 pub use compiler::compile;
 pub use compiler::formatter::format_component;
-pub use vm::{VirtualMachine, Value, KorObject, NativeFn};
+pub use vm::{KorObject, NativeFn, Value, VirtualMachine};
 
 #[cfg(test)]
 #[cfg(test)]
@@ -34,7 +34,14 @@ mod overhaul_tests {
             let obj = obj.lock().expect("Operation failed");
             if let Some(Value::Object(text_obj)) = obj.children.first() {
                 let text_obj = text_obj.lock().expect("Operation failed");
-                assert_eq!(text_obj.properties.get("text").expect("Operation failed").to_string_val(), "20");
+                assert_eq!(
+                    text_obj
+                        .properties
+                        .get("text")
+                        .expect("Operation failed")
+                        .to_string_val(),
+                    "20"
+                );
             }
         }
     }
@@ -49,7 +56,14 @@ mod overhaul_tests {
             let obj = obj.lock().expect("Mutex poisoned");
             if let Some(Value::Object(text_obj)) = obj.children.first() {
                 let text_obj = text_obj.lock().expect("Mutex poisoned");
-                assert_eq!(text_obj.properties.get("text").expect("Operation failed").to_string_val(), "30");
+                assert_eq!(
+                    text_obj
+                        .properties
+                        .get("text")
+                        .expect("Operation failed")
+                        .to_string_val(),
+                    "30"
+                );
             }
         }
     }

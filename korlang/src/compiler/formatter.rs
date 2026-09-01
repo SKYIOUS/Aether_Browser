@@ -1,10 +1,15 @@
-use super::parser::{Component, Node, Expr, FunctionDef};
 use super::lexer::Token;
+use super::parser::{Component, Expr, FunctionDef, Node};
 
 pub fn format_component(comp: &Component) -> String {
     let mut out = format!("Component {} {{\n", comp.name);
     for state in &comp.states {
-        out.push_str(&format!("    state {}: {} = {}\n", state.name, state.type_name, format_expr(&state.default_value)));
+        out.push_str(&format!(
+            "    state {}: {} = {}\n",
+            state.name,
+            state.type_name,
+            format_expr(&state.default_value)
+        ));
     }
     for func in &comp.functions {
         out.push_str(&format_function(func, 1));
@@ -15,7 +20,12 @@ pub fn format_component(comp: &Component) -> String {
 }
 
 fn format_function(func: &FunctionDef, indent: usize) -> String {
-    let mut out = format!("{}fn {}({}) {{\n", "    ".repeat(indent), func.name, func.params.join(", "));
+    let mut out = format!(
+        "{}fn {}({}) {{\n",
+        "    ".repeat(indent),
+        func.name,
+        func.params.join(", ")
+    );
     for node in &func.body {
         out.push_str(&format_node(node, indent + 1));
     }
@@ -30,7 +40,11 @@ fn format_node(node: &Node, indent: usize) -> String {
             let mut out = format!("{}{}", ind, el.name);
             if !el.properties.is_empty() {
                 out.push('(');
-                let props: Vec<String> = el.properties.iter().map(|p| format!("{}: {}", p.name, format_expr(&p.value))).collect();
+                let props: Vec<String> = el
+                    .properties
+                    .iter()
+                    .map(|p| format!("{}: {}", p.name, format_expr(&p.value)))
+                    .collect();
                 out.push_str(&props.join(", "));
                 out.push(')');
             }
@@ -48,22 +62,36 @@ fn format_node(node: &Node, indent: usize) -> String {
             }
             out
         }
-        Node::IfElse { condition, then_branch, else_branch } => {
+        Node::IfElse {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             let mut out = format!("{}if {} {{\n", ind, format_expr(condition));
-            for child in then_branch { out.push_str(&format_node(child, indent + 1)); }
+            for child in then_branch {
+                out.push_str(&format_node(child, indent + 1));
+            }
             out.push_str(&format!("{}}}", ind));
             if !else_branch.is_empty() {
                 out.push_str(" else {\n");
-                for child in else_branch { out.push_str(&format_node(child, indent + 1)); }
+                for child in else_branch {
+                    out.push_str(&format_node(child, indent + 1));
+                }
                 out.push_str(&format!("{}}}\n", ind));
             } else {
                 out.push('\n');
             }
             out
         }
-        Node::ForLoop { var, collection, body } => {
+        Node::ForLoop {
+            var,
+            collection,
+            body,
+        } => {
             let mut out = format!("{}for {} in {} {{\n", ind, var, format_expr(collection));
-            for child in body { out.push_str(&format_node(child, indent + 1)); }
+            for child in body {
+                out.push_str(&format_node(child, indent + 1));
+            }
             out.push_str(&format!("{}}}\n", ind));
             out
         }
@@ -91,12 +119,19 @@ fn format_expr(expr: &Expr) -> String {
                 out.push('$');
                 out.push_str(&vars[i]);
             }
-            if let Some(last) = parts.last() { out.push_str(last); }
+            if let Some(last) = parts.last() {
+                out.push_str(last);
+            }
             out.push('\"');
             out
         }
         Expr::BinaryOp { left, op, right } => {
-            format!("({} {} {})", format_expr(left), format_token(op), format_expr(right))
+            format!(
+                "({} {} {})",
+                format_expr(left),
+                format_token(op),
+                format_expr(right)
+            )
         }
         Expr::UnaryOp { op, expr } => {
             format!("{}{}", format_token(op), format_expr(expr))

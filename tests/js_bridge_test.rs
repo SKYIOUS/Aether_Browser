@@ -1,33 +1,47 @@
 use std::collections::HashMap;
-use vayu_browser::engine::js::js_bridge::JsBridge;
 use vayu_browser::engine::dom::{Node, NodeType};
+use vayu_browser::engine::js::js_bridge::JsBridge;
 
 fn make_dom() -> Node {
     let mut attrs = HashMap::new();
     attrs.insert("id".to_string(), "root".to_string());
     let mut child_attrs = HashMap::new();
     child_attrs.insert("class".to_string(), "child".to_string());
-    Node::new_element("div".to_string(), attrs, vec![
-        Node::new_element("span".to_string(), child_attrs, vec![
-            Node::new_text("Hello".to_string())
-        ])
-    ])
+    Node::new_element(
+        "div".to_string(),
+        attrs,
+        vec![Node::new_element(
+            "span".to_string(),
+            child_attrs,
+            vec![Node::new_text("Hello".to_string())],
+        )],
+    )
 }
 
 fn make_nested_dom() -> Node {
-    Node::new_element("div".to_string(), HashMap::new(), vec![
-        Node::new_element("section".to_string(), HashMap::new(), vec![
-            Node::new_element("p".to_string(), HashMap::new(), vec![
-                Node::new_text("Nested".to_string())
-            ])
-        ])
-    ])
+    Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![Node::new_element(
+            "section".to_string(),
+            HashMap::new(),
+            vec![Node::new_element(
+                "p".to_string(),
+                HashMap::new(),
+                vec![Node::new_text("Nested".to_string())],
+            )],
+        )],
+    )
 }
 
 fn find_in_dom<'a>(node: &'a Node, tag: &str) -> Option<&'a Node> {
-    if node.tag_name() == Some(tag) { return Some(node); }
+    if node.tag_name() == Some(tag) {
+        return Some(node);
+    }
     for child in &node.children {
-        if let Some(found) = find_in_dom(child, tag) { return Some(found); }
+        if let Some(found) = find_in_dom(child, tag) {
+            return Some(found);
+        }
     }
     None
 }
@@ -63,7 +77,10 @@ fn test_set_attribute() {
     let mut bridge = JsBridge::new();
     let id = bridge.create_element("div");
     bridge.set_attribute(id, "data-test", "value123");
-    assert_eq!(bridge.get_attribute(id, "data-test"), Some("value123".to_string()));
+    assert_eq!(
+        bridge.get_attribute(id, "data-test"),
+        Some("value123".to_string())
+    );
 }
 
 #[test]
@@ -192,7 +209,11 @@ fn test_fetch_url_cross_origin() {
     let bridge = JsBridge::load_dom(&dom, "https://example.com");
     let result = bridge.fetch_url("https://other.com/data");
     // Cross-origin fetch without ACAO header should fail
-    assert!(result.starts_with("__STATUS_0__"), "expected failure for cross-origin fetch, got: {}", result);
+    assert!(
+        result.starts_with("__STATUS_0__"),
+        "expected failure for cross-origin fetch, got: {}",
+        result
+    );
 }
 
 #[test]
@@ -272,7 +293,9 @@ fn test_dom_roundtrip() {
 
     assert_eq!(original.children.len(), roundtrip.children.len());
     assert_eq!(original.tag_name(), roundtrip.tag_name());
-    if let (NodeType::Element(orig), NodeType::Element(rt)) = (&original.node_type, &roundtrip.node_type) {
+    if let (NodeType::Element(orig), NodeType::Element(rt)) =
+        (&original.node_type, &roundtrip.node_type)
+    {
         assert_eq!(orig.tag_name, rt.tag_name);
         assert_eq!(orig.attributes, rt.attributes);
     }
@@ -306,11 +329,15 @@ fn test_dom_roundtrip_preserves_structure() {
 fn test_load_dom_with_body() {
     let mut body_attrs = HashMap::new();
     body_attrs.insert("id".to_string(), "main".to_string());
-    let body = Node::new_element("body".to_string(), body_attrs, vec![
-        Node::new_element("h1".to_string(), HashMap::new(), vec![
-            Node::new_text("Title".to_string())
-        ])
-    ]);
+    let body = Node::new_element(
+        "body".to_string(),
+        body_attrs,
+        vec![Node::new_element(
+            "h1".to_string(),
+            HashMap::new(),
+            vec![Node::new_text("Title".to_string())],
+        )],
+    );
     let mut doc = Node::new_document();
     doc.children.push(body);
     let bridge = JsBridge::load_dom(&doc, "https://example.com");
@@ -345,8 +372,14 @@ fn test_local_storage() {
     bridge.local_storage_set_item("key1".to_string(), "val1".to_string());
     bridge.local_storage_set_item("key2".to_string(), "val2".to_string());
     assert_eq!(bridge.local_storage_length(), 2);
-    assert_eq!(bridge.local_storage_get_item("key1"), Some("val1".to_string()));
-    assert_eq!(bridge.local_storage_get_item("key2"), Some("val2".to_string()));
+    assert_eq!(
+        bridge.local_storage_get_item("key1"),
+        Some("val1".to_string())
+    );
+    assert_eq!(
+        bridge.local_storage_get_item("key2"),
+        Some("val2".to_string())
+    );
     let key0 = bridge.local_storage_key(0);
     let key1 = bridge.local_storage_key(1);
     assert!(key0.is_some() && key1.is_some());
@@ -363,8 +396,14 @@ fn test_local_storage() {
 #[test]
 fn test_location_parts() {
     let dom = Node::new_document();
-    let bridge = JsBridge::load_dom(&dom, "https://example.com:8080/path/to/page?q=hello#section");
-    assert_eq!(bridge.get_location_href(), "https://example.com:8080/path/to/page?q=hello#section");
+    let bridge = JsBridge::load_dom(
+        &dom,
+        "https://example.com:8080/path/to/page?q=hello#section",
+    );
+    assert_eq!(
+        bridge.get_location_href(),
+        "https://example.com:8080/path/to/page?q=hello#section"
+    );
     assert_eq!(bridge.get_location_hostname(), "example.com");
     assert_eq!(bridge.get_location_pathname(), "/path/to/page");
     assert_eq!(bridge.get_location_protocol(), "https:");
@@ -389,28 +428,40 @@ fn test_location_parts_defaults() {
 fn test_location_reload() {
     let mut bridge = JsBridge::new();
     bridge.location_reload();
-    assert_eq!(bridge.pending_navigation, Some("https://localhost".to_string()));
+    assert_eq!(
+        bridge.pending_navigation,
+        Some("https://localhost".to_string())
+    );
 }
 
 #[test]
 fn test_location_assign() {
     let mut bridge = JsBridge::new();
     bridge.location_assign("https://example.com/new".to_string());
-    assert_eq!(bridge.pending_navigation, Some("https://example.com/new".to_string()));
+    assert_eq!(
+        bridge.pending_navigation,
+        Some("https://example.com/new".to_string())
+    );
 }
 
 #[test]
 fn test_location_replace() {
     let mut bridge = JsBridge::new();
     bridge.location_replace("https://example.com/alt".to_string());
-    assert_eq!(bridge.pending_navigation, Some("https://example.com/alt".to_string()));
+    assert_eq!(
+        bridge.pending_navigation,
+        Some("https://example.com/alt".to_string())
+    );
 }
 
 #[test]
 fn test_set_location_href() {
     let mut bridge = JsBridge::new();
     bridge.set_location_href("https://other.com".to_string());
-    assert_eq!(bridge.pending_navigation, Some("https://other.com".to_string()));
+    assert_eq!(
+        bridge.pending_navigation,
+        Some("https://other.com".to_string())
+    );
 }
 
 #[test]

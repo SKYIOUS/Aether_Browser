@@ -91,7 +91,7 @@ fn get_layout_engine() -> &'static dyn LayoutEngine {
 fn get_layout_engine() -> &'static dyn LayoutEngine {
     use std::sync::OnceLock;
     static ENGINE: OnceLock<NativeLayoutEngine> = OnceLock::new();
-    ENGINE.get_or_init(|| NativeLayoutEngine::new())
+    ENGINE.get_or_init(NativeLayoutEngine::new)
 }
 
 #[cfg(not(any(feature = "layout-taffy", feature = "layout-native")))]
@@ -171,9 +171,9 @@ fn post_process_inline_children(elements: &mut [StyledElement], _container_width
 
     // Build inline children map - O(n)
     let mut inline_children: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for i in 0..n {
-        if elements[i].display == css::Display::Inline {
-            if let Some(pidx) = elements[i].parent_index {
+    for (i, el) in elements.iter().enumerate().take(n) {
+        if el.display == css::Display::Inline {
+            if let Some(pidx) = el.parent_index {
                 if pidx < n {
                     inline_children[pidx].push(i);
                 }
@@ -217,8 +217,7 @@ fn post_process_inline_children(elements: &mut [StyledElement], _container_width
 
 // Re-export for backward compatibility
 pub use crate::engine::pipeline::layout::{
-    apply_taffy_layout as apply_taffy_layout_legacy, get_layout_pass_count,
-    reset_layout_pass_count, wrap_text,
+    apply_taffy_layout as apply_taffy_layout_legacy, wrap_text,
 };
 
 /// Backward-compatible wrapper — now uses the layout-engine abstraction

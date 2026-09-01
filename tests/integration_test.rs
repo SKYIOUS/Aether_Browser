@@ -1,5 +1,5 @@
-use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::dom::NodeType;
+use vayu_browser::engine::parser::parse_html;
 
 #[test]
 fn test_parsing_div_with_paragraph() {
@@ -7,10 +7,22 @@ fn test_parsing_div_with_paragraph() {
     let doc = parse_html(&html);
 
     assert!(matches!(doc.node_type, NodeType::Document));
-    let html_elem = doc.children.iter().find(|c| c.tag_name() == Some("html")).expect("should find html");
-    let body = html_elem.children.iter().find(|c| c.tag_name() == Some("body")).expect("should find body");
-    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
-    
+    let html_elem = doc
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("html"))
+        .expect("should find html");
+    let body = html_elem
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("body"))
+        .expect("should find body");
+    let div = body
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("div"))
+        .expect("should find div");
+
     assert!(matches!(div.node_type, NodeType::Element(_)));
     assert_eq!(div.tag_name(), Some("div"));
     assert_eq!(div.children.len(), 1);
@@ -30,10 +42,22 @@ fn test_parsing_multiple_elements() {
     let html = String::from("<div><h1>Title</h1><p>Content here.</p></div>");
     let doc = parse_html(&html);
 
-    let html_elem = doc.children.iter().find(|c| c.tag_name() == Some("html")).expect("should find html");
-    let body = html_elem.children.iter().find(|c| c.tag_name() == Some("body")).expect("should find body");
-    let div = body.children.iter().find(|c| c.tag_name() == Some("div")).expect("should find div");
-    
+    let html_elem = doc
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("html"))
+        .expect("should find html");
+    let body = html_elem
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("body"))
+        .expect("should find body");
+    let div = body
+        .children
+        .iter()
+        .find(|c| c.tag_name() == Some("div"))
+        .expect("should find div");
+
     assert_eq!(div.tag_name(), Some("div"));
     assert_eq!(div.children.len(), 2);
     assert_eq!(div.children[0].tag_name(), Some("h1"));
@@ -57,44 +81,70 @@ fn test_should_skip_tag_filters() {
 #[test]
 fn test_extract_and_layout_pipeline() {
     use vayu_browser::engine::parser::parse_html;
-    use vayu_browser::engine::stratus;
     use vayu_browser::engine::pipeline::extractor::{extract_elements, FontWeight};
     use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
+    use vayu_browser::engine::stratus;
 
     let html = r#"
         <div class="container">
             <p id="first">Hello</p>
             <p class="highlight">World</p>
         </div>
-    "#.to_string();
+    "#
+    .to_string();
 
     let css = r#"
         .container { display: block; width: 800px; background-color: #fff; }
         p { display: block; color: #333; font-size: 16px; margin-top: 8px; margin-bottom: 8px; }
         .highlight { color: red; font-weight: bold; }
-    "#.to_string();
+    "#
+    .to_string();
 
     let dom = parse_html(&html);
     let stylesheet = stratus::parse(&css);
 
     let mut elements = Vec::new();
-    extract_elements(&dom, &mut elements, 0, &stylesheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut elements,
+        0,
+        &stylesheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+    );
 
     assert!(!elements.is_empty(), "should extract elements");
 
     let container = elements.iter().find(|e| e.tag == "div");
     assert!(container.is_some(), "should find div");
 
-    let first_p = elements.iter().find(|e| e.tag == "p" && e.text.contains("Hello"));
+    let first_p = elements
+        .iter()
+        .find(|e| e.tag == "p" && e.text.contains("Hello"));
     assert!(first_p.is_some(), "should find first <p>");
     let first_p = first_p.unwrap();
-    assert_eq!(first_p.color, iced::Color::from_rgb(0x33 as f32 / 255.0, 0x33 as f32 / 255.0, 0x33 as f32 / 255.0));
+    assert_eq!(
+        first_p.color,
+        iced::Color::from_rgb(
+            0x33 as f32 / 255.0,
+            0x33 as f32 / 255.0,
+            0x33 as f32 / 255.0
+        )
+    );
 
-    let highlight = elements.iter().find(|e| e.tag == "p" && e.text.contains("World"));
+    let highlight = elements
+        .iter()
+        .find(|e| e.tag == "p" && e.text.contains("World"));
     assert!(highlight.is_some(), "should find highlighted <p>");
     let highlight = highlight.unwrap();
     let red = iced::Color::from_rgb(1.0, 0.0, 0.0);
-    assert!((highlight.color.r - red.r).abs() < 0.01, "highlight color should be red");
+    assert!(
+        (highlight.color.r - red.r).abs() < 0.01,
+        "highlight color should be red"
+    );
     assert_eq!(highlight.font_weight, FontWeight::Bold);
 
     let max_el = elements.len().min(2000);
@@ -103,16 +153,29 @@ fn test_extract_and_layout_pipeline() {
     let container = elements.iter().find(|e| e.tag == "div").unwrap();
     assert!(container.width > 0.0, "container should have width");
     assert!(container.height > 0.0, "container should have height");
-    let first_p = elements.iter().find(|e| e.tag == "p" && e.text.contains("Hello")).unwrap();
-    assert!(first_p.y > container.y || (first_p.y - container.y).abs() < 0.001, "p.y should be >= container.y");
+    let first_p = elements
+        .iter()
+        .find(|e| e.tag == "p" && e.text.contains("Hello"))
+        .unwrap();
+    assert!(
+        first_p.y > container.y || (first_p.y - container.y).abs() < 0.001,
+        "p.y should be >= container.y"
+    );
 }
 
 #[test]
 fn test_inner_html_strips_script_tags() {
-    use vayu_browser::engine::js::js_bridge::JsBridge;
     use vayu_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
 
-    let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
+    let dom = Node::new_element(
+        "div".to_string(),
+        [("id", "x")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        vec![],
+    );
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");
     let root = bridge.get_element_by_id("x").unwrap();
 
@@ -121,82 +184,154 @@ fn test_inner_html_strips_script_tags() {
     let children = bridge.get_child_nodes(root);
     // script elements are fully stripped
     let script = children.iter().find(|&&id| {
-        bridge.get_tag_name(id).map(|t| t == "SCRIPT").unwrap_or(false)
+        bridge
+            .get_tag_name(id)
+            .map(|t| t == "SCRIPT")
+            .unwrap_or(false)
     });
-    assert!(script.is_none(), "script tag should be stripped from innerHTML");
+    assert!(
+        script.is_none(),
+        "script tag should be stripped from innerHTML"
+    );
     // <p> should be present
-    assert!(children.iter().any(|&id| {
-        bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false)
-    }), "<p> should remain after set_inner_html");
-    let p_id = children.iter().find(|&&id| {
-        bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false)
-    }).unwrap();
+    assert!(
+        children
+            .iter()
+            .any(|&id| { bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false) }),
+        "<p> should remain after set_inner_html"
+    );
+    let p_id = children
+        .iter()
+        .find(|&&id| bridge.get_tag_name(id).map(|t| t == "P").unwrap_or(false))
+        .unwrap();
     let p_text = bridge.get_text_content(*p_id);
     assert_eq!(p_text.trim(), "safe");
 }
 
 #[test]
 fn test_set_attribute_rejects_event_handlers() {
-    use vayu_browser::engine::js::js_bridge::JsBridge;
     use vayu_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
 
-    let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
+    let dom = Node::new_element(
+        "div".to_string(),
+        [("id", "x")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        vec![],
+    );
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");
     let root = bridge.get_element_by_id("x").unwrap();
 
     bridge.set_attribute(root, "onclick", "alert(1)");
-    assert_eq!(bridge.get_attribute(root, "onclick"), None, "onclick should be rejected");
+    assert_eq!(
+        bridge.get_attribute(root, "onclick"),
+        None,
+        "onclick should be rejected"
+    );
 
     bridge.set_attribute(root, "ONLOAD", "evil()");
-    assert_eq!(bridge.get_attribute(root, "onload"), None, "case-variant onload should be rejected");
-    assert_eq!(bridge.get_attribute(root, "ONLOAD"), None, "case-variant onload should be rejected by key");
+    assert_eq!(
+        bridge.get_attribute(root, "onload"),
+        None,
+        "case-variant onload should be rejected"
+    );
+    assert_eq!(
+        bridge.get_attribute(root, "ONLOAD"),
+        None,
+        "case-variant onload should be rejected by key"
+    );
 
     bridge.set_attribute(root, "href", "javascript:alert(1)");
-    assert_eq!(bridge.get_attribute(root, "href"), None, "javascript: href should be rejected");
+    assert_eq!(
+        bridge.get_attribute(root, "href"),
+        None,
+        "javascript: href should be rejected"
+    );
 
     bridge.set_attribute(root, "class", "safe");
-    assert_eq!(bridge.get_attribute(root, "class"), Some("safe".into()), "class should be allowed");
+    assert_eq!(
+        bridge.get_attribute(root, "class"),
+        Some("safe".into()),
+        "class should be allowed"
+    );
 }
 
 #[test]
 fn test_set_attribute_rejects_srcdoc() {
-    use vayu_browser::engine::js::js_bridge::JsBridge;
     use vayu_browser::engine::dom::Node;
+    use vayu_browser::engine::js::js_bridge::JsBridge;
 
-    let dom = Node::new_element("div".to_string(), [("id", "x")].into_iter().map(|(k,v)|(k.to_string(),v.to_string())).collect(), vec![]);
+    let dom = Node::new_element(
+        "div".to_string(),
+        [("id", "x")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        vec![],
+    );
     let mut bridge = JsBridge::load_dom(&dom, "about:blank");
     let root = bridge.get_element_by_id("x").unwrap();
 
     bridge.set_attribute(root, "srcdoc", "<script>alert(1)</script>");
-    assert_eq!(bridge.get_attribute(root, "srcdoc"), None, "srcdoc should be rejected");
+    assert_eq!(
+        bridge.get_attribute(root, "srcdoc"),
+        None,
+        "srcdoc should be rejected"
+    );
 }
 
 #[test]
 fn test_resolve_url_absolute() {
     use vayu_browser::engine::net::resolve_url;
-    assert_eq!(resolve_url("https://example.com", "http://base.com"), "https://example.com");
-    assert_eq!(resolve_url("http://example.com", "http://base.com"), "http://example.com");
+    assert_eq!(
+        resolve_url("https://example.com", "http://base.com"),
+        "https://example.com"
+    );
+    assert_eq!(
+        resolve_url("http://example.com", "http://base.com"),
+        "http://example.com"
+    );
 }
 
 #[test]
 fn test_resolve_url_protocol_relative() {
     use vayu_browser::engine::net::resolve_url;
-    assert_eq!(resolve_url("//example.com/path", "https://base.com/page"), "https://example.com/path");
+    assert_eq!(
+        resolve_url("//example.com/path", "https://base.com/page"),
+        "https://example.com/path"
+    );
 }
 
 #[test]
 fn test_resolve_url_root_relative() {
     use vayu_browser::engine::net::resolve_url;
-    assert_eq!(resolve_url("/abs/path", "https://example.com/rel/page"), "https://example.com/abs/path");
+    assert_eq!(
+        resolve_url("/abs/path", "https://example.com/rel/page"),
+        "https://example.com/abs/path"
+    );
 }
 
 #[test]
 fn test_resolve_url_relative() {
     use vayu_browser::engine::net::resolve_url;
-    assert_eq!(resolve_url("page.html", "https://example.com/dir/"), "https://example.com/dir/page.html");
-    assert_eq!(resolve_url("sub/page.html", "https://example.com/dir/"), "https://example.com/dir/sub/page.html");
-    assert_eq!(resolve_url("../page.html", "https://example.com/dir/page.html"), "https://example.com/page.html");
-    assert_eq!(resolve_url("./page.html", "https://example.com/dir/"), "https://example.com/dir/page.html");
+    assert_eq!(
+        resolve_url("page.html", "https://example.com/dir/"),
+        "https://example.com/dir/page.html"
+    );
+    assert_eq!(
+        resolve_url("sub/page.html", "https://example.com/dir/"),
+        "https://example.com/dir/sub/page.html"
+    );
+    assert_eq!(
+        resolve_url("../page.html", "https://example.com/dir/page.html"),
+        "https://example.com/page.html"
+    );
+    assert_eq!(
+        resolve_url("./page.html", "https://example.com/dir/"),
+        "https://example.com/dir/page.html"
+    );
 }
 
 use vayu_browser::engine::net::{parse_csp, CspDirective, CspSource};
@@ -205,16 +340,28 @@ use vayu_browser::engine::net::{parse_csp, CspDirective, CspSource};
 fn test_csp_nonce_not_treated_as_self() {
     let policy = parse_csp("script-src 'self' 'nonce-abc123'");
     let script_src = policy.sources_for(&CspDirective::ScriptSrc).unwrap();
-    assert!(script_src.contains(&CspSource::Nonce("'nonce-abc123'".to_string())), "nonce should be parsed as Nonce variant");
-    assert!(script_src.contains(&CspSource::Self_), "'self' should still be parsed as Self_");
+    assert!(
+        script_src.contains(&CspSource::Nonce("'nonce-abc123'".to_string())),
+        "nonce should be parsed as Nonce variant"
+    );
+    assert!(
+        script_src.contains(&CspSource::Self_),
+        "'self' should still be parsed as Self_"
+    );
 }
 
 #[test]
 fn test_csp_blocks_all_scripts_with_none() {
     use vayu_browser::engine::net::csp_blocks_scripts;
     let mut headers = std::collections::HashMap::new();
-    headers.insert("content-security-policy".to_string(), "script-src 'none'".to_string());
-    assert!(csp_blocks_scripts(&headers), "script-src 'none' should block all scripts");
+    headers.insert(
+        "content-security-policy".to_string(),
+        "script-src 'none'".to_string(),
+    );
+    assert!(
+        csp_blocks_scripts(&headers),
+        "script-src 'none' should block all scripts"
+    );
 }
 
 #[test]
@@ -223,4 +370,3 @@ fn test_normalize_url_preserves_scheme() {
     assert_eq!(normalize_url("https://example.com"), "https://example.com");
     assert_eq!(normalize_url("http://example.com"), "http://example.com");
 }
-

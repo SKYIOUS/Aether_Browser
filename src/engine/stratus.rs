@@ -4,15 +4,14 @@
 //! Re-exports style types from aether_css and provides a new cssparser-based `parse` function.
 
 pub use aether_css::{
-    AlignItems, AlignSelf, Color, ComputedStyle, CssPropertyName, Declaration, Display,
-    ElementData, FlexDirection, FlexOptions, FlexWrap, JustifyContent,
-    LengthValue, Position, PropertyValue, Rule, Selector, SimpleSelector,
-    Specificity, Stylesheet, Transform, Transition, Unit,
-    match_element, match_rules, resolve_style, resolve_style_vp,
-    resolve_styles_for_tree,
+    match_element, match_rules, resolve_style, resolve_style_vp, resolve_styles_for_tree,
+    AlignContent, AlignItems, AlignSelf, Color, ComputedStyle, CssPropertyName, Declaration,
+    Display, ElementData, FlexDirection, FlexOptions, FlexWrap, JustifyContent, LengthValue,
+    Position, PropertyValue, Rule, Selector, SimpleSelector, Specificity, Stylesheet, Transform,
+    Transition, Unit,
 };
 
-use cssparser::{BasicParseErrorKind, Delimiter, Parser, ParserInput, ParseError, Token};
+use cssparser::{BasicParseErrorKind, Delimiter, ParseError, Parser, ParserInput, Token};
 
 pub fn parse(css: &str) -> Stylesheet {
     let mut input = ParserInput::new(css);
@@ -30,14 +29,12 @@ pub fn parse(css: &str) -> Stylesheet {
 
         match parser.try_parse(parse_rule) {
             Ok(rule) => stylesheet.rules.push(rule),
-            Err(_) => {
-                match parser.try_parse(parse_at_rule) {
-                    Ok(rules) => stylesheet.rules.extend(rules),
-                    Err(_) => {
-                        let _ = parser.next();
-                    }
+            Err(_) => match parser.try_parse(parse_at_rule) {
+                Ok(rules) => stylesheet.rules.extend(rules),
+                Err(_) => {
+                    let _ = parser.next();
                 }
-            }
+            },
         }
     }
 
@@ -73,14 +70,19 @@ fn parse_rule<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Rule, ParseError<'i, ()>
             Token::CurlyBracketBlock => {
                 let declarations = p.parse_nested_block(parse_declarations)?;
                 if has_selectors {
-                    return Ok(Rule { selectors, declarations });
+                    return Ok(Rule {
+                        selectors,
+                        declarations,
+                    });
                 } else {
                     return Err(p.new_error(BasicParseErrorKind::EndOfInput));
                 }
             }
             other => {
                 let e = ParseError {
-                    kind: cssparser::ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(other.clone())),
+                    kind: cssparser::ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(
+                        other.clone(),
+                    )),
                     location: p.current_source_location(),
                 };
                 return Err(e);
@@ -89,13 +91,18 @@ fn parse_rule<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Rule, ParseError<'i, ()>
     }
 
     if has_selectors {
-        Ok(Rule { selectors, declarations: Vec::new() })
+        Ok(Rule {
+            selectors,
+            declarations: Vec::new(),
+        })
     } else {
         Err(p.new_error(BasicParseErrorKind::EndOfInput))
     }
 }
 
-fn parse_simple_selector<'i, 't>(p: &mut Parser<'i, 't>) -> Result<SimpleSelector, ParseError<'i, ()>> {
+fn parse_simple_selector<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<SimpleSelector, ParseError<'i, ()>> {
     let mut selector = SimpleSelector::new();
     let mut found = false;
 
@@ -117,7 +124,9 @@ fn parse_simple_selector<'i, 't>(p: &mut Parser<'i, 't>) -> Result<SimpleSelecto
                         FoundComponent::Class(name.to_string())
                     } else {
                         return Err(ParseError {
-                            kind: cssparser::ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(nxt)),
+                            kind: cssparser::ParseErrorKind::Basic(
+                                BasicParseErrorKind::UnexpectedToken(nxt),
+                            ),
                             location: p.current_source_location(),
                         });
                     }
@@ -128,7 +137,9 @@ fn parse_simple_selector<'i, 't>(p: &mut Parser<'i, 't>) -> Result<SimpleSelecto
                         FoundComponent::Pseudo(name.to_string())
                     } else {
                         return Err(ParseError {
-                            kind: cssparser::ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(nxt)),
+                            kind: cssparser::ParseErrorKind::Basic(
+                                BasicParseErrorKind::UnexpectedToken(nxt),
+                            ),
                             location: p.current_source_location(),
                         });
                     }
@@ -136,7 +147,9 @@ fn parse_simple_selector<'i, 't>(p: &mut Parser<'i, 't>) -> Result<SimpleSelecto
                 Token::Delim('*') => FoundComponent::Universal,
                 _ => {
                     return Err(ParseError {
-                        kind: cssparser::ParseErrorKind::Basic(BasicParseErrorKind::UnexpectedToken(token)),
+                        kind: cssparser::ParseErrorKind::Basic(
+                            BasicParseErrorKind::UnexpectedToken(token),
+                        ),
                         location: p.current_source_location(),
                     });
                 }
@@ -201,25 +214,25 @@ fn parse_at_rule<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<Rule>, ParseError
             }
             p.parse_nested_block(parse_rules_in_block)
         }
-        _ => {
-            loop {
-                let t = p.next()?.clone();
-                match &t {
-                    Token::Semicolon => return Ok(Vec::new()),
-                    Token::CurlyBracketBlock => {
-                        return p.parse_nested_block(|p| -> Result<Vec<Rule>, ParseError<'_, ()>> {
-                            while !p.is_exhausted() {
-                                p.skip_whitespace();
-                                if p.is_exhausted() { break; }
-                                let _ = p.next()?;
+        _ => loop {
+            let t = p.next()?.clone();
+            match &t {
+                Token::Semicolon => return Ok(Vec::new()),
+                Token::CurlyBracketBlock => {
+                    return p.parse_nested_block(|p| -> Result<Vec<Rule>, ParseError<'_, ()>> {
+                        while !p.is_exhausted() {
+                            p.skip_whitespace();
+                            if p.is_exhausted() {
+                                break;
                             }
-                            Ok(Vec::new())
-                        });
-                    }
-                    _ => continue,
+                            let _ = p.next()?;
+                        }
+                        Ok(Vec::new())
+                    });
                 }
+                _ => continue,
             }
-        }
+        },
     }
 }
 
@@ -227,29 +240,33 @@ fn parse_rules_in_block<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<Rule>, Par
     let mut rules = Vec::new();
     while !p.is_exhausted() {
         p.skip_whitespace();
-        if p.is_exhausted() { break; }
+        if p.is_exhausted() {
+            break;
+        }
 
         match p.try_parse(parse_rule) {
             Ok(rule) => rules.push(rule),
-            Err(_) => {
-                match p.try_parse(parse_at_rule) {
-                    Ok(more) => rules.extend(more),
-                    Err(_) => {
-                        let _ = p.next();
-                    }
+            Err(_) => match p.try_parse(parse_at_rule) {
+                Ok(more) => rules.extend(more),
+                Err(_) => {
+                    let _ = p.next();
                 }
-            }
+            },
         }
     }
     Ok(rules)
 }
 
-fn parse_declarations<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<Declaration>, ParseError<'i, ()>> {
+fn parse_declarations<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<Vec<Declaration>, ParseError<'i, ()>> {
     let mut declarations = Vec::new();
 
     while !p.is_exhausted() {
         p.skip_whitespace();
-        if p.is_exhausted() { break; }
+        if p.is_exhausted() {
+            break;
+        }
 
         let parsed = p.try_parse(|p| -> Result<Declaration, ParseError<'i, ()>> {
             let name = p.expect_ident_cloned()?;
@@ -257,7 +274,10 @@ fn parse_declarations<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<Declaration>
             p.expect_colon()?;
             p.skip_whitespace();
             let value = parse_value(p)?;
-            Ok(Declaration { name: name.to_string(), value })
+            Ok(Declaration {
+                name: name.to_string(),
+                value,
+            })
         });
 
         match parsed {
@@ -274,7 +294,8 @@ fn parse_declarations<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<Declaration>
 }
 
 fn parse_value<'i, 't>(p: &mut Parser<'i, 't>) -> Result<PropertyValue, ParseError<'i, ()>> {
-    let values: Vec<PropertyValue> = p.parse_until_before(Delimiter::Semicolon, parse_value_tokens)?;
+    let values: Vec<PropertyValue> =
+        p.parse_until_before(Delimiter::Semicolon, parse_value_tokens)?;
 
     if values.len() == 1 {
         Ok(values.into_iter().next().unwrap())
@@ -285,11 +306,15 @@ fn parse_value<'i, 't>(p: &mut Parser<'i, 't>) -> Result<PropertyValue, ParseErr
     }
 }
 
-fn parse_value_tokens<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<PropertyValue>, ParseError<'i, ()>> {
+fn parse_value_tokens<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<Vec<PropertyValue>, ParseError<'i, ()>> {
     let mut values = Vec::new();
     while !p.is_exhausted() {
         p.skip_whitespace();
-        if p.is_exhausted() { break; }
+        if p.is_exhausted() {
+            break;
+        }
 
         if let Ok(color) = p.try_parse(try_parse_color) {
             values.push(PropertyValue::Color(color));
@@ -312,15 +337,20 @@ fn parse_value_tokens<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Vec<PropertyValu
     Ok(values)
 }
 
-fn convert_token_to_value<'i, 't>(p: &mut Parser<'i, 't>, token: &Token<'i>) -> Result<PropertyValue, ParseError<'i, ()>> {
+fn convert_token_to_value<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    token: &Token<'i>,
+) -> Result<PropertyValue, ParseError<'i, ()>> {
     match token {
         Token::Number { value, .. } => Ok(PropertyValue::Number(*value)),
-        Token::Dimension { value, unit, .. } => {
-            Ok(PropertyValue::Length(LengthValue { value: *value, unit: unit_to_enum(unit.as_ref()) }))
-        }
-        Token::Percentage { unit_value, .. } => {
-            Ok(PropertyValue::Length(LengthValue { value: *unit_value * 100.0, unit: Unit::Percent }))
-        }
+        Token::Dimension { value, unit, .. } => Ok(PropertyValue::Length(LengthValue {
+            value: *value,
+            unit: unit_to_enum(unit.as_ref()),
+        })),
+        Token::Percentage { unit_value, .. } => Ok(PropertyValue::Length(LengthValue {
+            value: *unit_value * 100.0,
+            unit: Unit::Percent,
+        })),
         Token::Ident(name) => {
             if let Some(color) = Color::from_named(name) {
                 Ok(PropertyValue::Color(color))
@@ -351,21 +381,37 @@ fn convert_token_to_value<'i, 't>(p: &mut Parser<'i, 't>, token: &Token<'i>) -> 
 }
 
 fn unit_to_enum(s: &str) -> Unit {
-    if s.eq_ignore_ascii_case("px") { Unit::Px }
-    else if s.eq_ignore_ascii_case("em") { Unit::Em }
-    else if s.eq_ignore_ascii_case("rem") { Unit::Rem }
-    else if s.eq_ignore_ascii_case("vw") { Unit::Vw }
-    else if s.eq_ignore_ascii_case("vh") { Unit::Vh }
-    else if s.eq_ignore_ascii_case("vmin") { Unit::Vmin }
-    else if s.eq_ignore_ascii_case("vmax") { Unit::Vmax }
-    else if s.eq_ignore_ascii_case("pt") { Unit::Pt }
-    else if s.eq_ignore_ascii_case("pc") { Unit::Pc }
-    else if s.eq_ignore_ascii_case("cm") { Unit::Cm }
-    else if s.eq_ignore_ascii_case("mm") { Unit::Mm }
-    else if s.eq_ignore_ascii_case("in") { Unit::In }
-    else if s.eq_ignore_ascii_case("ch") { Unit::Ch }
-    else if s.eq_ignore_ascii_case("ex") { Unit::Ex }
-    else { Unit::Px }
+    if s.eq_ignore_ascii_case("px") {
+        Unit::Px
+    } else if s.eq_ignore_ascii_case("em") {
+        Unit::Em
+    } else if s.eq_ignore_ascii_case("rem") {
+        Unit::Rem
+    } else if s.eq_ignore_ascii_case("vw") {
+        Unit::Vw
+    } else if s.eq_ignore_ascii_case("vh") {
+        Unit::Vh
+    } else if s.eq_ignore_ascii_case("vmin") {
+        Unit::Vmin
+    } else if s.eq_ignore_ascii_case("vmax") {
+        Unit::Vmax
+    } else if s.eq_ignore_ascii_case("pt") {
+        Unit::Pt
+    } else if s.eq_ignore_ascii_case("pc") {
+        Unit::Pc
+    } else if s.eq_ignore_ascii_case("cm") {
+        Unit::Cm
+    } else if s.eq_ignore_ascii_case("mm") {
+        Unit::Mm
+    } else if s.eq_ignore_ascii_case("in") {
+        Unit::In
+    } else if s.eq_ignore_ascii_case("ch") {
+        Unit::Ch
+    } else if s.eq_ignore_ascii_case("ex") {
+        Unit::Ex
+    } else {
+        Unit::Px
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -408,9 +454,15 @@ fn try_parse_color_mix<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Color, ParseErr
                 let _t2 = p.next()?;
                 p.skip_whitespace();
                 match p.next() {
-                    Ok(Token::Comma) => { eprintln!("try_parse_color_mix: found comma"); }
-                    Ok(other) => { eprintln!("try_parse_color_mix: unexpected token={:?}", other); }
-                    Err(_) => { eprintln!("try_parse_color_mix: error after color-space"); }
+                    Ok(Token::Comma) => {
+                        eprintln!("try_parse_color_mix: found comma");
+                    }
+                    Ok(other) => {
+                        eprintln!("try_parse_color_mix: unexpected token={:?}", other);
+                    }
+                    Err(_) => {
+                        eprintln!("try_parse_color_mix: error after color-space");
+                    }
                 }
                 p.skip_whitespace();
                 Ok(())
@@ -423,22 +475,29 @@ fn try_parse_color_mix<'i, 't>(p: &mut Parser<'i, 't>) -> Result<Color, ParseErr
     let color = match first {
         Token::Hash(name) | Token::IDHash(name) => {
             let hex = format!("#{}", name);
-            Color::from_hex(&hex).ok_or_else(|| p.new_error::<()>(BasicParseErrorKind::EndOfInput))?
+            Color::from_hex(&hex)
+                .ok_or_else(|| p.new_error::<()>(BasicParseErrorKind::EndOfInput))?
         }
-        Token::Ident(name) => {
-            Color::from_named(name.as_ref()).ok_or_else(|| p.new_error::<()>(BasicParseErrorKind::EndOfInput))?
-        }
+        Token::Ident(name) => Color::from_named(name.as_ref())
+            .ok_or_else(|| p.new_error::<()>(BasicParseErrorKind::EndOfInput))?,
         _ => return Err(p.new_error::<()>(BasicParseErrorKind::EndOfInput)),
     };
-    while !p.is_exhausted() { let _ = p.next(); }
+    while !p.is_exhausted() {
+        let _ = p.next();
+    }
     Ok(color)
 }
 
-fn parse_color_function<'i, 't>(p: &mut Parser<'i, 't>, name: &str) -> Result<Color, ParseError<'i, ()>> {
+fn parse_color_function<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    name: &str,
+) -> Result<Color, ParseError<'i, ()>> {
     let mut args: Vec<ColorArg> = Vec::new();
     loop {
         p.skip_whitespace();
-        if p.is_exhausted() { break; }
+        if p.is_exhausted() {
+            break;
+        }
         let tok = p.next()?;
         match tok {
             Token::Comma | Token::Delim('/') => continue,
@@ -457,7 +516,11 @@ fn parse_color_function<'i, 't>(p: &mut Parser<'i, 't>, name: &str) -> Result<Co
             let r = arg_to_rgb(args[0]);
             let g = arg_to_rgb(args[1]);
             let b = arg_to_rgb(args[2]);
-            let a = if args.len() >= 4 { arg_to_alpha(args[3]) } else { 255 };
+            let a = if args.len() >= 4 {
+                arg_to_alpha(args[3])
+            } else {
+                255
+            };
             Ok(Color { r, g, b, a })
         }
         "hsl" | "hsla" => {
@@ -468,7 +531,11 @@ fn parse_color_function<'i, 't>(p: &mut Parser<'i, 't>, name: &str) -> Result<Co
             let s = arg_to_pct(args[1]);
             let l = arg_to_pct(args[2]);
             let (r, g, b) = hsl_to_rgb(h, s, l);
-            let a = if args.len() >= 4 { arg_to_alpha(args[3]) } else { 255 };
+            let a = if args.len() >= 4 {
+                arg_to_alpha(args[3])
+            } else {
+                255
+            };
             Ok(Color { r, g, b, a })
         }
         _ => Err(p.new_error(BasicParseErrorKind::EndOfInput)),
@@ -514,17 +581,34 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
         return (v, v, v);
     }
     let hue_to_rgb = |p: f32, q: f32, mut t: f32| -> f32 {
-        if t < 0.0 { t += 1.0; }
-        if t > 1.0 { t -= 1.0; }
-        if t < 1.0 / 6.0 { p + (q - p) * 6.0 * t }
-        else if t < 1.0 / 2.0 { q }
-        else if t < 2.0 / 3.0 { p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
-        else { p }
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 1.0 / 2.0 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        }
     };
-    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
     let p = 2.0 * l - q;
     let r = hue_to_rgb(p, q, h + 1.0 / 3.0);
     let g = hue_to_rgb(p, q, h);
     let b = hue_to_rgb(p, q, h - 1.0 / 3.0);
-    ((r * 255.0).round() as u8, (g * 255.0).round() as u8, (b * 255.0).round() as u8)
+    (
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+    )
 }

@@ -74,7 +74,6 @@ pub enum PropertyValue {
     Shorthand(Vec<PropertyValue>),
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,12 +93,23 @@ mod tests {
             attribute: None,
             pseudo_class: None,
         };
-        assert!(matches!(sel, SimpleSelector { tag_name: Some(_), .. }));
+        assert!(matches!(
+            sel,
+            SimpleSelector {
+                tag_name: Some(_),
+                ..
+            }
+        ));
     }
 
     #[test]
     fn test_property_value_color() {
-        let pv = PropertyValue::Color(Color { r: 255, g: 0, b: 0, a: 255 });
+        let pv = PropertyValue::Color(Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
         assert!(matches!(pv, PropertyValue::Color(c) if c.r == 255));
     }
 }

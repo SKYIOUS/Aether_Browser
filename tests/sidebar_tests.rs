@@ -1,10 +1,15 @@
-use vayu_browser::engine::pipeline::{normalize_nav_url, Tab, apply_taffy_layout};
-use vayu_browser::engine::pipeline::extractor::{should_skip_tag, should_skip_content, BoxSizing, FontWeight, TextDecor};
-use vayu_browser::engine::net::normalize_url;
-use vayu_browser::engine::pipeline::StyledElement;
-use vayu_browser::engine::stratus::{AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position};
-use vayu_browser::ui::screens::settings::VayuSettings;
+use aether_css::AlignContent;
 use iced::Color;
+use vayu_browser::engine::net::normalize_url;
+use vayu_browser::engine::pipeline::extractor::{
+    should_skip_content, should_skip_tag, BoxSizing, FontWeight, TextDecor,
+};
+use vayu_browser::engine::pipeline::StyledElement;
+use vayu_browser::engine::pipeline::{apply_taffy_layout, normalize_nav_url, Tab};
+use vayu_browser::engine::stratus::{
+    AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position,
+};
+use vayu_browser::ui::screens::settings::VayuSettings;
 
 fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
     let display = match display {
@@ -40,6 +45,7 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         justify_content: JustifyContent::FlexStart,
         align_items: AlignItems::Stretch,
         align_self: AlignSelf::Auto,
+        align_content: AlignContent::Stretch,
         box_sizing: BoxSizing::ContentBox,
         flex_grow: 0.0,
         flex_shrink: 1.0,
@@ -57,7 +63,7 @@ fn make_element(tag: &str, text: &str, display: &str) -> StyledElement {
         height: 0.0,
         line_height: 1.4,
         text_decoration: TextDecor::default(),
-       
+
         border_radius: [0.0; 4],
         input_type: String::new(),
         input_value: String::new(),
@@ -116,12 +122,18 @@ fn test_tab_serialization_roundtrip() {
 
 #[test]
 fn test_normalize_nav_url_https() {
-    assert_eq!(normalize_nav_url("https://example.com"), "https://example.com");
+    assert_eq!(
+        normalize_nav_url("https://example.com"),
+        "https://example.com"
+    );
 }
 
 #[test]
 fn test_normalize_nav_url_http() {
-    assert_eq!(normalize_nav_url("http://example.com"), "http://example.com");
+    assert_eq!(
+        normalize_nav_url("http://example.com"),
+        "http://example.com"
+    );
 }
 
 #[test]
@@ -131,7 +143,10 @@ fn test_normalize_nav_url_bare_domain() {
 
 #[test]
 fn test_normalize_nav_url_double_slash() {
-    assert_eq!(normalize_nav_url("//example.com/path"), "https://example.com/path");
+    assert_eq!(
+        normalize_nav_url("//example.com/path"),
+        "https://example.com/path"
+    );
 }
 
 #[test]
@@ -156,7 +171,10 @@ fn test_normalize_nav_url_whitespace_only() {
 
 #[test]
 fn test_normalize_nav_url_strips_whitespace() {
-    assert_eq!(normalize_nav_url("  https://example.com  "), "https://example.com");
+    assert_eq!(
+        normalize_nav_url("  https://example.com  "),
+        "https://example.com"
+    );
 }
 
 #[test]
@@ -166,7 +184,10 @@ fn test_normalize_url_plain() {
 
 #[test]
 fn test_normalize_url_with_path() {
-    assert_eq!(normalize_url("example.com/path"), "https://example.com/path");
+    assert_eq!(
+        normalize_url("example.com/path"),
+        "https://example.com/path"
+    );
 }
 
 #[test]
@@ -215,7 +236,10 @@ fn test_is_url_plain_search_query() {
 
 #[test]
 fn test_search_url_duckduckgo() {
-    let settings = VayuSettings { default_search_engine: "duckduckgo".to_string(), ..Default::default() };
+    let settings = VayuSettings {
+        default_search_engine: "duckduckgo".to_string(),
+        ..Default::default()
+    };
     let url = settings.search_url("hello world");
     assert!(url.contains("duckduckgo.com"));
     assert!(url.contains("hello+world"));
@@ -223,7 +247,10 @@ fn test_search_url_duckduckgo() {
 
 #[test]
 fn test_search_url_google() {
-    let settings = VayuSettings { default_search_engine: "google".to_string(), ..Default::default() };
+    let settings = VayuSettings {
+        default_search_engine: "google".to_string(),
+        ..Default::default()
+    };
     let url = settings.search_url("rust");
     assert!(url.contains("google.com/search"));
     assert!(url.contains("rust"));
@@ -287,7 +314,8 @@ fn test_settings_save_and_load() {
     };
     let json = serde_json::to_string_pretty(&s).unwrap();
     std::fs::write(path, &json).unwrap();
-    let loaded: VayuSettings = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let loaded: VayuSettings =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert_eq!(loaded.home_page_url, "vayu://test");
     assert_eq!(loaded.default_search_engine, "google");
     assert!(!loaded.js_enabled);
@@ -390,7 +418,10 @@ fn test_history_truncate_on_new_navigate() {
     hist_entries.truncate(idx + 1);
     hist_entries.push("https://d.com".to_string());
     idx = hist_entries.len() - 1;
-    assert_eq!(hist_entries, vec!["https://a.com", "https://b.com", "https://d.com"]);
+    assert_eq!(
+        hist_entries,
+        vec!["https://a.com", "https://b.com", "https://d.com"]
+    );
     assert_eq!(idx, 2);
 }
 
@@ -412,9 +443,11 @@ fn test_history_limit_many_entries() {
 
 #[test]
 fn test_autocomplete_filter_exact_prefix() {
-    let history = ["https://example.com".to_string(),
+    let history = [
+        "https://example.com".to_string(),
         "https://exotic.org".to_string(),
-        "https://other.net".to_string()];
+        "https://other.net".to_string(),
+    ];
     let input = "https://ex";
     let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).collect();
     assert_eq!(matches.len(), 2);
@@ -422,8 +455,10 @@ fn test_autocomplete_filter_exact_prefix() {
 
 #[test]
 fn test_autocomplete_filter_no_matches() {
-    let history = ["https://example.com".to_string(),
-        "https://other.net".to_string()];
+    let history = [
+        "https://example.com".to_string(),
+        "https://other.net".to_string(),
+    ];
     let input = "zzz";
     let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).collect();
     assert!(matches.is_empty());
@@ -443,7 +478,11 @@ fn test_autocomplete_filter_limit_results() {
     let history: Vec<String> = (0..20).map(|i| format!("https://site{}.com", i)).collect();
     let input = "site";
     let limit = 8;
-    let matches: Vec<&String> = history.iter().filter(|h| h.contains(input)).take(limit).collect();
+    let matches: Vec<&String> = history
+        .iter()
+        .filter(|h| h.contains(input))
+        .take(limit)
+        .collect();
     assert_eq!(matches.len(), limit);
 }
 
@@ -585,7 +624,11 @@ fn test_layout_with_margin() {
     elements[1].parent_index = Some(0);
     elements[1].margin_top = 20.0;
     apply_taffy_layout(&mut elements, 800.0, 600.0);
-    assert!(elements[1].y >= 20.0, "child y={} should be >= 20", elements[1].y);
+    assert!(
+        elements[1].y >= 20.0,
+        "child y={} should be >= 20",
+        elements[1].y
+    );
 }
 
 #[test]
@@ -771,7 +814,10 @@ fn test_devtools_tab_default_is_console() {
 
 #[test]
 fn test_normalize_nav_url_with_port() {
-    assert_eq!(normalize_nav_url("localhost:3000"), "https://localhost:3000");
+    assert_eq!(
+        normalize_nav_url("localhost:3000"),
+        "https://localhost:3000"
+    );
 }
 
 #[test]
@@ -818,7 +864,10 @@ fn test_tab_title_update() {
 #[test]
 fn test_normalize_url_strips_leading_slashes() {
     use vayu_browser::engine::net::normalize_url;
-    assert_eq!(normalize_url("//example.com/path"), "https://example.com/path");
+    assert_eq!(
+        normalize_url("//example.com/path"),
+        "https://example.com/path"
+    );
     assert_eq!(normalize_url("/path"), "https://path");
 }
 
@@ -826,16 +875,30 @@ fn test_normalize_url_strips_leading_slashes() {
 fn test_csp_blocks_all_styles_with_none() {
     use vayu_browser::engine::net::csp_blocks_styles;
     let mut headers = std::collections::HashMap::new();
-    headers.insert("content-security-policy".to_string(), "style-src 'none'".to_string());
-    assert!(csp_blocks_styles(&headers), "style-src 'none' should block all styles");
+    headers.insert(
+        "content-security-policy".to_string(),
+        "style-src 'none'".to_string(),
+    );
+    assert!(
+        csp_blocks_styles(&headers),
+        "style-src 'none' should block all styles"
+    );
 }
 
 #[test]
 fn test_csp_allows_self() {
-    use vayu_browser::engine::net::{parse_csp, csp_allows_script_url};
+    use vayu_browser::engine::net::{csp_allows_script_url, parse_csp};
     let policy = parse_csp("script-src 'self'");
-    assert!(csp_allows_script_url("https://example.com/app.js", "https://example.com", &policy));
-    assert!(!csp_allows_script_url("https://evil.com/app.js", "https://example.com", &policy));
+    assert!(csp_allows_script_url(
+        "https://example.com/app.js",
+        "https://example.com",
+        &policy
+    ));
+    assert!(!csp_allows_script_url(
+        "https://evil.com/app.js",
+        "https://example.com",
+        &policy
+    ));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -846,31 +909,272 @@ fn test_csp_allows_self() {
 fn test_deep_nested_layout_positions() {
     use vayu_browser::engine::pipeline::apply_taffy_layout;
     let mut elements = vec![
-        StyledElement { tag: "grandparent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
-        StyledElement { tag: "parent".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(0), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
-        StyledElement { tag: "child".into(), text: "".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Block, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: Some(1), min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
+        StyledElement {
+            tag: "grandparent".into(),
+            text: "".into(),
+            wrapped_lines: vec![],
+            dom_path: vec![],
+            is_link: false,
+            href: None,
+            indent_level: 0,
+            color: iced::Color::BLACK,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            background_color: None,
+            border_widths: [0.0; 4],
+            border_color: None,
+            image_handle: None,
+            image_url: None,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: None,
+            margin_right: None,
+            padding: [0.0; 4],
+            display: Display::Block,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto,
+            align_content: AlignContent::Stretch,
+            box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            css_width: None,
+            css_height: None,
+            parent_index: None,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            line_height: 1.4,
+            text_decoration: TextDecor::default(),
+            border_radius: [0.0; 4],
+            input_type: String::new(),
+            input_value: String::new(),
+            input_placeholder: String::new(),
+            checked: false,
+            position: Position::Static,
+            inset_top: 0.0,
+            inset_right: 0.0,
+            inset_bottom: 0.0,
+            inset_left: 0.0,
+        },
+        StyledElement {
+            tag: "parent".into(),
+            text: "".into(),
+            wrapped_lines: vec![],
+            dom_path: vec![],
+            is_link: false,
+            href: None,
+            indent_level: 0,
+            color: iced::Color::BLACK,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            background_color: None,
+            border_widths: [0.0; 4],
+            border_color: None,
+            image_handle: None,
+            image_url: None,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: None,
+            margin_right: None,
+            padding: [0.0; 4],
+            display: Display::Block,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto,
+            align_content: AlignContent::Stretch,
+            box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            css_width: None,
+            css_height: None,
+            parent_index: Some(0),
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            line_height: 1.4,
+            text_decoration: TextDecor::default(),
+            border_radius: [0.0; 4],
+            input_type: String::new(),
+            input_value: String::new(),
+            input_placeholder: String::new(),
+            checked: false,
+            position: Position::Static,
+            inset_top: 0.0,
+            inset_right: 0.0,
+            inset_bottom: 0.0,
+            inset_left: 0.0,
+        },
+        StyledElement {
+            tag: "child".into(),
+            text: "".into(),
+            wrapped_lines: vec![],
+            dom_path: vec![],
+            is_link: false,
+            href: None,
+            indent_level: 0,
+            color: iced::Color::BLACK,
+            font_size: 16.0,
+            font_weight: FontWeight::Normal,
+            background_color: None,
+            border_widths: [0.0; 4],
+            border_color: None,
+            image_handle: None,
+            image_url: None,
+            margin_top: 0.0,
+            margin_bottom: 0.0,
+            margin_left: None,
+            margin_right: None,
+            padding: [0.0; 4],
+            display: Display::Block,
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Stretch,
+            align_self: AlignSelf::Auto,
+            align_content: AlignContent::Stretch,
+            box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            css_width: None,
+            css_height: None,
+            parent_index: Some(1),
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            line_height: 1.4,
+            text_decoration: TextDecor::default(),
+            border_radius: [0.0; 4],
+            input_type: String::new(),
+            input_value: String::new(),
+            input_placeholder: String::new(),
+            checked: false,
+            position: Position::Static,
+            inset_top: 0.0,
+            inset_right: 0.0,
+            inset_bottom: 0.0,
+            inset_left: 0.0,
+        },
     ];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
     let child = &elements[2];
     let parent = &elements[1];
     let grandparent = &elements[0];
-    assert!(child.x >= parent.x, "child.x {} >= parent.x {}", child.x, parent.x);
-    assert!(child.y >= parent.y, "child.y {} >= parent.y {}", child.y, parent.y);
-    assert!(parent.x >= grandparent.x, "parent.x {} >= grandparent.x {}", parent.x, grandparent.x);
-    assert!(parent.y >= grandparent.y, "parent.y {} >= grandparent.y {}", parent.y, grandparent.y);
+    assert!(
+        child.x >= parent.x,
+        "child.x {} >= parent.x {}",
+        child.x,
+        parent.x
+    );
+    assert!(
+        child.y >= parent.y,
+        "child.y {} >= parent.y {}",
+        child.y,
+        parent.y
+    );
+    assert!(
+        parent.x >= grandparent.x,
+        "parent.x {} >= grandparent.x {}",
+        parent.x,
+        grandparent.x
+    );
+    assert!(
+        parent.y >= grandparent.y,
+        "parent.y {} >= grandparent.y {}",
+        parent.y,
+        grandparent.y
+    );
 }
 
 #[test]
 fn test_inline_text_width_respected() {
     use vayu_browser::engine::pipeline::apply_taffy_layout;
-    let mut elements = vec![
-        StyledElement { tag: "span".into(), text: "hello world".into(), wrapped_lines: vec![], dom_path: vec![], is_link: false, href: None, indent_level: 0, color: iced::Color::BLACK, font_size: 16.0, font_weight: FontWeight::Normal, background_color: None, border_widths: [0.0; 4], border_color: None, image_handle: None, image_url: None, margin_top: 0.0, margin_bottom: 0.0, margin_left: None, margin_right: None, padding: [0.0; 4], display: Display::Inline, flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::NoWrap, justify_content: JustifyContent::FlexStart, align_items: AlignItems::Stretch, align_self: AlignSelf::Auto, box_sizing: BoxSizing::ContentBox, flex_grow: 0.0, flex_shrink: 1.0, flex_basis: None, css_width: None, css_height: None, parent_index: None, min_width: None, max_width: None, min_height: None, max_height: None, x: 0.0, y: 0.0, width: 0.0, height: 0.0, line_height: 1.4, text_decoration: TextDecor::default(), border_radius: [0.0; 4], input_type: String::new(), input_value: String::new(), input_placeholder: String::new(), checked: false, position: Position::Static, inset_top: 0.0, inset_right: 0.0, inset_bottom: 0.0, inset_left: 0.0 },
-    ];
+    let mut elements = vec![StyledElement {
+        tag: "span".into(),
+        text: "hello world".into(),
+        wrapped_lines: vec![],
+        dom_path: vec![],
+        is_link: false,
+        href: None,
+        indent_level: 0,
+        color: iced::Color::BLACK,
+        font_size: 16.0,
+        font_weight: FontWeight::Normal,
+        background_color: None,
+        border_widths: [0.0; 4],
+        border_color: None,
+        image_handle: None,
+        image_url: None,
+        margin_top: 0.0,
+        margin_bottom: 0.0,
+        margin_left: None,
+        margin_right: None,
+        padding: [0.0; 4],
+        display: Display::Inline,
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::NoWrap,
+        justify_content: JustifyContent::FlexStart,
+        align_items: AlignItems::Stretch,
+        align_self: AlignSelf::Auto,
+        align_content: AlignContent::Stretch,
+        box_sizing: BoxSizing::ContentBox,
+        flex_grow: 0.0,
+        flex_shrink: 1.0,
+        flex_basis: None,
+        css_width: None,
+        css_height: None,
+        parent_index: None,
+        min_width: None,
+        max_width: None,
+        min_height: None,
+        max_height: None,
+        x: 0.0,
+        y: 0.0,
+        width: 0.0,
+        height: 0.0,
+        line_height: 1.4,
+        text_decoration: TextDecor::default(),
+        border_radius: [0.0; 4],
+        input_type: String::new(),
+        input_value: String::new(),
+        input_placeholder: String::new(),
+        checked: false,
+        position: Position::Static,
+        inset_top: 0.0,
+        inset_right: 0.0,
+        inset_bottom: 0.0,
+        inset_left: 0.0,
+    }];
     apply_taffy_layout(&mut elements, 800.0, 6000.0);
-    assert!(elements[0].width > 0.0, "inline element should have positive width");
-    assert!(elements[0].width >= 800.0, "stretched block element should fill container width, got {}", elements[0].width);
+    assert!(
+        elements[0].width > 0.0,
+        "inline element should have positive width"
+    );
+    assert!(
+        elements[0].width >= 800.0,
+        "stretched block element should fill container width, got {}",
+        elements[0].width
+    );
 }
-
-
-
-

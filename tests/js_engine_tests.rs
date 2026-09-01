@@ -1,5 +1,5 @@
-use vayu_browser::engine::js::js_bridge::JsBridge;
 use vayu_browser::engine::dom::Node;
+use vayu_browser::engine::js::js_bridge::JsBridge;
 
 // ── Helper: build a DOM tree with div > (span.foo#bar + p) ──────────
 fn make_tree() -> (JsBridge, u32, u32, u32, u32) {
@@ -227,7 +227,7 @@ fn test_interval_callback_is_source() {
     let mut b = JsBridge::new();
     let src = "console.log('tick')".to_string();
     let _ = b.set_interval(src.clone(), 60_000); // won't fire in time
-    // Verify the source via has_pending_timers — timer exists
+                                                 // Verify the source via has_pending_timers — timer exists
     assert!(b.has_pending_timers());
 }
 
@@ -481,7 +481,10 @@ fn test_cookie_expires() {
     // Max-Age=0 means already expired
     bridge.set_cookie("temp=value; Max-Age=0");
     let cookie = bridge.get_cookie();
-    assert!(!cookie.contains("temp=value"), "expired cookie should be swept");
+    assert!(
+        !cookie.contains("temp=value"),
+        "expired cookie should be swept"
+    );
 }
 
 #[test]

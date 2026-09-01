@@ -108,8 +108,7 @@ pub fn path_match(request_path: &str, cookie_path: &str) -> bool {
     if !request_path.starts_with(cookie_path) {
         return false;
     }
-    request_path[cookie_path.len()..].starts_with('/')
-        || cookie_path.ends_with('/')
+    request_path[cookie_path.len()..].starts_with('/') || cookie_path.ends_with('/')
 }
 
 /// RFC 6265 §5.1.3 domain-match restricted by host-only flag.
@@ -132,7 +131,11 @@ pub fn parse_set_cookie(
     header: &str,
 ) -> Option<CookieRecord> {
     if header.len() > MAX_COOKIE_LINE_BYTES {
-        plog!("COOKIE", "Rejected Set-Cookie over {} bytes", MAX_COOKIE_LINE_BYTES);
+        plog!(
+            "COOKIE",
+            "Rejected Set-Cookie over {} bytes",
+            MAX_COOKIE_LINE_BYTES
+        );
         return None;
     }
     let trimmed = header.trim();
@@ -254,9 +257,7 @@ pub fn same_site_allowed(
         // filter stays out of the way rather than guessing.
         SameSite::Lax | SameSite::Strict if initiator_site.is_none() => true,
         SameSite::Strict => initiator_site.map(same_site_of).unwrap_or(false),
-        SameSite::Lax => {
-            initiator_site.map(same_site_of).unwrap_or(false) || top_level_navigation
-        }
+        SameSite::Lax => initiator_site.map(same_site_of).unwrap_or(false) || top_level_navigation,
     }
 }
 
@@ -279,7 +280,8 @@ fn load_jar() -> Jar {
         return Jar(records);
     }
     // Legacy format (pre-C2): origin-keyed nested map without domain/path.
-    if let Ok(legacy) = serde_json::from_str::<HashMap<String, HashMap<String, LegacyAttrs>>>(&data) {
+    if let Ok(legacy) = serde_json::from_str::<HashMap<String, HashMap<String, LegacyAttrs>>>(&data)
+    {
         let records = legacy
             .into_iter()
             .flat_map(|(origin_key, cookies)| {
@@ -352,7 +354,9 @@ fn store_record(record: CookieRecord) {
 /// Called from fetch paths when a response carries Set-Cookie.
 pub fn set_cookie_from_response(request_url: &str, header: &str) {
     let (request_host, request_path) = split_url_parts(request_url);
-    let request_host = request_host.rsplit_once(':').map_or(&request_host[..], |(h, _)| h);
+    let request_host = request_host
+        .rsplit_once(':')
+        .map_or(&request_host[..], |(h, _)| h);
 
     let record = match parse_set_cookie(request_host, &request_path, header) {
         Some(r) => r,
@@ -380,7 +384,9 @@ pub fn get_cookies_for_request(
 ) -> String {
     let now = Instant::now();
     let (host_port, request_path) = split_url_parts(request_url);
-    let host = host_port.rsplit_once(':').map_or(host_port.as_str(), |(h, _)| h);
+    let host = host_port
+        .rsplit_once(':')
+        .map_or(host_port.as_str(), |(h, _)| h);
 
     let mut pairs: Vec<(String, String)> = Vec::new();
     let expired_any;
@@ -401,7 +407,12 @@ pub fn get_cookies_for_request(
             if !path_match(&request_path, &c.path) {
                 continue;
             }
-            if !same_site_allowed(c.same_site, initiator_url, request_url, top_level_navigation) {
+            if !same_site_allowed(
+                c.same_site,
+                initiator_url,
+                request_url,
+                top_level_navigation,
+            ) {
                 continue;
             }
             pairs.push((c.name.clone(), c.value.clone()));
@@ -411,7 +422,11 @@ pub fn get_cookies_for_request(
             save_current_jar();
         }
     }
-    pairs.into_iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ")
+    pairs
+        .into_iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// RFC 1123 `Expires=` dates, interpreted as local time (pre-C2 behavior kept).
@@ -424,8 +439,18 @@ fn parse_rfc1123_date_local(s: &str) -> Option<Instant> {
     }
     let day = parts[0].parse::<u32>().ok()? as u64;
     let month = match parts[1] {
-        "Jan" => 1, "Feb" => 2, "Mar" => 3, "Apr" => 4, "May" => 5, "Jun" => 6,
-        "Jul" => 7, "Aug" => 8, "Sep" => 9, "Oct" => 10, "Nov" => 11, "Dec" => 12,
+        "Jan" => 1,
+        "Feb" => 2,
+        "Mar" => 3,
+        "Apr" => 4,
+        "May" => 5,
+        "Jun" => 6,
+        "Jul" => 7,
+        "Aug" => 8,
+        "Sep" => 9,
+        "Oct" => 10,
+        "Nov" => 11,
+        "Dec" => 12,
         _ => return None,
     } as u64;
     let year = parts[2].parse::<i64>().ok()?;
@@ -440,17 +465,28 @@ fn parse_rfc1123_date_local(s: &str) -> Option<Instant> {
     let month_days: [i64; 12] = [
         31,
         if is_leap(year) { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     if !(1..=12).contains(&month) {
         return None;
     }
-    let days_since_epoch = year_diff * 365 + leap_years_before + month_days[(month - 1) as usize] + (day as i64) - 1;
+    let days_since_epoch =
+        year_diff * 365 + leap_years_before + month_days[(month - 1) as usize] + (day as i64) - 1;
     let secs = (days_since_epoch.max(0) as u64) * 86400;
     Some(Instant::now() + std::time::Duration::from_secs(secs))
 }
 
-fn split_url_parts(url: &str) -> (String, String) {    let rest = match url.split_once("://") {
+fn split_url_parts(url: &str) -> (String, String) {
+    let rest = match url.split_once("://") {
         Some((_, r)) => r,
         None => url,
     };
