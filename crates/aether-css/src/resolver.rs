@@ -186,6 +186,9 @@ fn apply_declarations_vp(
                     style.flex.align_items = parse_align_items(&decl.value)
                 }
                 CssPropertyName::AlignSelf => style.flex.align_self = parse_align_self(&decl.value),
+                CssPropertyName::Flex => {
+                    apply_flex_shorthand(&mut style.flex, &decl.value, vw, vh);
+                }
                 CssPropertyName::FlexGrow => {
                     style.flex.flex_grow = match &decl.value {
                         PropertyValue::Number(n) => n.max(0.0),
@@ -483,6 +486,91 @@ fn parse_transition(value: &PropertyValue) -> Option<Transition> {
                 delay: 0.0,
             })
         }
+        _ => None,
+    }
+}
+
+fn apply_flex_shorthand(
+    flex: &mut super::style_value::FlexOptions,
+    value: &PropertyValue,
+    vw: f32,
+    vh: f32,
+) {
+    match value {
+        PropertyValue::Keyword(s) => match s.as_str() {
+            "none" => {
+                flex.flex_grow = 0.0;
+                flex.flex_shrink = 0.0;
+                flex.flex_basis = None;
+                return;
+            }
+            "auto" => {
+                flex.flex_grow = 1.0;
+                flex.flex_shrink = 1.0;
+                flex.flex_basis = None;
+                return;
+            }
+            "initial" => {
+                flex.flex_grow = 0.0;
+                flex.flex_shrink = 1.0;
+                flex.flex_basis = None;
+                return;
+            }
+            _ => {}
+        },
+        PropertyValue::Number(_) => {}
+        PropertyValue::Shorthand(_) => {}
+        _ => return,
+    }
+
+    let parts: Vec<&PropertyValue> = match value {
+        PropertyValue::Shorthand(parts) => parts.iter().collect(),
+        other => vec![other],
+    };
+
+    let len = parts.len();
+    if len == 0 || len > 3 {
+        return;
+    }
+
+    // flex-grow (required, must be a number)
+    let grow = match parts[0] {
+        PropertyValue::Number(n) => n.max(0.0),
+        PropertyValue::Keyword(s) => match s.parse::<f32>() {
+            Ok(v) => v.max(0.0),
+            Err(_) => return,
+        },
+        _ => return,
+    };
+    flex.flex_grow = grow;
+
+    // flex-shrink (optional, defaults to 1)
+    flex.flex_shrink = if len >= 2 {
+        match parts[1] {
+            PropertyValue::Number(n) => n.max(0.0),
+            PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0),
+            _ => 1.0,
+        }
+    } else {
+        1.0
+    };
+
+    // flex-basis (optional, defaults to 0%)
+    flex.flex_basis = if len >= 3 {
+        match parts[2] {
+            PropertyValue::Keyword(s) if s == "auto" => None,
+            other => parse_length_from_pv_vp(other, vw, vh),
+        }
+    } else {
+        Some(0.0)
+    };
+}
+
+fn parse_length_from_pv_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
+    match value {
+        PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
+        PropertyValue::Number(n) => Some(*n),
+        PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
 }
@@ -939,5 +1027,120 @@ mod tests {
                 a: 64
             })
         );
+    }
+
+    #[test]
+    fn test_flex_shorthand_single_number() {
+        let stylesheet = make_stylesheet(&[("flex", PropertyValue::Keyword("1".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
+        assert_eq!(style.flex.flex_basis, Some(0.0));
+    }
+
+    #[test]
+    fn test_flex_shorthand_single_number_2() {
+        let stylesheet = make_stylesheet(&[("flex", PropertyValue::Keyword("2".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 2.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
+        assert_eq!(style.flex.flex_basis, Some(0.0));
+    }
+
+    #[test]
+    fn test_flex_shorthand_two_numbers() {
+        let stylesheet = make_stylesheet(&[(
+            "flex",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Keyword("1".into()),
+                PropertyValue::Keyword("0".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 0.0);
+        assert_eq!(style.flex.flex_basis, Some(0.0));
+    }
+
+    #[test]
+    fn test_flex_shorthand_three_values_auto() {
+        let stylesheet = make_stylesheet(&[(
+            "flex",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Keyword("1".into()),
+                PropertyValue::Keyword("1".into()),
+                PropertyValue::Keyword("auto".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
+        assert_eq!(style.flex.flex_basis, None);
+    }
+
+    #[test]
+    fn test_flex_shorthand_three_values_length() {
+        let stylesheet = make_stylesheet(&[(
+            "flex",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Keyword("1".into()),
+                PropertyValue::Keyword("0".into()),
+                PropertyValue::Length(crate::style_value::LengthValue {
+                    value: 200.0,
+                    unit: crate::style_value::Unit::Px,
+                }),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 0.0);
+        assert_eq!(style.flex.flex_basis, Some(200.0));
+    }
+
+    #[test]
+    fn test_flex_shorthand_none() {
+        let stylesheet = make_stylesheet(&[("flex", PropertyValue::Keyword("none".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 0.0);
+        assert_eq!(style.flex.flex_shrink, 0.0);
+        assert_eq!(style.flex.flex_basis, None);
+    }
+
+    #[test]
+    fn test_flex_shorthand_auto() {
+        let stylesheet = make_stylesheet(&[("flex", PropertyValue::Keyword("auto".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
+        assert_eq!(style.flex.flex_basis, None);
+    }
+
+    #[test]
+    fn test_flex_shorthand_initial() {
+        let stylesheet = make_stylesheet(&[("flex", PropertyValue::Keyword("initial".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 0.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
+        assert_eq!(style.flex.flex_basis, None);
+    }
+
+    #[test]
+    fn test_flex_shorthand_does_not_override_longhand() {
+        let stylesheet = make_stylesheet(&[
+            ("flex-grow", PropertyValue::Keyword("3".into())),
+            ("flex", PropertyValue::Keyword("1".into())),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.flex.flex_grow, 1.0);
+        assert_eq!(style.flex.flex_shrink, 1.0);
     }
 }
