@@ -25,6 +25,7 @@ use korlang::vm::{OpCode, VirtualMachine};
 
 mod canvas;
 mod devtools;
+pub(crate) mod navigation;
 mod tab_bar;
 mod workspaces;
 
@@ -87,8 +88,7 @@ pub struct BrowserScreen {
     pub loading: bool,
     pub bridge: Option<Arc<Mutex<JsBridge>>>,
     pub js_engine: Option<JSEngine>,
-    tab_history: Vec<(Vec<String>, usize)>,
-    is_history_nav: bool,
+    navigation: navigation::NavigationState,
     pub bounds: (f32, f32),
     pub kor_vm: RefCell<VirtualMachine>,
     pub sidebar_kor_vm: RefCell<VirtualMachine>,
@@ -103,7 +103,6 @@ pub struct BrowserScreen {
     js_errors: Vec<String>,
     show_dev_console: bool,
     pub url_input: String,
-    pub url_history: Vec<String>,
     pub bookmarks: Vec<Bookmark>,
     pub show_bookmarks_bar: bool,
     pub crashed_last_session: bool,
@@ -184,27 +183,21 @@ Component SidebarWS {
         sidebar_ws_kor_vm.execute(sidebar_ws_bytecode.clone());
         crate::engine::js::js_bridge::load_local_storage();
         let loaded_tabs = load_tabs();
-        let url_history: Vec<String> = loaded_tabs.iter().map(|t| t.url.clone()).collect();
-        let (tabs, tab_history, url_val, content_val) = if loaded_tabs.is_empty() {
+        let navigation = if loaded_tabs.is_empty() {
+            navigation::NavigationState::new_single_tab(&default_url)
+        } else {
+            navigation::NavigationState::new(&loaded_tabs)
+        };
+        let (tabs, url_val, content_val) = if loaded_tabs.is_empty() {
             (
                 vec![Tab::new("New Tab", &default_url, 0)],
-                vec![(vec![default_url.clone()], 0)],
                 default_url.clone(),
                 "Welcome to Vayu Browser".to_string(),
             )
         } else {
             let count = loaded_tabs.len();
-            let history: Vec<(Vec<String>, usize)> = loaded_tabs
-                .iter()
-                .map(|t| (vec![t.url.clone()], 0))
-                .collect();
             let url = loaded_tabs[0].url.clone();
-            (
-                loaded_tabs,
-                history,
-                url,
-                format!("Restored {} tabs", count),
-            )
+            (loaded_tabs, url, format!("Restored {} tabs", count))
         };
         let settings = VayuSettings::load();
         crate::engine::pipeline::set_js_enabled(settings.js_enabled);
@@ -221,8 +214,7 @@ Component SidebarWS {
             loading: false,
             bridge: None,
             js_engine: None,
-            tab_history,
-            is_history_nav: false,
+            navigation,
             bounds: (1440.0, 900.0),
             kor_vm: RefCell::new(kor_vm),
             sidebar_kor_vm: RefCell::new(sidebar_kor_vm),
@@ -237,7 +229,6 @@ Component SidebarWS {
             js_errors: vec![],
             show_dev_console: false,
             url_input: url_val.clone(),
-            url_history,
             bookmarks: load_bookmarks(),
             show_bookmarks_bar: settings.show_bookmarks_bar,
             // Sentinel check happens only after tabs/history above are fully
@@ -279,7 +270,7 @@ Component SidebarWS {
             BrowserMessage::UrlInputChanged(s) => {
                 self.url_input = s.clone();
                 self.show_autocomplete =
-                    !s.is_empty() && self.url_history.iter().any(|h| h.contains(&s));
+                    !s.is_empty() && self.navigation.url_history.iter().any(|h| h.contains(&s));
                 self.autocomplete_index = 0;
                 Task::none()
             }
@@ -289,14 +280,12 @@ Component SidebarWS {
                 if input.is_empty() {
                     return Task::none();
                 }
-                if !self.url_history.contains(&input) {
-                    self.url_history.push(input.clone());
-                }
+                self.navigation.add_to_url_history(&input);
                 self.navigate_to(&input)
             }
             BrowserMessage::AutocompleteSelected(idx) => {
                 self.show_autocomplete = false;
-                let url = self.url_history.get(idx).cloned();
+                let url = self.navigation.url_history.get(idx).cloned();
                 if let Some(item) = url {
                     self.url_input = item.clone();
                     self.navigate_to(&item)
@@ -313,48 +302,28 @@ Component SidebarWS {
                 self.navigate_to(&url)
             }
             BrowserMessage::NavBack => {
-                let result = {
-                    let (hist, idx) = &mut self.tab_history[self.active_tab];
-                    if *idx > 0 {
-                        *idx -= 1;
-                        Some((hist[*idx].clone(), *idx))
-                    } else {
-                        None
-                    }
-                };
-                if let Some((url, _)) = result {
+                if let Some(url) = self.navigation.go_back(self.active_tab) {
                     plog!("NAV", "NavBack to {}", url);
-                    self.is_history_nav = true;
                     self.loading = true;
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
                     return Task::perform(
-                        fetch_page_content(url, bw, bh, self.url_history.clone()),
+                        fetch_page_content(url, bw, bh, self.navigation.url_history.clone()),
                         |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
                     );
                 }
                 Task::none()
             }
             BrowserMessage::NavForward => {
-                let result = {
-                    let (hist, idx) = &mut self.tab_history[self.active_tab];
-                    if *idx + 1 < hist.len() {
-                        *idx += 1;
-                        Some((hist[*idx].clone(), *idx))
-                    } else {
-                        None
-                    }
-                };
-                if let Some((url, _)) = result {
+                if let Some(url) = self.navigation.go_forward(self.active_tab) {
                     plog!("NAV", "NavForward to {}", url);
-                    self.is_history_nav = true;
                     self.loading = true;
                     self.bridge = None;
                     let (bw, bh) = self.bounds;
                     save_tabs(&self.tabs);
                     return Task::perform(
-                        fetch_page_content(url, bw, bh, self.url_history.clone()),
+                        fetch_page_content(url, bw, bh, self.navigation.url_history.clone()),
                         |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
                     );
                 }
@@ -373,16 +342,8 @@ Component SidebarWS {
                 self.url = page_url.clone();
                 self.url_input = page_url.clone();
                 self.show_autocomplete = false;
-                if !self.is_history_nav {
-                    let (ref mut hist, ref mut idx) = self.tab_history[self.active_tab];
-                    hist.truncate(*idx + 1);
-                    hist.push(page_url.clone());
-                    *idx = hist.len() - 1;
-                }
-                if !self.url_history.contains(&page_url) && !page_url.starts_with("vayu://") {
-                    self.url_history.push(page_url.clone());
-                }
-                self.is_history_nav = false;
+                self.navigation
+                    .update_after_page_load(self.active_tab, &page_url);
                 self.styled_elements = Arc::new(elements);
                 self.layout_gen += 1;
                 self.page_canvas = Some(canvas::PageCanvas::new(
@@ -485,7 +446,12 @@ Component SidebarWS {
                         self.bridge = None;
                         let (bw, bh) = self.bounds;
                         return Task::perform(
-                            fetch_page_content(self.url.clone(), bw, bh, self.url_history.clone()),
+                            fetch_page_content(
+                                self.url.clone(),
+                                bw,
+                                bh,
+                                self.navigation.url_history.clone(),
+                            ),
                             |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
                         );
                     }
@@ -494,20 +460,10 @@ Component SidebarWS {
                         b.pending_history_delta.take()
                     };
                     if let Some(delta) = hist_delta {
-                        let url = {
-                            let (hist, idx) = &mut self.tab_history[self.active_tab];
-                            let new_idx =
-                                (*idx as i32 + delta).clamp(0, hist.len() as i32 - 1) as usize;
-                            if new_idx < hist.len() && new_idx != *idx {
-                                *idx = new_idx;
-                                Some(hist[new_idx].clone())
-                            } else {
-                                None
-                            }
-                        };
-                        if let Some(url) = url {
+                        if let Some(url) =
+                            self.navigation.apply_history_delta(self.active_tab, delta)
+                        {
                             self.url = url.clone();
-                            self.is_history_nav = true;
                             self.loading = true;
                             self.kor_vm.borrow_mut().update_state(
                                 "status_mid",
@@ -520,7 +476,12 @@ Component SidebarWS {
                             self.bridge = None;
                             let (bw, bh) = self.bounds;
                             return Task::perform(
-                                fetch_page_content(url, bw, bh, self.url_history.clone()),
+                                fetch_page_content(
+                                    url,
+                                    bw,
+                                    bh,
+                                    self.navigation.url_history.clone(),
+                                ),
                                 |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
                             );
                         }
@@ -581,9 +542,9 @@ Component SidebarWS {
             BrowserMessage::DuplicateTab(i) => {
                 if i < self.tabs.len() {
                     let tab = self.tabs[i].clone();
-                    let history = self.tab_history[i].clone();
+                    let history = self.navigation.clone_tab_history_for_duplicate(i);
                     self.tabs.insert(i + 1, tab);
-                    self.tab_history.insert(i + 1, history);
+                    self.navigation.insert_tab_history(i + 1, history);
                     self.active_tab = i + 1;
                     save_tabs(&self.tabs);
                 }
@@ -592,10 +553,10 @@ Component SidebarWS {
             BrowserMessage::CloseOtherTabs(keep) => {
                 // Single-tab (or stale index): nothing to close.
                 if keep < self.tabs.len() && self.tabs.len() > 1 {
-                    let history = self.tab_history[keep].clone();
+                    let history = self.navigation.clone_tab_history_for_close_others(keep);
                     let kept = self.tabs[keep].clone();
                     self.tabs = vec![kept];
-                    self.tab_history = vec![history];
+                    self.navigation.replace_with_tab(history);
                     self.active_tab = 0;
                     if let Some(active_tab) = self.tabs.get_mut(0) {
                         active_tab.update_accessed();
@@ -606,7 +567,7 @@ Component SidebarWS {
             }
             BrowserMessage::StartFreshSession => {
                 self.tabs = vec![Tab::new("New Tab", "about:blank", self.active_workspace)];
-                self.tab_history = vec![(vec!["about:blank".to_string()], 0)];
+                self.navigation.set_fresh_session();
                 self.active_tab = 0;
                 self.url = "about:blank".to_string();
                 self.url_input = "about:blank".to_string();
@@ -672,7 +633,8 @@ Component SidebarWS {
                 self.styled_elements = Arc::new(vec![]);
                 self.loading = false;
                 self.bridge = None;
-                self.tab_history.push((vec!["about:blank".to_string()], 0));
+                self.navigation
+                    .push_tab_history((vec!["about:blank".to_string()], 0));
                 save_tabs(&self.tabs);
                 Task::none()
             }
@@ -680,7 +642,7 @@ Component SidebarWS {
                 if self.tabs.len() > 1 && i < self.tabs.len() {
                     let was_active = i == self.active_tab;
                     self.tabs.remove(i);
-                    self.tab_history.remove(i);
+                    self.navigation.remove_tab_history(i);
                     if was_active {
                         self.active_tab = self.tabs.len() - 1;
                     } else if i < self.active_tab {
@@ -969,16 +931,8 @@ Component SidebarWS {
     }
 
     fn top_bar(&self) -> Element<'_, BrowserMessage> {
-        let can_go_back = self
-            .tab_history
-            .get(self.active_tab)
-            .map(|(_h, i)| *i > 0)
-            .unwrap_or(false);
-        let can_go_forward = self
-            .tab_history
-            .get(self.active_tab)
-            .map(|(h, i)| *i + 1 < h.len())
-            .unwrap_or(false);
+        let can_go_back = self.navigation.can_go_back(self.active_tab);
+        let can_go_forward = self.navigation.can_go_forward(self.active_tab);
         let secure_icon = text(secure_indicator(&self.url)).size(14);
 
         let back_btn: Element<'_, BrowserMessage> = if can_go_back {
@@ -1062,7 +1016,8 @@ Component SidebarWS {
 
         // Autocomplete dropdown
         let matches: Vec<&String> = if self.show_autocomplete && !self.url_input.is_empty() {
-            self.url_history
+            self.navigation
+                .url_history
                 .iter()
                 .filter(|h| h.contains(&self.url_input))
                 .take(8)
@@ -1265,10 +1220,10 @@ Component SidebarWS {
         self.show_autocomplete = false;
         self.loading = true;
         self.bridge = None;
-        self.is_history_nav = false;
+        self.navigation.is_history_nav = false;
         let (bw, bh) = self.bounds;
         Task::perform(
-            fetch_page_content(target, bw, bh, self.url_history.clone()),
+            fetch_page_content(target, bw, bh, self.navigation.url_history.clone()),
             |(u, els, b)| BrowserMessage::PageLoaded(u, els, b),
         )
     }
@@ -1523,11 +1478,11 @@ mod tests {
             Tab::new("C", "https://c.com", 0),
         ];
         screen.active_tab = 2;
-        screen.tab_history = vec![
+        screen.navigation = navigation::NavigationState::with_tab_history(vec![
             (vec!["https://a.com".into()], 0),
             (vec!["https://b.com".into()], 0),
             (vec!["https://c.com".into()], 0),
-        ];
+        ]);
 
         let _ = screen.update(BrowserMessage::CloseTab(0));
 
@@ -1593,11 +1548,11 @@ mod tests {
             Tab::new("B", "https://b.com", 0),
             Tab::new("C", "https://c.com", 0),
         ];
-        s.tab_history = vec![
+        s.navigation = navigation::NavigationState::with_tab_history(vec![
             (vec!["https://a.com".to_string()], 0),
             (vec!["https://b.com".to_string()], 0),
             (vec!["https://c.com".to_string()], 0),
-        ];
+        ]);
         s.crashed_last_session = false;
         s
     }
@@ -1611,7 +1566,7 @@ mod tests {
         assert_eq!(s.tabs[1].title, "A");
         assert_eq!(s.tabs[1].url, "https://a.com");
         assert_eq!(s.active_tab, 1);
-        assert_eq!(s.tab_history.len(), 4);
+        assert_eq!(s.navigation.len(), 4);
         assert_eq!(load_tabs().len(), 4, "duplicate must persist");
     }
 
@@ -1645,7 +1600,7 @@ mod tests {
         assert_eq!(s.tabs.len(), 1);
         assert_eq!(s.tabs[0].title, "New Tab");
         assert!(!s.crashed_last_session);
-        assert_eq!(s.tab_history.len(), 1);
+        assert_eq!(s.navigation.len(), 1);
         assert_eq!(load_tabs().len(), 1, "start-fresh must persist");
     }
 
