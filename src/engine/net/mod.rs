@@ -3,6 +3,7 @@ pub mod mock;
 
 use std::collections::HashMap;
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -123,17 +124,23 @@ fn client() -> Option<&'static reqwest::blocking::Client> {
 
 // ?? HTTP cache ????????????????????????????????????????????????????????
 
-type Cache = HashMap<String, (String, Instant)>;
+type Cache = lru::LruCache<String, (String, Instant)>;
+
+const HTTP_CACHE_CAPACITY: usize = 256;
 
 fn cache() -> &'static RwLock<Cache> {
     static CACHE: OnceLock<RwLock<Cache>> = OnceLock::new();
-    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+    CACHE.get_or_init(|| {
+        RwLock::new(lru::LruCache::new(
+            NonZeroUsize::new(HTTP_CACHE_CAPACITY).unwrap(),
+        ))
+    })
 }
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
 
 fn cache_get(url: &str) -> Option<String> {
-    let map = cache().read().ok()?;
+    let mut map = cache().write().ok()?;
     if let Some((body, time)) = map.get(url) {
         if time.elapsed() < CACHE_TTL {
             return Some(body.clone());
@@ -144,7 +151,19 @@ fn cache_get(url: &str) -> Option<String> {
 
 fn cache_set(url: &str, body: &str) {
     if let Ok(mut map) = cache().write() {
-        map.insert(url.to_string(), (body.to_string(), Instant::now()));
+        map.put(url.to_string(), (body.to_string(), Instant::now()));
+    }
+}
+
+/// Returns the current number of entries in the HTTP cache. Test-only.
+pub fn cache_len() -> usize {
+    cache().read().map(|c| c.len()).unwrap_or(0)
+}
+
+/// Clears all entries from the HTTP cache. Test-only.
+pub fn clear_cache() {
+    if let Ok(mut c) = cache().write() {
+        c.clear();
     }
 }
 
