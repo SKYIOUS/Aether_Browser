@@ -24,6 +24,7 @@
     { "name": "padding-bottom", "enum": "PaddingBottom", "type": "length" },
     { "name": "padding-left", "enum": "PaddingLeft", "type": "length" },
     { "name": "border-width", "enum": "BorderWidth", "type": "shorthand" },
+    { "name": "border", "enum": "Border", "type": "shorthand" },
     { "name": "border-top-width", "enum": "BorderTopWidth", "type": "length" },
     { "name": "border-right-width", "enum": "BorderRightWidth", "type": "length" },
     { "name": "border-bottom-width", "enum": "BorderBottomWidth", "type": "length" },

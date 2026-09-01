@@ -315,8 +315,9 @@ CSS features.
 - `extractor` → text nodes get `display=Block` with inherited CSS properties
   from parent rules (affects deep_nesting, margins_affect_layout). Layout
   engine receives correct `LayoutInput`; the defect is upstream.
-- CSS shorthand `border:` not expanded by Stratus parser into individual
-  `border-*-width` properties. Layout engine handles longhand correctly.
+- ~~CSS shorthand `border:` not expanded by Stratus parser into individual~~
+  ~~`border-*-width` properties. Layout engine handles longhand correctly.~~ **FIXED** —
+  `apply_border_shorthand()` in aether-css resolver; 11 tests; issues.md #12.
 - Grid and overflow are unsupported; divergence is expected and preserved.
 
 **Production backend: Native (switched 2026-08-31).** Taffy retained as

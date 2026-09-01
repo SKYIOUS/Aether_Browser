@@ -226,6 +226,9 @@ fn apply_declarations_vp(
                 CssPropertyName::BorderRadius => {
                     style.border_radius = parse_length_vp(&decl.value, vw, vh)
                 }
+                CssPropertyName::Border => {
+                    apply_border_shorthand(style, &decl.value);
+                }
             }
         }
     }
@@ -708,6 +711,71 @@ fn apply_border_colors(
     }
 }
 
+/// CSS `border` shorthand: `<line-width> || <line-style> || <color>`
+///
+/// `border-style` is not supported by this project — style keywords are
+/// silently ignored. `border: none` sets all widths to 0.
+fn apply_border_shorthand(style: &mut ComputedStyle, value: &PropertyValue) {
+    // Keyword forms: "none"
+    if let PropertyValue::Keyword(s) = value {
+        if s == "none" {
+            style.border_top_width = Some(0.0);
+            style.border_right_width = Some(0.0);
+            style.border_bottom_width = Some(0.0);
+            style.border_left_width = Some(0.0);
+            return;
+        }
+    }
+
+    let parts: Vec<&PropertyValue> = match value {
+        PropertyValue::Shorthand(parts) => parts.iter().collect(),
+        other => vec![other],
+    };
+
+    let mut width: Option<f32> = None;
+    let mut color: Option<Color> = None;
+
+    for part in &parts {
+        match part {
+            // Length or number → width
+            PropertyValue::Length(lv) => {
+                width = Some(lv_to_px(lv, 800.0, 600.0));
+            }
+            PropertyValue::Number(n) => {
+                width = Some(*n);
+            }
+            // Keyword → could be color, style (ignored), or numeric string
+            PropertyValue::Keyword(s) => {
+                if let Some(c) = parse_color(&PropertyValue::Keyword(s.clone())) {
+                    color = Some(c);
+                } else if let Ok(n) = s.parse::<f32>() {
+                    width = Some(n);
+                }
+                // Style keywords (solid, dotted, etc.) are ignored — no
+                // border-style support in this project.
+            }
+            // Explicit color value
+            PropertyValue::Color(c) => {
+                color = Some(c.clone());
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(w) = width {
+        style.border_top_width = Some(w);
+        style.border_right_width = Some(w);
+        style.border_bottom_width = Some(w);
+        style.border_left_width = Some(w);
+    }
+    if let Some(c) = color {
+        style.border_top_color = Some(c.clone());
+        style.border_right_color = Some(c.clone());
+        style.border_bottom_color = Some(c.clone());
+        style.border_left_color = Some(c);
+    }
+}
+
 pub fn resolve_styles_for_tree(
     element: &ElementData,
     stylesheet: &Stylesheet,
@@ -1142,5 +1210,246 @@ mod tests {
         let style = resolve_style(&element, &stylesheet);
         assert_eq!(style.flex.flex_grow, 1.0);
         assert_eq!(style.flex.flex_shrink, 1.0);
+    }
+
+    // ── border shorthand tests ───────────────────────────────────────
+
+    #[test]
+    fn test_border_shorthand_width_style_color() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Length(LengthValue {
+                    value: 1.0,
+                    unit: Unit::Px,
+                }),
+                PropertyValue::Keyword("solid".into()),
+                PropertyValue::Keyword("red".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(1.0));
+        assert_eq!(style.border_right_width, Some(1.0));
+        assert_eq!(style.border_bottom_width, Some(1.0));
+        assert_eq!(style.border_left_width, Some(1.0));
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn test_border_shorthand_width_color() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Length(LengthValue {
+                    value: 2.0,
+                    unit: Unit::Px,
+                }),
+                PropertyValue::Keyword("blue".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(2.0));
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn test_border_shorthand_width_only() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![PropertyValue::Length(LengthValue {
+                value: 3.0,
+                unit: Unit::Px,
+            })]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(3.0));
+        assert_eq!(style.border_right_width, Some(3.0));
+        assert_eq!(style.border_bottom_width, Some(3.0));
+        assert_eq!(style.border_left_width, Some(3.0));
+    }
+
+    #[test]
+    fn test_border_shorthand_color_only() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![PropertyValue::Keyword("green".into())]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 0,
+                g: 128,
+                b: 0,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn test_border_shorthand_style_ignored() {
+        // border-style is not supported by this project; "solid" is ignored.
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![PropertyValue::Keyword("solid".into())]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        // No width or color set — only the unsupported style keyword was present.
+        assert_eq!(style.border_top_width, Some(0.0)); // default
+        assert_eq!(style.border_top_color, None); // default
+    }
+
+    #[test]
+    fn test_border_shorthand_none() {
+        let stylesheet = make_stylesheet(&[("border", PropertyValue::Keyword("none".into()))]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(0.0));
+        assert_eq!(style.border_right_width, Some(0.0));
+        assert_eq!(style.border_bottom_width, Some(0.0));
+        assert_eq!(style.border_left_width, Some(0.0));
+    }
+
+    #[test]
+    fn test_border_shorthand_zero() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![PropertyValue::Number(0.0)]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(0.0));
+        assert_eq!(style.border_right_width, Some(0.0));
+    }
+
+    #[test]
+    fn test_border_shorthand_unordered_tokens() {
+        // "red 1px dashed" — color first, then width, then style (ignored)
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Keyword("red".into()),
+                PropertyValue::Length(LengthValue {
+                    value: 4.0,
+                    unit: Unit::Px,
+                }),
+                PropertyValue::Keyword("dashed".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(4.0));
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn test_border_longhand_overrides_shorthand() {
+        let stylesheet = make_stylesheet(&[
+            (
+                "border",
+                PropertyValue::Shorthand(vec![
+                    PropertyValue::Length(LengthValue {
+                        value: 1.0,
+                        unit: Unit::Px,
+                    }),
+                    PropertyValue::Keyword("red".into()),
+                ]),
+            ),
+            (
+                "border-top-width",
+                PropertyValue::Length(LengthValue {
+                    value: 5.0,
+                    unit: Unit::Px,
+                }),
+            ),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        // Longhand applied after shorthand — top is overridden.
+        assert_eq!(style.border_top_width, Some(5.0));
+        // Other sides remain from shorthand.
+        assert_eq!(style.border_right_width, Some(1.0));
+    }
+
+    #[test]
+    fn test_border_shorthand_does_not_corrupt_other_properties() {
+        let stylesheet = make_stylesheet(&[
+            ("color", PropertyValue::Keyword("blue".into())),
+            (
+                "border",
+                PropertyValue::Shorthand(vec![
+                    PropertyValue::Length(LengthValue {
+                        value: 1.0,
+                        unit: Unit::Px,
+                    }),
+                    PropertyValue::Keyword("red".into()),
+                ]),
+            ),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        // color must not be affected by border shorthand
+        assert_eq!(
+            style.color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 255,
+                a: 255
+            })
+        );
+    }
+
+    #[test]
+    fn test_border_shorthand_number_width() {
+        let stylesheet = make_stylesheet(&[(
+            "border",
+            PropertyValue::Shorthand(vec![
+                PropertyValue::Number(2.0),
+                PropertyValue::Keyword("solid".into()),
+                PropertyValue::Keyword("black".into()),
+            ]),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let style = resolve_style(&element, &stylesheet);
+        assert_eq!(style.border_top_width, Some(2.0));
+        assert_eq!(
+            style.border_top_color,
+            Some(Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255
+            })
+        );
     }
 }
