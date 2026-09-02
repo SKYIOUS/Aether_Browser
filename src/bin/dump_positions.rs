@@ -3,6 +3,7 @@ use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::apply_taffy_layout;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
 use vayu_browser::engine::stratus;
+use vayu_browser::engine::stratus::CustomPropertyMap;
 
 fn styled_to_input(
     el: &vayu_browser::engine::pipeline::StyledElement,
@@ -66,7 +67,18 @@ fn dump(name: &str, html: &str, css: &str) {
         stratus::parse(css)
     };
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     println!("=== {} ===", name);
     println!("extracted {} elements:", els.len());
     for (i, e) in els.iter().enumerate() {

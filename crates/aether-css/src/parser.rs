@@ -72,6 +72,33 @@ pub enum PropertyValue {
     Length(LengthValue),
     Color(Color),
     Shorthand(Vec<PropertyValue>),
+    /// `var(--name)` or `var(--name, fallback)` — resolved during cascade.
+    Var {
+        name: String,
+        fallback: Option<Box<PropertyValue>>,
+    },
+    /// `calc(...)` expression — resolved after var() substitution.
+    Calc(Vec<CalcTerm>),
+}
+
+/// A single term inside a `calc()` expression.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CalcTerm {
+    /// A numeric value (unitless).
+    Number(f32),
+    /// A dimension value (e.g. `20px`, `50%`).
+    Length(LengthValue),
+    /// An addition or subtraction operator.
+    Add,
+    Sub,
+    /// A multiplication operator.
+    Mul,
+    /// A division operator.
+    Div,
+    /// A parenthesized sub-expression.
+    Paren(Vec<CalcTerm>),
+    /// A `var()` reference inside calc, resolved during substitution.
+    Var(String, Option<Box<PropertyValue>>),
 }
 
 #[cfg(test)]

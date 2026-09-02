@@ -1,6 +1,6 @@
-use vayu_browser::engine::parser::parse_html;
+﻿use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
-use vayu_browser::engine::stratus::Stylesheet;
+use vayu_browser::engine::stratus::{CustomPropertyMap, Stylesheet};
 
 fn extract(html: &str) -> Vec<vayu_browser::engine::pipeline::extractor::StyledElement> {
     let dom = parse_html(html);
@@ -16,6 +16,7 @@ fn extract(html: &str) -> Vec<vayu_browser::engine::pipeline::extractor::StyledE
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     elements
 }

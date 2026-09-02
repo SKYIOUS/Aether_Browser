@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use vayu_browser::engine::stratus::{
-    self, Color, ComputedStyle, Display, ElementData, FlexDirection, JustifyContent,
+    self, Color, ComputedStyle, CustomPropertyMap, Display, ElementData, FlexDirection,
+    JustifyContent,
 };
 
 fn resolve(css: &str, tag: &str) -> ComputedStyle {
@@ -418,6 +419,7 @@ fn test_inline_child_text_inherited() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     let p = elements
         .iter()

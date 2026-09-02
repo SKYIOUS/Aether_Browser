@@ -4,8 +4,9 @@
 //! Re-exports style types from aether_css and provides a new cssparser-based `parse` function.
 
 pub use aether_css::{
-    match_element, match_rules, resolve_style, resolve_style_vp, resolve_styles_for_tree,
-    AlignContent, AlignItems, AlignSelf, Color, ComputedStyle, CssPropertyName, Declaration,
+    match_element, match_rules, resolve_style, resolve_style_vp, resolve_style_with_vars,
+    resolve_style_with_vars_and_custom, resolve_styles_for_tree, AlignContent, AlignItems,
+    AlignSelf, CalcTerm, Color, ComputedStyle, CssPropertyName, CustomPropertyMap, Declaration,
     Display, ElementData, FlexDirection, FlexOptions, FlexWrap, JustifyContent, LengthValue,
     Position, PropertyValue, Rule, Selector, SimpleSelector, Specificity, Stylesheet, Transform,
     Transition, Unit,
@@ -269,15 +270,20 @@ fn parse_declarations<'i, 't>(
         }
 
         let parsed = p.try_parse(|p| -> Result<Declaration, ParseError<'i, ()>> {
-            let name = p.expect_ident_cloned()?;
+            let name = parse_property_name(p)?;
             p.skip_whitespace();
             p.expect_colon()?;
             p.skip_whitespace();
-            let value = parse_value(p)?;
-            Ok(Declaration {
-                name: name.to_string(),
-                value,
-            })
+
+            // Custom properties (--*) store raw value tokens; do not parse through
+            // normal value pipeline.
+            let value = if name.starts_with("--") {
+                parse_raw_value(p)?
+            } else {
+                parse_value(p)?
+            };
+
+            Ok(Declaration { name, value })
         });
 
         match parsed {
@@ -291,6 +297,72 @@ fn parse_declarations<'i, 't>(
     }
 
     Ok(declarations)
+}
+
+/// Parse a property name: either a standard identifier or a dashed
+/// identifier (custom property `--*`).
+fn parse_property_name<'i, 't>(p: &mut Parser<'i, 't>) -> Result<String, ParseError<'i, ()>> {
+    let name = p.expect_ident_cloned()?;
+    Ok(name.to_string())
+}
+
+/// Parse a custom property value as raw tokens (no type-level parsing).
+/// Custom properties store arbitrary CSS token sequences.
+fn parse_raw_value<'i, 't>(p: &mut Parser<'i, 't>) -> Result<PropertyValue, ParseError<'i, ()>> {
+    let mut tokens = Vec::new();
+    p.parse_until_before(Delimiter::Semicolon, |p| {
+        while !p.is_exhausted() {
+            p.skip_whitespace();
+            if p.is_exhausted() {
+                break;
+            }
+            let tok = p.next()?.clone();
+            tokens.push(tok_to_raw_value(p, &tok)?);
+        }
+        Ok(())
+    })?;
+
+    if tokens.len() == 1 {
+        Ok(tokens.into_iter().next().unwrap())
+    } else if tokens.is_empty() {
+        Ok(PropertyValue::Keyword(String::new()))
+    } else {
+        Ok(PropertyValue::Shorthand(tokens))
+    }
+}
+
+/// Convert a cssparser token to a raw PropertyValue for custom property storage.
+fn tok_to_raw_value<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    token: &Token<'i>,
+) -> Result<PropertyValue, ParseError<'i, ()>> {
+    match token {
+        Token::Number { value, .. } => Ok(PropertyValue::Number(*value)),
+        Token::Dimension { value, unit, .. } => Ok(PropertyValue::Length(LengthValue {
+            value: *value,
+            unit: unit_to_enum(unit.as_ref()),
+        })),
+        Token::Percentage { unit_value, .. } => Ok(PropertyValue::Length(LengthValue {
+            value: *unit_value * 100.0,
+            unit: Unit::Percent,
+        })),
+        Token::Ident(name) => Ok(PropertyValue::Keyword(name.to_string())),
+        Token::Hash(name) | Token::IDHash(name) => Ok(PropertyValue::Keyword(format!("#{}", name))),
+        Token::Function(name) => {
+            if name.eq_ignore_ascii_case("var") {
+                return parse_var_function(p);
+            }
+            let _ = p.parse_nested_block(|p| -> Result<(), ParseError<'_, ()>> {
+                while !p.is_exhausted() {
+                    let _ = p.next()?;
+                }
+                Ok(())
+            });
+            Ok(PropertyValue::Keyword(name.to_string()))
+        }
+        Token::Delim(c) => Ok(PropertyValue::Keyword(c.to_string())),
+        _ => Ok(PropertyValue::Keyword(format!("{:?}", token))),
+    }
 }
 
 fn parse_value<'i, 't>(p: &mut Parser<'i, 't>) -> Result<PropertyValue, ParseError<'i, ()>> {
@@ -326,6 +398,37 @@ fn parse_value_tokens<'i, 't>(
             Token::Function(name) if name.eq_ignore_ascii_case("color-mix") => {
                 let color = p.parse_nested_block(try_parse_color_mix)?;
                 values.push(PropertyValue::Color(color));
+                continue;
+            }
+            Token::Function(name) if name.eq_ignore_ascii_case("var") => {
+                if let Ok(var_pv) = p.try_parse(|p| p.parse_nested_block(parse_var_function_inner))
+                {
+                    values.push(var_pv);
+                } else {
+                    // Consume the nested block to avoid re-parsing its tokens.
+                    let _ = p.parse_nested_block(|p| -> Result<(), ParseError<'_, ()>> {
+                        while !p.is_exhausted() {
+                            let _ = p.next()?;
+                        }
+                        Ok(())
+                    });
+                }
+                continue;
+            }
+            Token::Function(name) if name.eq_ignore_ascii_case("calc") => {
+                if let Ok(calc_pv) =
+                    p.try_parse(|p| p.parse_nested_block(parse_calc_function_inner))
+                {
+                    values.push(calc_pv);
+                } else {
+                    // Consume the nested block to avoid re-parsing its tokens.
+                    let _ = p.parse_nested_block(|p| -> Result<(), ParseError<'_, ()>> {
+                        while !p.is_exhausted() {
+                            let _ = p.next()?;
+                        }
+                        Ok(())
+                    });
+                }
                 continue;
             }
             _ => {
@@ -378,6 +481,232 @@ fn convert_token_to_value<'i, 't>(
         Token::Delim(c) => Ok(PropertyValue::Keyword(c.to_string())),
         _ => Ok(PropertyValue::Keyword(format!("{:?}", token))),
     }
+}
+
+/// Parse `var(--name)` or `var(--name, fallback)` from the nested block.
+/// Called after `Token::Function("var")` has been consumed.
+fn parse_var_function_inner<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<PropertyValue, ParseError<'i, ()>> {
+    p.skip_whitespace();
+    let name = parse_dashed_ident_arg(p)?;
+    p.skip_whitespace();
+
+    let fallback = if p.try_parse(|p| p.expect_comma()).is_ok() {
+        p.skip_whitespace();
+        let fallback_val = parse_value(p)?;
+        Some(Box::new(fallback_val))
+    } else {
+        None
+    };
+
+    Ok(PropertyValue::Var { name, fallback })
+}
+
+/// Parse a dashed ident argument (e.g. `--primary`) inside var().
+fn parse_dashed_ident_arg<'i, 't>(p: &mut Parser<'i, 't>) -> Result<String, ParseError<'i, ()>> {
+    let tok = p.next()?.clone();
+    match tok {
+        Token::Ident(ref name) if name.starts_with("--") => Ok(name.to_string()),
+        _ => Err(p.new_custom_error(())),
+    }
+}
+
+/// Parse `calc(...)` from the nested block.
+/// Called after `Token::Function("calc")` has been consumed.
+fn parse_calc_function_inner<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<PropertyValue, ParseError<'i, ()>> {
+    let terms = parse_calc_expression(p)?;
+    Ok(PropertyValue::Calc(terms))
+}
+
+/// Parse a calc() expression with operator precedence.
+fn parse_calc_expression<'i, 't>(
+    p: &mut Parser<'i, 't>,
+) -> Result<Vec<CalcTerm>, ParseError<'i, ()>> {
+    let mut terms = Vec::new();
+    parse_calc_additive(p, &mut terms)?;
+    Ok(terms)
+}
+
+fn parse_calc_additive<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    terms: &mut Vec<CalcTerm>,
+) -> Result<(), ParseError<'i, ()>> {
+    parse_calc_multiplicative(p, terms)?;
+    loop {
+        p.skip_whitespace();
+        if p.is_exhausted() {
+            break;
+        }
+        let ok = p
+            .try_parse(|p| {
+                let tok = p.next()?.clone();
+                match tok {
+                    Token::Delim('+') => {
+                        p.skip_whitespace();
+                        parse_calc_multiplicative(p, terms)?;
+                        terms.push(CalcTerm::Add);
+                        Ok(())
+                    }
+                    Token::Delim('-') => {
+                        p.skip_whitespace();
+                        parse_calc_multiplicative(p, terms)?;
+                        terms.push(CalcTerm::Sub);
+                        Ok(())
+                    }
+                    _ => Err(p.new_custom_error(())),
+                }
+            })
+            .is_ok();
+        if !ok {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn parse_calc_multiplicative<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    terms: &mut Vec<CalcTerm>,
+) -> Result<(), ParseError<'i, ()>> {
+    parse_calc_unary(p, terms)?;
+    loop {
+        p.skip_whitespace();
+        if p.is_exhausted() {
+            break;
+        }
+        let ok = p
+            .try_parse(|p| {
+                let tok = p.next()?.clone();
+                match tok {
+                    Token::Delim('*') => {
+                        p.skip_whitespace();
+                        parse_calc_unary(p, terms)?;
+                        terms.push(CalcTerm::Mul);
+                        Ok(())
+                    }
+                    Token::Delim('/') => {
+                        p.skip_whitespace();
+                        parse_calc_unary(p, terms)?;
+                        terms.push(CalcTerm::Div);
+                        Ok(())
+                    }
+                    _ => Err(p.new_custom_error(())),
+                }
+            })
+            .is_ok();
+        if !ok {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn parse_calc_unary<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    terms: &mut Vec<CalcTerm>,
+) -> Result<(), ParseError<'i, ()>> {
+    p.skip_whitespace();
+    if p.is_exhausted() {
+        return Ok(());
+    }
+    let tok = p.next()?.clone();
+    match tok {
+        Token::Delim('-') => {
+            p.skip_whitespace();
+            parse_calc_primary(p, terms)?;
+            negate_last_number(terms);
+        }
+        Token::Delim('+') => {}
+        Token::Number { value, .. } => {
+            terms.push(CalcTerm::Number(value));
+        }
+        Token::Dimension { value, unit, .. } => {
+            terms.push(CalcTerm::Length(LengthValue {
+                value,
+                unit: unit_to_enum(unit.as_ref()),
+            }));
+        }
+        Token::Percentage { unit_value, .. } => {
+            terms.push(CalcTerm::Length(LengthValue {
+                value: unit_value * 100.0,
+                unit: Unit::Percent,
+            }));
+        }
+        Token::ParenthesisBlock => {
+            let sub = p.parse_nested_block(parse_calc_expression)?;
+            terms.push(CalcTerm::Paren(sub));
+        }
+        Token::Function(ref name) if name.eq_ignore_ascii_case("var") => {
+            let var_pv = p.parse_nested_block(parse_var_function_inner)?;
+            if let PropertyValue::Var {
+                name: var_name,
+                fallback,
+            } = var_pv
+            {
+                terms.push(CalcTerm::Var(var_name, fallback));
+            } else {
+                return Err(p.new_custom_error(()));
+            }
+        }
+        _ => return Err(p.new_custom_error(())),
+    }
+    Ok(())
+}
+
+fn negate_last_number(terms: &mut [CalcTerm]) {
+    if let Some(CalcTerm::Number(n)) = terms.last_mut() {
+        *n = -*n;
+    }
+}
+
+fn parse_calc_primary<'i, 't>(
+    p: &mut Parser<'i, 't>,
+    terms: &mut Vec<CalcTerm>,
+) -> Result<(), ParseError<'i, ()>> {
+    let tok = p.next()?.clone();
+    match tok {
+        Token::Number { value, .. } => {
+            terms.push(CalcTerm::Number(value));
+        }
+        Token::Dimension { value, unit, .. } => {
+            terms.push(CalcTerm::Length(LengthValue {
+                value,
+                unit: unit_to_enum(unit.as_ref()),
+            }));
+        }
+        Token::Percentage { unit_value, .. } => {
+            terms.push(CalcTerm::Length(LengthValue {
+                value: unit_value * 100.0,
+                unit: Unit::Percent,
+            }));
+        }
+        Token::ParenthesisBlock => {
+            let sub = p.parse_nested_block(parse_calc_expression)?;
+            terms.push(CalcTerm::Paren(sub));
+        }
+        Token::Function(ref name) if name.eq_ignore_ascii_case("var") => {
+            let var_pv = p.parse_nested_block(parse_var_function_inner)?;
+            if let PropertyValue::Var {
+                name: var_name,
+                fallback,
+            } = var_pv
+            {
+                terms.push(CalcTerm::Var(var_name, fallback));
+            } else {
+                return Err(p.new_custom_error(()));
+            }
+        }
+        _ => return Err(p.new_custom_error(())),
+    }
+    Ok(())
+}
+
+/// Parse `var(--name)` from raw value context (custom property values).
+fn parse_var_function<'i, 't>(p: &mut Parser<'i, 't>) -> Result<PropertyValue, ParseError<'i, ()>> {
+    p.parse_nested_block(parse_var_function_inner)
 }
 
 fn unit_to_enum(s: &str) -> Unit {

@@ -12,6 +12,7 @@ use vayu_browser::engine::pipeline::apply_taffy_layout;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
 use vayu_browser::engine::pipeline::StyledElement;
 use vayu_browser::engine::stratus;
+use vayu_browser::engine::stratus::CustomPropertyMap;
 
 fn styled_to_input(
     el: &vayu_browser::engine::pipeline::StyledElement,
@@ -111,7 +112,18 @@ fn run_page(
         stratus::parse(css)
     };
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
 
     let native_elements = els.len();
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
@@ -381,7 +393,18 @@ fn f11_b_stability() {
                 stratus::parse(&page.css)
             };
             let mut els = Vec::new();
-            extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+            extract_elements(
+                &dom,
+                &mut els,
+                0,
+                &sheet,
+                None,
+                None,
+                vec![],
+                800.0,
+                600.0,
+                &CustomPropertyMap::new(),
+            );
 
             let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
             let input = LayoutInput {
@@ -453,7 +476,18 @@ fn f11_b_stability() {
             stratus::parse(&page.css)
         };
         let mut els = Vec::new();
-        extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+        extract_elements(
+            &dom,
+            &mut els,
+            0,
+            &sheet,
+            None,
+            None,
+            vec![],
+            800.0,
+            600.0,
+            &CustomPropertyMap::new(),
+        );
         let parent_violations = check_parent_child_health(&els);
         total_parent_violations += parent_violations.len();
         for v in &parent_violations {
@@ -502,7 +536,18 @@ fn dump_page_geometry(name: &str, html: &str, css: &str) {
         stratus::parse(css)
     };
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
 
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
@@ -592,7 +637,18 @@ fn run_layout(html: &str, css: &str) -> Vec<(f32, f32, f32, f32)> {
         stratus::parse(css)
     };
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,

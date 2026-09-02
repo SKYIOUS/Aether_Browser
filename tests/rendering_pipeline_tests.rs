@@ -1,4 +1,4 @@
-use aether_css::AlignContent;
+﻿use aether_css::AlignContent;
 use std::collections::HashMap;
 use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::{
@@ -7,9 +7,9 @@ use vayu_browser::engine::pipeline::extractor::{
 };
 use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 use vayu_browser::engine::stratus::{
-    self, Color, ComputedStyle, Display, ElementData, FlexDirection, JustifyContent,
+    self, AlignItems, AlignSelf, Color, ComputedStyle, CustomPropertyMap, Display, ElementData,
+    FlexDirection, FlexWrap, JustifyContent, Position,
 };
-use vayu_browser::engine::stratus::{AlignItems, AlignSelf, FlexWrap, Position};
 
 fn resolve(css: &str, tag: &str) -> ComputedStyle {
     let sheet = stratus::parse(css);
@@ -329,6 +329,7 @@ fn test_extract_elements_from_simple_html() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     assert!(!elements.is_empty());
 }
@@ -349,6 +350,7 @@ fn test_extract_elements_no_script_content() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     assert!(!elements.iter().any(|e| e.text.contains("var x")));
 }
@@ -369,6 +371,7 @@ fn test_extract_elements_script_content_skipped() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     assert!(elements.iter().any(|e| e.text.contains("safe")));
     assert!(!elements.iter().any(|e| e.text.contains("alert")));
@@ -390,6 +393,7 @@ fn test_extract_elements_head_content_hidden() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     assert!(elements.iter().any(|e| e.text.contains("body")));
     assert!(!elements
@@ -1203,6 +1207,7 @@ fn test_decode_in_extracted_text() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     let p = elements
         .iter()
@@ -1227,6 +1232,7 @@ fn test_decode_href_attribute() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     let a = elements
         .iter()
@@ -1255,6 +1261,7 @@ fn test_decode_alt_attribute() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     let img = elements
         .iter()
@@ -1302,6 +1309,7 @@ fn test_inline_formatting_tags_inside_paragraph() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
     let p = elements
         .iter()
@@ -1364,6 +1372,7 @@ fn test_inline_link_has_text_width() {
         vec![],
         1440.0,
         900.0,
+        &CustomPropertyMap::new(),
     );
     apply_taffy_layout(&mut elements, 1440.0, 900.0);
     let h1 = elements

@@ -6,8 +6,8 @@ use iced::Color;
 use crate::engine::dom::{Node, NodeType};
 use crate::engine::js::js_bridge::FlatNode;
 use crate::engine::stratus::{
-    self, AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position,
-    Stylesheet,
+    self, AlignItems, AlignSelf, CustomPropertyMap, Display, FlexDirection, FlexWrap,
+    JustifyContent, Position, Stylesheet,
 };
 use crate::ui::style::C;
 use aether_css::AlignContent;
@@ -392,15 +392,27 @@ fn get_all_text(node: &Node) -> String {
     out
 }
 
-fn compute_full_style(node: &Node, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
+fn compute_full_style(
+    node: &Node,
+    ss: &Stylesheet,
+    vw: f32,
+    vh: f32,
+    parent_vars: &CustomPropertyMap,
+) -> (FullStyle, CustomPropertyMap) {
     let (tag, attrs) = match &node.node_type {
         NodeType::Element(e) => (e.tag_name.to_lowercase(), &e.attributes),
         _ => (String::new(), &HashMap::new()),
     };
-    compute_full_style_inner(&tag, attrs, None, Some(node), ss, vw, vh)
+    compute_full_style_inner(&tag, attrs, None, Some(node), ss, vw, vh, parent_vars)
 }
 
-fn compute_full_style_flat(node: &FlatNode, ss: &Stylesheet, vw: f32, vh: f32) -> FullStyle {
+fn compute_full_style_flat(
+    node: &FlatNode,
+    ss: &Stylesheet,
+    vw: f32,
+    vh: f32,
+    parent_vars: &CustomPropertyMap,
+) -> (FullStyle, CustomPropertyMap) {
     compute_full_style_inner(
         &node.tag,
         &node.attrs,
@@ -409,9 +421,11 @@ fn compute_full_style_flat(node: &FlatNode, ss: &Stylesheet, vw: f32, vh: f32) -
         ss,
         vw,
         vh,
+        parent_vars,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_full_style_inner(
     tag: &str,
     attrs: &HashMap<String, String>,
@@ -420,9 +434,10 @@ fn compute_full_style_inner(
     ss: &Stylesheet,
     vw: f32,
     vh: f32,
-) -> FullStyle {
-    let cs = match node {
-        Some(n) => crate::engine::style::compute_style_vp(n, ss, vw, vh),
+    parent_vars: &CustomPropertyMap,
+) -> (FullStyle, CustomPropertyMap) {
+    let (cs, custom) = match node {
+        Some(n) => crate::engine::style::compute_style_vp_with_vars(n, ss, vw, vh, parent_vars),
         None => {
             let merged = if let Some(inline) = inline_styles {
                 let mut m = HashMap::with_capacity(attrs.len() + inline.len());
@@ -434,7 +449,13 @@ fn compute_full_style_inner(
             };
             let element =
                 crate::engine::stratus::ElementData::with_attributes_ref(tag.to_string(), &merged);
-            crate::engine::stratus::resolve_style_vp(&element, ss, vw, vh)
+            crate::engine::stratus::resolve_style_with_vars_and_custom(
+                &element,
+                ss,
+                vw,
+                vh,
+                parent_vars,
+            )
         }
     };
     // Match (not unwrap_or): the palette read must stay lazy so elements with
@@ -516,7 +537,7 @@ fn compute_full_style_inner(
         _ => BoxSizing::ContentBox,
     };
 
-    FullStyle {
+    let fs = FullStyle {
         color,
         font_size,
         font_weight,
@@ -556,7 +577,8 @@ fn compute_full_style_inner(
         inset_right: cs.right.unwrap_or(0.0),
         inset_bottom: cs.bottom.unwrap_or(0.0),
         inset_left: cs.left.unwrap_or(0.0),
-    }
+    };
+    (fs, custom)
 }
 
 fn make_element(
@@ -635,6 +657,7 @@ pub fn extract_elements(
     dom_path: Vec<usize>,
     viewport_w: f32,
     viewport_h: f32,
+    parent_vars: &CustomPropertyMap,
 ) {
     if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS {
         return;
@@ -653,6 +676,7 @@ pub fn extract_elements(
                     dom_path.clone(),
                     viewport_w,
                     viewport_h,
+                    parent_vars,
                 );
             }
         }
@@ -668,7 +692,8 @@ pub fn extract_elements(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let fs = compute_full_style(node, ss, viewport_w, viewport_h);
+                    let (fs, _custom) =
+                        compute_full_style(node, ss, viewport_w, viewport_h, parent_vars);
                     let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -697,13 +722,15 @@ pub fn extract_elements(
                             child_path,
                             viewport_w,
                             viewport_h,
+                            parent_vars,
                         );
                     }
                 }
                 return;
             }
 
-            let fs = compute_full_style(node, ss, viewport_w, viewport_h);
+            let (fs, element_custom_vars) =
+                compute_full_style(node, ss, viewport_w, viewport_h, parent_vars);
 
             let uses_default_margins = uses_default_margins(tag.as_str());
 
@@ -1025,6 +1052,7 @@ pub fn extract_elements(
                     child_path,
                     viewport_w,
                     viewport_h,
+                    &element_custom_vars,
                 );
             }
         }
@@ -1089,6 +1117,7 @@ pub(crate) fn extract_elements_flat(
     ss: &Stylesheet,
     viewport_w: f32,
     viewport_h: f32,
+    parent_vars: &CustomPropertyMap,
 ) {
     #[allow(clippy::too_many_arguments)]
     fn walk(
@@ -1102,6 +1131,7 @@ pub(crate) fn extract_elements_flat(
         dom_path: &mut Vec<usize>,
         vw: f32,
         vh: f32,
+        parent_vars: &CustomPropertyMap,
     ) {
         if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS {
             return;
@@ -1125,6 +1155,7 @@ pub(crate) fn extract_elements_flat(
                     dom_path,
                     vw,
                     vh,
+                    parent_vars,
                 );
                 dom_path.pop();
             }
@@ -1142,7 +1173,7 @@ pub(crate) fn extract_elements_flat(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let fs = compute_full_style_flat(node, ss, vw, vh);
+                    let (fs, _custom) = compute_full_style_flat(node, ss, vw, vh, parent_vars);
                     let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -1167,6 +1198,7 @@ pub(crate) fn extract_elements_flat(
                         dom_path,
                         vw,
                         vh,
+                        parent_vars,
                     );
                     dom_path.pop();
                 }
@@ -1174,7 +1206,7 @@ pub(crate) fn extract_elements_flat(
             return;
         }
 
-        let fs = compute_full_style_flat(node, ss, vw, vh);
+        let (fs, element_custom_vars) = compute_full_style_flat(node, ss, vw, vh, parent_vars);
         let uses_default_margins = uses_default_margins(tag);
 
         let (
@@ -1372,6 +1404,7 @@ pub(crate) fn extract_elements_flat(
                 dom_path,
                 vw,
                 vh,
+                &element_custom_vars,
             );
             dom_path.pop();
         }
@@ -1382,7 +1415,17 @@ pub(crate) fn extract_elements_flat(
     }
     let mut path = Vec::new();
     walk(
-        nodes, 0, elements, 0, ss, None, None, &mut path, viewport_w, viewport_h,
+        nodes,
+        0,
+        elements,
+        0,
+        ss,
+        None,
+        None,
+        &mut path,
+        viewport_w,
+        viewport_h,
+        parent_vars,
     );
 }
 
@@ -1390,7 +1433,7 @@ pub(crate) fn extract_elements_flat(
 mod tests {
     use super::decode_html_entities;
     use crate::engine::parser::parse_html;
-    use crate::engine::stratus::Stylesheet;
+    use crate::engine::stratus::{CustomPropertyMap, Stylesheet};
 
     #[test]
     fn test_decode_amp() {
@@ -1465,6 +1508,7 @@ mod tests {
             vec![],
             800.0,
             600.0,
+            &CustomPropertyMap::new(),
         );
         let p = elements
             .iter()
@@ -1489,6 +1533,7 @@ mod tests {
             vec![],
             800.0,
             600.0,
+            &CustomPropertyMap::new(),
         );
         let a = elements
             .iter()
@@ -1517,6 +1562,7 @@ mod tests {
             vec![],
             800.0,
             600.0,
+            &CustomPropertyMap::new(),
         );
         let img = elements
             .iter()
@@ -1553,7 +1599,14 @@ mod tests {
         }
         let sheet = Stylesheet { rules: vec![] };
         let mut elements = Vec::new();
-        super::extract_elements_flat(&nodes, &mut elements, &sheet, 800.0, 600.0);
+        super::extract_elements_flat(
+            &nodes,
+            &mut elements,
+            &sheet,
+            800.0,
+            600.0,
+            &CustomPropertyMap::new(),
+        );
         assert!(
             elements.len() > 2000,
             "flat path should pass the old 2000-element cap, got {}",
@@ -1596,6 +1649,7 @@ mod tests {
                     vec![],
                     800.0,
                     600.0,
+                    &CustomPropertyMap::new(),
                 );
                 (
                     !elements.is_empty(),

@@ -1,4 +1,4 @@
-use vayu_browser::engine::dom::NodeType;
+﻿use vayu_browser::engine::dom::NodeType;
 use vayu_browser::engine::parser::parse_html;
 
 #[test]
@@ -84,6 +84,7 @@ fn test_extract_and_layout_pipeline() {
     use vayu_browser::engine::pipeline::extractor::{extract_elements, FontWeight};
     use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
     use vayu_browser::engine::stratus;
+    use vayu_browser::engine::stratus::CustomPropertyMap;
 
     let html = r#"
         <div class="container">
@@ -114,6 +115,7 @@ fn test_extract_and_layout_pipeline() {
         vec![],
         800.0,
         600.0,
+        &CustomPropertyMap::new(),
     );
 
     assert!(!elements.is_empty(), "should extract elements");

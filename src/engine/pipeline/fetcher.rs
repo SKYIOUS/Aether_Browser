@@ -19,7 +19,8 @@ use super::extractor::{
 };
 use super::layout::apply_taffy_layout;
 use crate::engine::stratus::{
-    AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position,
+    AlignItems, AlignSelf, CustomPropertyMap, Display, FlexDirection, FlexWrap, JustifyContent,
+    Position,
 };
 use aether_css::AlignContent;
 
@@ -1080,6 +1081,7 @@ fn do_fetch_page_content_sync(
         &stylesheet,
         content_width,
         viewport_h,
+        &CustomPropertyMap::new(),
     );
     plog!("EXTRACT", "Extracted {} elements", elements.len());
 

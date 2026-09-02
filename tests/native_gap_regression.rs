@@ -9,6 +9,7 @@ use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::apply_taffy_layout;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
 use vayu_browser::engine::stratus;
+use vayu_browser::engine::stratus::CustomPropertyMap;
 
 fn styled_to_input(
     el: &vayu_browser::engine::pipeline::StyledElement,
@@ -72,7 +73,18 @@ fn run_both(html: &str, css: &str) -> (Vec<(f32, f32, f32, f32)>, Vec<(f32, f32,
         stratus::parse(css)
     };
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
 
     let mut els_a = els.clone();
     apply_taffy_layout(&mut els_a, 800.0, 600.0);
@@ -191,7 +203,18 @@ fn native_position_absolute_semantic() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -243,7 +266,18 @@ fn native_position_simple_block_semantic() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -287,7 +321,18 @@ fn native_size_inline_width_semantic() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -337,7 +382,18 @@ fn native_size_flex_width_semantic() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -396,7 +452,18 @@ fn native_containment_block_block() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -438,7 +505,18 @@ fn native_containment_absolute_excluded() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -470,7 +548,18 @@ fn native_margin_collapse_block_flow() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -542,7 +631,18 @@ fn native_inline_siblings_margins() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -650,7 +750,18 @@ fn native_inline_block_explicit_sizing() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -750,7 +861,18 @@ fn native_padding_left_offsets_child_x() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -794,7 +916,18 @@ fn native_border_left_offsets_child_x() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -828,7 +961,18 @@ fn native_border_longhand_offsets_child_x() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -863,7 +1007,18 @@ fn native_gap_relative_positioning_left_offset() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
@@ -889,7 +1044,18 @@ fn native_gap_relative_positioning_top_offset() {
     let dom = parse_html(html);
     let sheet = stratus::parse(css);
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+    );
     let inputs: Vec<_> = els.iter().map(styled_to_input).collect();
     let input = LayoutInput {
         container_width: 800.0,
