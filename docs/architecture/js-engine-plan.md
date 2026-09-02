@@ -2,7 +2,7 @@
 
 > Plan for the workspace-native ECMAScript engine decided in [ADR-0003](../adr/0003-native-javascript-engine.md).
 > Spec of record: [ECMA-262](https://tc39.es/ecma262/) (current living standard).
-> Last updated: 2026-08-24
+> Last updated: 2026-09-01
 
 ---
 
@@ -105,8 +105,8 @@ Gates are test262 pass rate over the rung's declared feature set (`test262` vend
 
 | Rung | Contents | Gate |
 |---|---|---|
-| **R0** Walking skeleton | lexer/parser/VM round-trips literals, arithmetic, closures, calls, exceptions; hand-written suite | engine runs `eval` of a few hundred programs correctly |
-| **R1** ES5 core | ToPrimitive/ToNumber/ToString coercions incl. `==` quirks; prototypes & constructors; `this`; strict mode; statements; Object/Array/String/Number/Boolean/Error/Math/JSON; Date basics; RegExp basics; **ordinary internal methods** | ≥95% on non-ES2015+ feature dirs (annex `es5` corpus + `runtime semantics` baselines) |
+| **R0** Walking skeleton ✅ | lexer/parser/VM round-trips literals, arithmetic, comparisons, control flow (if/else, while, for, var/let/const, return, typeof), string ops; hand-written suite | engine runs `eval` of a few hundred programs correctly |
+| **R1** ES5 core | function calls/closures, break/continue, try/catch/finally; ToPrimitive/ToNumber/ToString coercions incl. `==` quirks; prototypes & constructors; `this`; strict mode; Object/Array/String/Number/Boolean/Error/Math/JSON; Date basics; RegExp basics; **ordinary internal methods** | ≥95% on non-ES2015+ feature dirs (annex `es5` corpus + `runtime semantics` baselines) |
 | **R2** ES2015 | let/const/TDZ, classes, arrows, destructuring, template literals, spread/rest, iterators/for-of, **generators**, Symbols + well-knowns (`iterator`, `species`, `toPrimitive`, `hasInstance`, `toStringTag`), Map/Set (+ ephemeron WeakMap/WeakSet), default/computed params, Proxy + Reflect | ≥95% on `class`, `generators`, `Symbol`, `Proxy`, `Map/Set`, `for-of`, `destructuring` feature dirs |
 | **R3** ES2016–17 | `**`, Array.includes, async functions + await (suspend via §2.4 frames), Promise (already started in R2 for async glue), Object.entries/values/values-as-enumerator fixes, string padding, trailing commas | ≥95% on `async-functions`, `Promise`, `exponentiation` |
 | **R4** ES2018–20 | async iteration, rest/spread properties, regex named groups + lookbehind + `s`, BigInt (`num-bigint`), optional chaining/nullish coalescing, globalThis, Promise.allSettled/race/any, String.matchAll, dynamic `import()` behind host loader hook | ≥95% on those feature dirs |

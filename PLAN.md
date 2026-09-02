@@ -32,6 +32,9 @@ Decision: [ADR-0003](docs/adr/0003-native-javascript-engine.md) — build our ow
 ECMAScript engine in Rust; detailed plan:
 [docs/architecture/js-engine-plan.md](docs/architecture/js-engine-plan.md).
 
+- **R0 skeleton: DONE** (commit `b4469a3`). Lexer, parser, bytecode compiler,
+  iterative VM, heap with GC. 75 passing eval tests. 9 tests deferred to R1
+  (function calls/closures, break/continue, try/catch/finally).
 - Runs **parallel** to Phases A–D; it gates nothing in them.
 - QuickJS stays the live runtime until the swap gate (R4/R5 pass rates +
   real-page smoke suite). JsBridge is the only swap point — capability modules

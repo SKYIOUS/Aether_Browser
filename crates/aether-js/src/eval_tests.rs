@@ -290,7 +290,7 @@ fn nested_if() {
     );
 }
 
-// ─── Functions (R0-incomplete: closures/calls not yet wired) ───
+// ─── Functions (R1: function call frames not yet wired) ───
 
 #[test]
 #[ignore]
@@ -315,7 +315,7 @@ fn function_closure() {
     );
 }
 
-// ─── Exceptions (R0-incomplete: try/catch not yet wired) ───
+// ─── Exceptions (R1: try/catch/finally not yet wired) ───
 
 #[test]
 #[ignore]
