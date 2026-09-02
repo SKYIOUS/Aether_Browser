@@ -167,6 +167,25 @@ pub fn clear_cache() {
     }
 }
 
+/// Returns the number of entries in the image cache. Test-only.
+pub fn image_cache_len() -> usize {
+    image_cache().read().map(|c| c.len()).unwrap_or(0)
+}
+
+/// Clears all entries from the image cache. Test-only.
+pub fn clear_image_cache() {
+    if let Ok(mut c) = image_cache().write() {
+        c.clear();
+    }
+}
+
+/// Insert a raw entry into the image cache. Test-only.
+pub fn put_image_cache(url: &str, bytes: Vec<u8>) {
+    if let Ok(mut c) = image_cache().write() {
+        c.put(url.to_string(), (bytes, Instant::now()));
+    }
+}
+
 // ?? Cookie jar ????????????????????????????????????????????????????????
 // Cookie lifecycle lives in net::cookies (PLAN C2).
 pub mod cookies;
@@ -1111,21 +1130,30 @@ pub fn is_same_origin(a: &str, b: &str) -> bool {
     port_a == port_b
 }
 
-type ImageCache = HashMap<String, (Vec<u8>, Instant)>;
+type ImageCache = lru::LruCache<String, (Vec<u8>, Instant)>;
+
+const IMAGE_CACHE_CAPACITY: usize = 256;
 
 fn image_cache() -> &'static RwLock<ImageCache> {
     static IMG_CACHE: OnceLock<RwLock<ImageCache>> = OnceLock::new();
-    IMG_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+    IMG_CACHE.get_or_init(|| {
+        RwLock::new(lru::LruCache::new(
+            NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap(),
+        ))
+    })
 }
 
 /// Fetches binary content (images, etc.) from the given URL.
-// ponytail: simple image cache with 60s TTL, capped at 100 entries
+// ponytail: image cache LRU-256 with 60s TTL, per-URL raw bytes
 pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchError> {
     if let Some(bytes) = mock::resolve_binary(url) {
         plog!("mock", "Serving binary for {}", url);
+        if let Ok(mut cache) = image_cache().write() {
+            cache.put(url.to_string(), (bytes.clone(), Instant::now()));
+        }
         return Ok(bytes);
     }
-    if let Ok(cache) = image_cache().read() {
+    if let Ok(mut cache) = image_cache().write() {
         if let Some((bytes, time)) = cache.get(url) {
             if time.elapsed() < Duration::from_secs(60) {
                 plog!("cache", "Image HIT: {}", url);
@@ -1177,11 +1205,7 @@ pub fn fetch_bytes(url: &str, initiator: Option<&str>) -> Result<Vec<u8>, FetchE
             .to_vec();
         plog!("net", "Fetched {} bytes", bytes.len());
         if let Ok(mut cache) = image_cache().write() {
-            if cache.len() > 100 {
-                cache.clear();
-                plog!("cache", "Image cache evicted (size > 100)");
-            }
-            cache.insert(url.to_string(), (bytes.clone(), Instant::now()));
+            cache.put(url.to_string(), (bytes.clone(), Instant::now()));
         }
         return Ok(bytes);
     }
