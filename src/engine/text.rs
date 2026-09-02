@@ -118,7 +118,7 @@ pub fn measure_text_width(text: &str, font_size: f32) -> f32 {
 
 fn measure_text_width_uncached(text: &str, font_size: f32) -> f32 {
     let metrics = Metrics::new(font_size, font_size * 1.2);
-    let mut font_system = font_system().lock().unwrap();
+    let mut font_system = font_system().lock().unwrap_or_else(|e| e.into_inner());
 
     BUFFER_CONSTRUCTIONS.with(|c| *c.borrow_mut() += 1);
 

@@ -974,7 +974,7 @@ fn do_fetch_page_content_sync(
                     .collect();
                 handles
                     .into_iter()
-                    .map(|h| h.join().expect("css fetch thread"))
+                    .map(|h| h.join().unwrap_or_else(|_| (String::new(), Err(()))))
                     .collect()
             });
         for (resolved, body_result) in results {
@@ -1124,7 +1124,7 @@ fn do_fetch_page_content_sync(
             .collect();
         handles
             .into_iter()
-            .map(|h| h.join().expect("image fetch thread"))
+            .map(|h| h.join().unwrap_or_else(|_| (String::new(), None)))
             .collect()
     });
     let fetched_map: HashMap<String, Vec<u8>> = fetched_bytes

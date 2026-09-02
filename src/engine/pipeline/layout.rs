@@ -27,7 +27,7 @@ thread_local! {
 fn get_char_width(font_size: f32) -> f32 {
     let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
     let cache = CHAR_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
-    let mut guard = cache.write().unwrap();
+    let mut guard = cache.write().unwrap_or_else(|e| e.into_inner());
     *guard
         .entry(fs_key)
         .or_insert_with(|| measure_text_width("M", font_size))
@@ -36,7 +36,7 @@ fn get_char_width(font_size: f32) -> f32 {
 fn get_space_width(font_size: f32) -> f32 {
     let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
     let cache = SPACE_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
-    let mut guard = cache.write().unwrap();
+    let mut guard = cache.write().unwrap_or_else(|e| e.into_inner());
     *guard
         .entry(fs_key)
         .or_insert_with(|| measure_text_width(" ", font_size))
@@ -46,7 +46,7 @@ fn get_space_width(font_size: f32) -> f32 {
 fn get_digit_width(font_size: f32, digit: char) -> f32 {
     let fs_key = (font_size.clamp(6.0, 200.0) * 100.0) as u32;
     let cache = DIGIT_WIDTH_CACHE.get_or_init(|| RwLock::new(HashMap::new()));
-    let mut guard = cache.write().unwrap();
+    let mut guard = cache.write().unwrap_or_else(|e| e.into_inner());
     *guard
         .entry((fs_key, digit))
         .or_insert_with(|| measure_text_width(&digit.to_string(), font_size))
