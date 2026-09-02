@@ -1,0 +1,9 @@
+[package]
+name = "aether-js"
+version = "0.1.0"
+edition = "2021"
+description = "Native ECMAScript engine — Vayu Browser (ADR-0003)"
+
+[dependencies]
+
+[dev-dependencies]

@@ -1,5 +1,5 @@
 [workspace]
-members = ["korlang", "crates/aether-dom", "crates/aether-css", "crates/layout-engine"]
+members = ["korlang", "crates/aether-dom", "crates/aether-css", "crates/layout-engine", "crates/aether-js"]
 resolver = "2"
 [package]
 name = "vayu-browser"
