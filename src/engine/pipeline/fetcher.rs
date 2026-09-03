@@ -240,6 +240,9 @@ fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         } else {
             FontWeight::Normal
         },
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: bg,
         border_widths: [0.0; 4],
         border_color: None,
@@ -355,6 +358,9 @@ fn history_page(
         } else {
             FontWeight::Normal
         },
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: None,
         border_widths: [0.0; 4],
         border_color: None,
@@ -465,6 +471,9 @@ fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         } else {
             FontWeight::Normal
         },
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: bg,
         border_widths: [0.0; 4],
         border_color: None,
@@ -563,6 +572,9 @@ fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         } else {
             FontWeight::Normal
         },
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: bg,
         border_widths: [0.0; 4],
         border_color: None,
@@ -689,6 +701,9 @@ fn error_page(
         } else {
             FontWeight::Normal
         },
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: bg,
         border_widths: [0.0; 4],
         border_color: None,
@@ -1530,6 +1545,9 @@ mod b3_history_tests {
             color: Color::BLACK,
             font_size: 16.0,
             font_weight: FontWeight::Normal,
+            font_family: None,
+            text_align: None,
+            visibility: None,
             background_color: None,
             border_widths: [0.0; 4],
             border_color: None,

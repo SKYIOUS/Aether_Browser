@@ -6,8 +6,8 @@ use iced::Color;
 use crate::engine::dom::{Node, NodeType};
 use crate::engine::js::js_bridge::FlatNode;
 use crate::engine::stratus::{
-    self, AlignItems, AlignSelf, CustomPropertyMap, Display, FlexDirection, FlexWrap,
-    JustifyContent, Position, Stylesheet,
+    self, AlignItems, AlignSelf, ComputedStyle, CustomPropertyMap, Display, FlexDirection,
+    FlexWrap, JustifyContent, Position, Stylesheet,
 };
 use crate::ui::style::C;
 use aether_css::AlignContent;
@@ -77,6 +77,9 @@ pub struct FullStyle {
     pub color: Color,
     pub font_size: f32,
     pub font_weight: FontWeight,
+    pub font_family: Option<String>,
+    pub text_align: Option<String>,
+    pub visibility: Option<String>,
     pub background_color: Option<Color>,
     pub margin_top: f32,
     pub margin_right: Option<f32>,
@@ -124,6 +127,9 @@ pub struct StyledElement {
     pub color: Color,
     pub font_size: f32,
     pub font_weight: FontWeight,
+    pub font_family: Option<String>,
+    pub text_align: Option<String>,
+    pub visibility: Option<String>,
     pub background_color: Option<Color>,
     pub border_widths: [f32; 4],
     pub border_color: Option<Color>,
@@ -398,12 +404,23 @@ fn compute_full_style(
     vw: f32,
     vh: f32,
     parent_vars: &CustomPropertyMap,
-) -> (FullStyle, CustomPropertyMap) {
+    parent_computed: Option<&ComputedStyle>,
+) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
     let (tag, attrs) = match &node.node_type {
         NodeType::Element(e) => (e.tag_name.to_lowercase(), &e.attributes),
         _ => (String::new(), &HashMap::new()),
     };
-    compute_full_style_inner(&tag, attrs, None, Some(node), ss, vw, vh, parent_vars)
+    compute_full_style_inner(
+        &tag,
+        attrs,
+        None,
+        Some(node),
+        ss,
+        vw,
+        vh,
+        parent_vars,
+        parent_computed,
+    )
 }
 
 fn compute_full_style_flat(
@@ -412,7 +429,8 @@ fn compute_full_style_flat(
     vw: f32,
     vh: f32,
     parent_vars: &CustomPropertyMap,
-) -> (FullStyle, CustomPropertyMap) {
+    parent_computed: Option<&ComputedStyle>,
+) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
     compute_full_style_inner(
         &node.tag,
         &node.attrs,
@@ -422,6 +440,7 @@ fn compute_full_style_flat(
         vw,
         vh,
         parent_vars,
+        parent_computed,
     )
 }
 
@@ -435,9 +454,17 @@ fn compute_full_style_inner(
     vw: f32,
     vh: f32,
     parent_vars: &CustomPropertyMap,
-) -> (FullStyle, CustomPropertyMap) {
+    parent_computed: Option<&ComputedStyle>,
+) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
     let (cs, custom) = match node {
-        Some(n) => crate::engine::style::compute_style_vp_with_vars(n, ss, vw, vh, parent_vars),
+        Some(n) => crate::engine::style::compute_style_vp_with_vars(
+            n,
+            ss,
+            vw,
+            vh,
+            parent_vars,
+            parent_computed,
+        ),
         None => {
             let merged = if let Some(inline) = inline_styles {
                 let mut m = HashMap::with_capacity(attrs.len() + inline.len());
@@ -449,15 +476,19 @@ fn compute_full_style_inner(
             };
             let element =
                 crate::engine::stratus::ElementData::with_attributes_ref(tag.to_string(), &merged);
-            crate::engine::stratus::resolve_style_with_vars_and_custom(
+            let (cs, custom, _mask) = crate::engine::stratus::resolve_style_with_vars_and_custom(
                 &element,
                 ss,
                 vw,
                 vh,
                 parent_vars,
-            )
+                parent_computed,
+            );
+            (cs, custom)
         }
     };
+    // Clone before partial moves via .or() on border_color fields below.
+    let cs_for_return = cs.clone();
     // Match (not unwrap_or): the palette read must stay lazy so elements with
     // an explicit CSS color never touch the global at all.
     let mut color = match cs.color.as_ref() {
@@ -541,6 +572,9 @@ fn compute_full_style_inner(
         color,
         font_size,
         font_weight,
+        font_family: cs.font_family.clone(),
+        text_align: cs.text_align.clone(),
+        visibility: cs.visibility.clone(),
         background_color,
         margin_top,
         margin_right,
@@ -578,7 +612,7 @@ fn compute_full_style_inner(
         inset_bottom: cs.bottom.unwrap_or(0.0),
         inset_left: cs.left.unwrap_or(0.0),
     };
-    (fs, custom)
+    (fs, custom, cs_for_return)
 }
 
 fn make_element(
@@ -599,6 +633,9 @@ fn make_element(
         color: fs.color,
         font_size: fs.font_size,
         font_weight: fs.font_weight,
+        font_family: fs.font_family.clone(),
+        text_align: fs.text_align.clone(),
+        visibility: fs.visibility.clone(),
         background_color: fs.background_color,
         border_widths: fs.border_widths,
         border_color: fs.border_color,
@@ -658,6 +695,7 @@ pub fn extract_elements(
     viewport_w: f32,
     viewport_h: f32,
     parent_vars: &CustomPropertyMap,
+    parent_computed: Option<&ComputedStyle>,
 ) {
     if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS {
         return;
@@ -677,6 +715,7 @@ pub fn extract_elements(
                     viewport_w,
                     viewport_h,
                     parent_vars,
+                    parent_computed,
                 );
             }
         }
@@ -692,8 +731,14 @@ pub fn extract_elements(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let (fs, _custom) =
-                        compute_full_style(node, ss, viewport_w, viewport_h, parent_vars);
+                    let (fs, _custom, _cs) = compute_full_style(
+                        node,
+                        ss,
+                        viewport_w,
+                        viewport_h,
+                        parent_vars,
+                        parent_computed,
+                    );
                     let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -723,14 +768,21 @@ pub fn extract_elements(
                             viewport_w,
                             viewport_h,
                             parent_vars,
+                            parent_computed,
                         );
                     }
                 }
                 return;
             }
 
-            let (fs, element_custom_vars) =
-                compute_full_style(node, ss, viewport_w, viewport_h, parent_vars);
+            let (fs, element_custom_vars, element_computed) = compute_full_style(
+                node,
+                ss,
+                viewport_w,
+                viewport_h,
+                parent_vars,
+                parent_computed,
+            );
 
             let uses_default_margins = uses_default_margins(tag.as_str());
 
@@ -1053,6 +1105,7 @@ pub fn extract_elements(
                     viewport_w,
                     viewport_h,
                     &element_custom_vars,
+                    Some(&element_computed),
                 );
             }
         }
@@ -1132,6 +1185,7 @@ pub(crate) fn extract_elements_flat(
         vw: f32,
         vh: f32,
         parent_vars: &CustomPropertyMap,
+        parent_computed: Option<&ComputedStyle>,
     ) {
         if depth > MAX_DEPTH || elements.len() >= MAX_ELEMENTS {
             return;
@@ -1156,6 +1210,7 @@ pub(crate) fn extract_elements_flat(
                     vw,
                     vh,
                     parent_vars,
+                    None,
                 );
                 dom_path.pop();
             }
@@ -1173,7 +1228,8 @@ pub(crate) fn extract_elements_flat(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let (fs, _custom) = compute_full_style_flat(node, ss, vw, vh, parent_vars);
+                    let (fs, _custom, _cs) =
+                        compute_full_style_flat(node, ss, vw, vh, parent_vars, parent_computed);
                     let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -1199,6 +1255,7 @@ pub(crate) fn extract_elements_flat(
                         vw,
                         vh,
                         parent_vars,
+                        parent_computed,
                     );
                     dom_path.pop();
                 }
@@ -1206,7 +1263,8 @@ pub(crate) fn extract_elements_flat(
             return;
         }
 
-        let (fs, element_custom_vars) = compute_full_style_flat(node, ss, vw, vh, parent_vars);
+        let (fs, element_custom_vars, element_computed) =
+            compute_full_style_flat(node, ss, vw, vh, parent_vars, parent_computed);
         let uses_default_margins = uses_default_margins(tag);
 
         let (
@@ -1405,6 +1463,7 @@ pub(crate) fn extract_elements_flat(
                 vw,
                 vh,
                 &element_custom_vars,
+                Some(&element_computed),
             );
             dom_path.pop();
         }
@@ -1426,6 +1485,7 @@ pub(crate) fn extract_elements_flat(
         viewport_w,
         viewport_h,
         parent_vars,
+        None,
     );
 }
 
@@ -1509,6 +1569,7 @@ mod tests {
             800.0,
             600.0,
             &CustomPropertyMap::new(),
+            None,
         );
         let p = elements
             .iter()
@@ -1534,6 +1595,7 @@ mod tests {
             800.0,
             600.0,
             &CustomPropertyMap::new(),
+            None,
         );
         let a = elements
             .iter()
@@ -1563,6 +1625,7 @@ mod tests {
             800.0,
             600.0,
             &CustomPropertyMap::new(),
+            None,
         );
         let img = elements
             .iter()
@@ -1650,6 +1713,7 @@ mod tests {
                     800.0,
                     600.0,
                     &CustomPropertyMap::new(),
+                    None,
                 );
                 (
                     !elements.is_empty(),
@@ -1681,15 +1745,16 @@ mod size_probe {
     use super::StyledElement;
 
     // A3 guard: repeated per-element Strings became Copy enums / a u8 bitfield.
-    // Measured 800 -> 544 bytes inline, plus one dropped heap allocation per
-    // removed String (~10 per element). Crossing this bound means new weight
-    // snuck back in — justify it against MAX_ELEMENTS (100k) or shrink elsewhere.
+    // Measured 800 -> 544 bytes inline (A3), then +72 bytes for font_family,
+    // text_align, visibility (Option<String>) to support CSS inheritance.
+    // Crossing this bound means new weight snuck back in — justify it against
+    // MAX_ELEMENTS (100k) or shrink elsewhere.
     #[test]
     fn styled_element_stays_slim() {
         let size = std::mem::size_of::<StyledElement>();
         assert!(
-            size <= 544,
-            "StyledElement grew to {} bytes; A3 slimming baseline is 544",
+            size <= 616,
+            "StyledElement grew to {} bytes; baseline is 616",
             size
         );
     }

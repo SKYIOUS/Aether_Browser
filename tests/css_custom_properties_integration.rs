@@ -105,7 +105,9 @@ fn resolve_with_parent(
     } else {
         ElementData::with_attributes(tag.to_string(), map)
     };
-    stratus::resolve_style_with_vars_and_custom(&el, &sheet, 800.0, 600.0, parent_vars)
+    let (cs, custom, _mask) =
+        stratus::resolve_style_with_vars_and_custom(&el, &sheet, 800.0, 600.0, parent_vars, None);
+    (cs, custom)
 }
 
 fn extract(html: &str, css: &str) -> Vec<StyledElement> {
@@ -123,6 +125,7 @@ fn extract(html: &str, css: &str) -> Vec<StyledElement> {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     elements
 }
@@ -142,6 +145,7 @@ fn extract_and_layout(html: &str, css: &str, vw: f32, vh: f32) -> Vec<StyledElem
         vw,
         vh,
         &CustomPropertyMap::new(),
+        None,
     );
     apply_taffy_layout(&mut elements, vw, vh);
     elements
@@ -598,4 +602,328 @@ fn test_resolve_with_inherited_parent_vars() {
     let css = "div { font-size: var(--x); }";
     let (style, _) = resolve_with_parent(css, "div", &[], &parent_vars);
     assert_eq!(style.font_size, Some(42.0));
+}
+
+// ══════════════════════════════════════════════════════════════
+// 8. CSS standard property inheritance
+// ══════════════════════════════════════════════════════════════
+
+use aether_css::{apply_inheritance, resolve_style_with_vars_and_custom, InheritMask};
+
+fn resolve_with_parent_computed(
+    css: &str,
+    tag: &str,
+    classes: &[&str],
+    parent_vars: &CustomPropertyMap,
+    parent_computed: Option<&ComputedStyle>,
+) -> (ComputedStyle, CustomPropertyMap) {
+    let sheet = stratus::parse(css);
+    let mut map = std::collections::HashMap::new();
+    for c in classes {
+        map.insert("class".to_string(), c.to_string());
+    }
+    let el = if map.is_empty() {
+        ElementData::new(tag.to_string())
+    } else {
+        ElementData::with_attributes(tag.to_string(), map)
+    };
+    let (cs, custom, _mask) =
+        resolve_style_with_vars_and_custom(&el, &sheet, 800.0, 600.0, parent_vars, parent_computed);
+    (cs, custom)
+}
+
+#[test]
+fn test_font_size_inherits_from_parent() {
+    let parent_css = "div { font-size: 24px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_size,
+        Some(24.0),
+        "child should inherit font-size from parent"
+    );
+}
+
+#[test]
+fn test_font_weight_inherits_from_parent() {
+    let parent_css = "div { font-weight: bold; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_weight.as_deref(),
+        Some("bold"),
+        "child should inherit font-weight"
+    );
+}
+
+#[test]
+fn test_color_inherits_from_parent() {
+    let parent_css = "div { color: red; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert!(
+        child.color.is_some(),
+        "child should inherit color from parent"
+    );
+}
+
+#[test]
+fn test_font_family_inherits_from_parent() {
+    let parent_css = "div { font-family: monospace; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_family.as_deref(),
+        Some("monospace"),
+        "child should inherit font-family"
+    );
+}
+
+#[test]
+fn test_text_align_inherits_from_parent() {
+    let parent_css = "div { text-align: center; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.text_align.as_deref(),
+        Some("center"),
+        "child should inherit text-align"
+    );
+}
+
+#[test]
+fn test_visibility_inherits_from_parent() {
+    let parent_css = "div { visibility: hidden; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.visibility.as_deref(),
+        Some("hidden"),
+        "child should inherit visibility"
+    );
+}
+
+#[test]
+fn test_child_override_prevents_inheritance() {
+    let parent_css = "div { font-size: 24px; color: red; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { font-size: 12px; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_size,
+        Some(12.0),
+        "child's own font-size should override parent"
+    );
+    assert!(
+        child.color.is_some(),
+        "child should still inherit color (not overridden)"
+    );
+}
+
+#[test]
+fn test_inherit_keyword_pulls_from_parent() {
+    let parent_css = "div { font-size: 24px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { font-size: inherit; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_size,
+        Some(24.0),
+        "inherit keyword should pull parent's value"
+    );
+}
+
+#[test]
+fn test_non_inheritable_properties_not_inherited() {
+    let parent_css = "div { margin-top: 10px; padding: 5px; border-width: 2px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.margin_top, None,
+        "margin should NOT inherit (initial is None)"
+    );
+    assert_eq!(
+        child.padding_top,
+        Some(0.0),
+        "padding should NOT inherit (stays initial 0.0)"
+    );
+    assert_eq!(
+        child.border_top_width,
+        Some(0.0),
+        "border-width should NOT inherit (stays initial 0.0)"
+    );
+}
+
+#[test]
+fn test_root_element_gets_initial_values_when_no_parent() {
+    let css = "div { }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        style.font_size, initial.font_size,
+        "root should get initial font-size"
+    );
+}
+
+#[test]
+fn test_apply_inheritance_fills_none_fields() {
+    let mut child = ComputedStyle::default_style();
+    child.color = None;
+    child.font_size = None;
+    child.font_weight = None;
+
+    let mut parent = ComputedStyle::default_style();
+    parent.color = Some(aether_css::Color {
+        r: 255,
+        g: 0,
+        b: 0,
+        a: 255,
+    });
+    parent.font_size = Some(20.0);
+    parent.font_weight = Some("bold".into());
+
+    apply_inheritance(
+        &mut child,
+        Some(&parent),
+        InheritMask::default(),
+        InheritMask::default(),
+    );
+
+    assert!(child.color.is_some(), "color should be inherited");
+    assert_eq!(child.font_size, Some(20.0), "font_size should be inherited");
+    assert_eq!(
+        child.font_weight.as_deref(),
+        Some("bold"),
+        "font_weight should be inherited"
+    );
+}
+
+#[test]
+fn test_apply_inheritance_uses_initial_when_no_parent() {
+    let mut child = ComputedStyle::default_style();
+    child.color = None;
+    child.font_size = None;
+
+    apply_inheritance(
+        &mut child,
+        None,
+        InheritMask::default(),
+        InheritMask::default(),
+    );
+
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        child.font_size, initial.font_size,
+        "should use initial value when no parent"
+    );
+}
+
+#[test]
+fn test_line_height_child_override_preserves_explicit_value() {
+    let parent_css = "div { line-height: 20px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { line-height: 1.5; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.line_height,
+        Some(1.5),
+        "child's explicit line-height should NOT be overwritten by parent"
+    );
+}
+
+#[test]
+fn test_line_height_inherit_keyword_pulls_from_parent() {
+    let parent_css = "div { line-height: 20px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { line-height: inherit; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.line_height,
+        Some(20.0),
+        "inherit keyword should copy parent's line-height"
+    );
+}
+
+#[test]
+fn test_line_height_no_parent_gets_explicit_value() {
+    let css = "div { line-height: 24px; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.line_height,
+        Some(24.0),
+        "line-height without parent should be the explicit value"
+    );
 }

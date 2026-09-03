@@ -1,4 +1,4 @@
-﻿use vayu_browser::engine::parser::parse_html;
+use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
 use vayu_browser::engine::stratus::{CustomPropertyMap, Stylesheet};
 
@@ -17,13 +17,14 @@ fn extract(html: &str) -> Vec<vayu_browser::engine::pipeline::extractor::StyledE
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     elements
 }
 
 // Regression guard for PLAN A1: the old 2000-element cap silently dropped
 // content on long pages. The budget is a safety ceiling far above real
-// page sizes, not a fidelity target — a normal long article must extract whole.
+// page sizes, not a fidelity target � a normal long article must extract whole.
 #[test]
 fn extraction_passes_old_element_cap() {
     let mut html = String::from("<html><body>");
@@ -88,7 +89,7 @@ fn content_beyond_old_1mb_boundary_is_extracted() {
     let filler_item =
         "<p>lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod</p>";
     let mut html = String::from("<html><body><p class=\"early\">early-marker</p>");
-    // ~78 bytes x 14000 ≈ 1.1MB total; element count also far past the old 2000 cap
+    // ~78 bytes x 14000 � 1.1MB total; element count also far past the old 2000 cap
     for _ in 0..14000 {
         html.push_str(filler_item);
     }

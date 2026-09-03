@@ -38,6 +38,7 @@ pub fn compute_style_vp_with_vars(
     vw: f32,
     vh: f32,
     parent_vars: &CustomPropertyMap,
+    parent_computed: Option<&ComputedStyle>,
 ) -> (ComputedStyle, CustomPropertyMap) {
     let element = match &node.node_type {
         NodeType::Element(elem) => {
@@ -45,5 +46,13 @@ pub fn compute_style_vp_with_vars(
         }
         _ => ElementData::new("unknown".to_string()),
     };
-    resolve_style_with_vars_and_custom(&element, stylesheet, vw, vh, parent_vars)
+    let (cs, custom, _mask) = resolve_style_with_vars_and_custom(
+        &element,
+        stylesheet,
+        vw,
+        vh,
+        parent_vars,
+        parent_computed,
+    );
+    (cs, custom)
 }

@@ -13,6 +13,7 @@ use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::extract_elements;
 use vayu_browser::engine::pipeline::{apply_taffy_layout, fetch_page_content};
 use vayu_browser::engine::stratus;
+use vayu_browser::engine::stratus::CustomPropertyMap;
 
 fn small_doc() -> String {
     "<html><body><h1>Title</h1><p>hello world</p><a href=\"https://x\">link</a></body></html>"
@@ -44,7 +45,19 @@ fn elements_from(html: &str) -> Vec<vayu_browser::engine::pipeline::StyledElemen
     let dom = parse_html(html);
     let sheet = stratus::parse("");
     let mut els = Vec::new();
-    extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+    extract_elements(
+        &dom,
+        &mut els,
+        0,
+        &sheet,
+        None,
+        None,
+        vec![],
+        800.0,
+        600.0,
+        &CustomPropertyMap::new(),
+        None,
+    );
     els
 }
 
@@ -178,6 +191,8 @@ fn bench_extract(c: &mut Criterion) {
                 vec![],
                 800.0,
                 600.0,
+                &CustomPropertyMap::new(),
+                None,
             );
             black_box(els.len())
         })
@@ -315,7 +330,19 @@ fn bench_f10b_gap_classification(c: &mut Criterion) {
             stratus::parse(css)
         };
         let mut els = Vec::new();
-        extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+        extract_elements(
+            &dom,
+            &mut els,
+            0,
+            &sheet,
+            None,
+            None,
+            vec![],
+            800.0,
+            600.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
         if els.is_empty() && !html.is_empty() {
             // FIXTURE_ISSUE: extraction produced no elements for non-empty html
             fixture_details.push((fixture_name.to_string(), 0, 0, 0, 0, 1));
@@ -698,7 +725,19 @@ fn bench_f10b_gap_classification(c: &mut Criterion) {
             let dom = parse_html(fixtures[0].0);
             let sheet = stratus::parse(fixtures[0].1);
             let mut els = Vec::new();
-            extract_elements(&dom, &mut els, 0, &sheet, None, None, vec![], 800.0, 600.0);
+            extract_elements(
+                &dom,
+                &mut els,
+                0,
+                &sheet,
+                None,
+                None,
+                vec![],
+                800.0,
+                600.0,
+                &CustomPropertyMap::new(),
+                None,
+            );
             let _ = run_native_layout(&els, 800.0, 600.0);
         })
     });

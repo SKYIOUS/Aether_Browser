@@ -1,4 +1,4 @@
-﻿use aether_css::AlignContent;
+use aether_css::AlignContent;
 use std::collections::HashMap;
 use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::{
@@ -39,6 +39,9 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
         color: iced::Color::BLACK,
         font_size: 16.0,
         font_weight: FontWeight::Normal,
+        font_family: None,
+        text_align: None,
+        visibility: None,
         background_color: None,
         border_widths: [0.0; 4],
         border_color: None,
@@ -92,9 +95,9 @@ fn make_test(tag: &str, text: &str, display: &str, parent: Option<usize>) -> Sty
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 1. CSS PARSING (tests 1-10)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_css_parse_color_hex() {
@@ -189,9 +192,9 @@ fn test_css_parse_multiple_rules() {
     assert_eq!(sheet.rules.len(), 3);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 2. COMPUTED STYLES (tests 11-15)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_computed_style_inline_to_block_for_block_tags() {
@@ -244,9 +247,9 @@ fn test_computed_style_justify_content() {
     assert_eq!(style.flex.justify_content, JustifyContent::SpaceBetween);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 3. EXTRACTOR LOGIC (tests 16-22)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_skip_tag_script() {
@@ -330,6 +333,7 @@ fn test_extract_elements_from_simple_html() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     assert!(!elements.is_empty());
 }
@@ -351,6 +355,7 @@ fn test_extract_elements_no_script_content() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     assert!(!elements.iter().any(|e| e.text.contains("var x")));
 }
@@ -372,6 +377,7 @@ fn test_extract_elements_script_content_skipped() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     assert!(elements.iter().any(|e| e.text.contains("safe")));
     assert!(!elements.iter().any(|e| e.text.contains("alert")));
@@ -394,6 +400,7 @@ fn test_extract_elements_head_content_hidden() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     assert!(elements.iter().any(|e| e.text.contains("body")));
     assert!(!elements
@@ -401,9 +408,9 @@ fn test_extract_elements_head_content_hidden() {
         .any(|e| e.text.contains("T") && e.tag == "text"));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 4. BLOCK LAYOUT (tests 23-28)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_block_elements_stack_vertically() {
@@ -470,7 +477,7 @@ fn test_multiple_siblings_stacked() {
 
 #[test]
 fn test_block_with_margin_top() {
-    // ponytail: first child's margin collapses with root — use padding to prevent
+    // ponytail: first child's margin collapses with root � use padding to prevent
     let mut parent = make_test("div", "", "block", None);
     parent.padding = [1.0, 0.0, 0.0, 0.0];
     let mut el = make_test("p", "Hello", "block", Some(0));
@@ -484,9 +491,9 @@ fn test_block_with_margin_top() {
     );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 5. INLINE LAYOUT (tests 29-34)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_inline_siblings_flow_horizontally() {
@@ -570,9 +577,9 @@ fn test_multiple_inline_spans() {
     assert!(elements[2].x >= elements[1].x);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 6. FLEXBOX LAYOUT (tests 35-40)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_flex_row_direction() {
@@ -733,9 +740,9 @@ fn test_flex_column_stretch_empty_block_child_with_sibling() {
     assert!(elements[1].width > 0.0, "P element should have width");
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 7. GRID LAYOUT (tests 41-45)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_grid_display() {
@@ -807,9 +814,9 @@ fn test_grid_empty_container() {
     assert!(elements[0].width > 0.0);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 8. FLOAT LAYOUT (tests 46-50)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_float_left_element() {
@@ -886,13 +893,13 @@ fn test_multiple_floats() {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 9. MARGIN COLLAPSE (tests 51-55)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_margin_top_on_first_element() {
-    // ponytail: first child's top margin collapses with root — use padding to prevent
+    // ponytail: first child's top margin collapses with root � use padding to prevent
     let mut parent = make_test("div", "", "block", None);
     parent.padding = [1.0, 0.0, 0.0, 0.0];
     let mut el = make_test("p", "Hello", "block", Some(0));
@@ -934,7 +941,7 @@ fn test_zero_margins() {
 
 #[test]
 fn test_large_margin_top() {
-    // ponytail: first child's margin collapses with root — use padding to prevent
+    // ponytail: first child's margin collapses with root � use padding to prevent
     let mut parent = make_test("div", "", "block", None);
     parent.padding = [1.0, 0.0, 0.0, 0.0];
     let mut el = make_test("p", "Spaced", "block", Some(0));
@@ -966,9 +973,9 @@ fn test_margins_on_nested_elements() {
     );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 10. BORDER & PADDING (tests 56-60)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_border_widths_applied() {
@@ -1020,9 +1027,9 @@ fn test_element_positioning_with_padding() {
     assert!(elements[0].y >= 0.0);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // EDGE CASES (bonus tests 61-70)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_empty_elements_vec() {
@@ -1127,9 +1134,9 @@ fn test_font_size_affects_height() {
     );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 // 11. HTML ENTITY DECODING (tests 71+)
-// ═══════════════════════════════════════════════════════════════════════════════
+// -------------------------------------------------------------------------------
 
 #[test]
 fn test_decode_amp() {
@@ -1208,12 +1215,13 @@ fn test_decode_in_extracted_text() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     let p = elements
         .iter()
         .find(|e| e.tag == "p")
         .expect("should find <p>");
-    assert_eq!(p.text, "hello & goodbye", "&amp; should decode to &");
+    assert_eq!(p.text, "hello & goodbye", "&amp; should decode &");
 }
 
 #[test]
@@ -1233,6 +1241,7 @@ fn test_decode_href_attribute() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     let a = elements
         .iter()
@@ -1262,6 +1271,7 @@ fn test_decode_alt_attribute() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     let img = elements
         .iter()
@@ -1310,6 +1320,7 @@ fn test_inline_formatting_tags_inside_paragraph() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     let p = elements
         .iter()
@@ -1373,6 +1384,7 @@ fn test_inline_link_has_text_width() {
         1440.0,
         900.0,
         &CustomPropertyMap::new(),
+        None,
     );
     apply_taffy_layout(&mut elements, 1440.0, 900.0);
     let h1 = elements

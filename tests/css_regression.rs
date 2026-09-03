@@ -420,6 +420,7 @@ fn test_inline_child_text_inherited() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     let p = elements
         .iter()

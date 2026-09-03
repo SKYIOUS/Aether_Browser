@@ -78,6 +78,7 @@ fn dump(name: &str, html: &str, css: &str) {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
     println!("=== {} ===", name);
     println!("extracted {} elements:", els.len());
@@ -223,6 +224,9 @@ fn main() {
                 color: iced::Color::BLACK,
                 font_size: 16.0,
                 font_weight: FontWeight::Normal,
+                font_family: None,
+                text_align: None,
+                visibility: None,
                 background_color: None,
                 border_widths: [0.0; 4],
                 border_color: None,

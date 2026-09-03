@@ -9,6 +9,66 @@ use super::style_value::{
 };
 use std::collections::HashMap;
 
+/// Bitmask tracking which inheritable properties were set to `inherit`.
+/// Exists only until `apply_inheritance()` consumes it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InheritMask(u32);
+
+impl InheritMask {
+    const COLOR: u32 = 1 << 0;
+    const FONT_SIZE: u32 = 1 << 1;
+    const FONT_WEIGHT: u32 = 1 << 2;
+    const FONT_FAMILY: u32 = 1 << 3;
+    const LINE_HEIGHT: u32 = 1 << 4;
+    const TEXT_ALIGN: u32 = 1 << 5;
+    const VISIBILITY: u32 = 1 << 6;
+
+    fn set(&mut self, bit: u32) {
+        self.0 |= bit;
+    }
+    fn has(&self, bit: u32) -> bool {
+        self.0 & bit != 0
+    }
+}
+
+/// Apply CSS inheritance: for each inheritable property, if the child has no
+/// specified value (None) or the `inherit` keyword was used, copy the parent's
+/// computed value. If no parent exists (root element), use the initial value
+/// from `ComputedStyle::default_style()`.
+///
+/// `inherit_mask`: tracks properties set to `inherit` keyword
+/// `set_mask`: tracks properties explicitly set by the cascade (non-inherit keyword)
+pub fn apply_inheritance(
+    child: &mut ComputedStyle,
+    parent: Option<&ComputedStyle>,
+    inherit_mask: InheritMask,
+    set_mask: InheritMask,
+) {
+    let initial = ComputedStyle::default_style();
+    let p = parent.unwrap_or(&initial);
+
+    macro_rules! inherit {
+        ($field:ident, $bit:expr) => {
+            if inherit_mask.has($bit) {
+                // Explicit `inherit` keyword: always copy from parent
+                child.$field = p.$field.clone();
+            } else if !set_mask.has($bit) {
+                // Not set by cascade: use parent's value if available, else initial
+                child.$field = p.$field.clone();
+            }
+            // else: set by cascade — keep child's value
+        };
+    }
+
+    inherit!(color, InheritMask::COLOR);
+    inherit!(font_size, InheritMask::FONT_SIZE);
+    inherit!(font_weight, InheritMask::FONT_WEIGHT);
+    inherit!(font_family, InheritMask::FONT_FAMILY);
+    inherit!(line_height, InheritMask::LINE_HEIGHT);
+    inherit!(text_align, InheritMask::TEXT_ALIGN);
+    inherit!(visibility, InheritMask::VISIBILITY);
+}
+
 /// Custom properties map: `--name` → raw value.
 pub type CustomPropertyMap = HashMap<String, PropertyValue>;
 
@@ -55,20 +115,32 @@ pub fn resolve_style_with_vars(
     collect_custom_properties(&mut custom, &all_decls);
 
     // 3. Apply standard declarations with var() substitution + calc().
-    apply_declarations_with_vars(&mut style, &all_decls, &custom, viewport_w, viewport_h);
+    let mut mask = InheritMask::default();
+    let mut set_mask = InheritMask::default();
+    apply_declarations_with_vars(
+        &mut style,
+        &all_decls,
+        &custom,
+        viewport_w,
+        viewport_h,
+        &mut mask,
+        &mut set_mask,
+    );
 
     style
 }
 
 /// Resolve style and return both ComputedStyle + element's custom properties.
 /// Used by the extraction pipeline to thread inheritance.
+/// `parent_computed` is the parent element's resolved style (None for root).
 pub fn resolve_style_with_vars_and_custom(
     element: &ElementData,
     stylesheet: &Stylesheet,
     viewport_w: f32,
     viewport_h: f32,
     parent_vars: &CustomPropertyMap,
-) -> (ComputedStyle, CustomPropertyMap) {
+    parent_computed: Option<&ComputedStyle>,
+) -> (ComputedStyle, CustomPropertyMap, InheritMask) {
     let mut style = ComputedStyle::default_style();
     let matched = match_rules(element, stylesheet);
 
@@ -80,9 +152,21 @@ pub fn resolve_style_with_vars_and_custom(
     let mut custom = parent_vars.clone();
     collect_custom_properties(&mut custom, &all_decls);
 
-    apply_declarations_with_vars(&mut style, &all_decls, &custom, viewport_w, viewport_h);
+    let mut inherit_mask = InheritMask::default();
+    let mut set_mask = InheritMask::default();
+    apply_declarations_with_vars(
+        &mut style,
+        &all_decls,
+        &custom,
+        viewport_w,
+        viewport_h,
+        &mut inherit_mask,
+        &mut set_mask,
+    );
 
-    (style, custom)
+    apply_inheritance(&mut style, parent_computed, inherit_mask, set_mask);
+
+    (style, custom, inherit_mask)
 }
 
 /// Collect custom property declarations (--*) into the map.
@@ -104,6 +188,8 @@ fn apply_declarations_with_vars(
     custom: &CustomPropertyMap,
     viewport_w: f32,
     viewport_h: f32,
+    inherit_mask: &mut InheritMask,
+    set_mask: &mut InheritMask,
 ) {
     // Resolve all declarations: substitute var(), evaluate calc().
     let resolved: Vec<Declaration> = decls
@@ -129,6 +215,8 @@ fn apply_declarations_with_vars(
             (0, 0, 0),
             viewport_w,
             viewport_h,
+            inherit_mask,
+            set_mask,
         );
     }
 }
@@ -334,7 +422,15 @@ fn apply_op(values: &mut Vec<f32>, op: char) -> Option<()> {
 
 #[allow(dead_code)]
 fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], spec: Specificity) {
-    apply_declarations_vp(style, declarations, spec, 800.0, 600.0)
+    apply_declarations_vp(
+        style,
+        declarations,
+        spec,
+        800.0,
+        600.0,
+        &mut InheritMask::default(),
+        &mut InheritMask::default(),
+    )
 }
 
 fn apply_declarations_vp(
@@ -343,6 +439,8 @@ fn apply_declarations_vp(
     _specificity: Specificity,
     viewport_w: f32,
     viewport_h: f32,
+    inherit_mask: &mut InheritMask,
+    set_mask: &mut InheritMask,
 ) {
     use super::property_names::CssPropertyName;
     use std::str::FromStr;
@@ -353,9 +451,12 @@ fn apply_declarations_vp(
         if let Ok(prop) = CssPropertyName::from_str(&decl.name) {
             match prop {
                 CssPropertyName::Color => {
-                    if let Some(v) = parse_color(&decl.value) {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::COLOR);
+                    } else if let Some(v) = parse_color(&decl.value) {
                         if !v.is_current() {
                             style.color = Some(v);
+                            set_mask.set(InheritMask::COLOR);
                         }
                     }
                 }
@@ -365,14 +466,49 @@ fn apply_declarations_vp(
                 CssPropertyName::BackgroundColor => {
                     style.background_color = parse_color(&decl.value)
                 }
-                CssPropertyName::FontSize => style.font_size = parse_length_vp(&decl.value, vw, vh),
-                CssPropertyName::FontWeight => style.font_weight = parse_keyword(&decl.value),
-                CssPropertyName::FontFamily => style.font_family = parse_keyword(&decl.value),
-                CssPropertyName::TextAlign => style.text_align = parse_keyword(&decl.value),
+                CssPropertyName::FontSize => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::FONT_SIZE);
+                    } else {
+                        style.font_size = parse_length_vp(&decl.value, vw, vh);
+                        set_mask.set(InheritMask::FONT_SIZE);
+                    }
+                }
+                CssPropertyName::FontWeight => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::FONT_WEIGHT);
+                    } else {
+                        style.font_weight = parse_keyword(&decl.value);
+                        set_mask.set(InheritMask::FONT_WEIGHT);
+                    }
+                }
+                CssPropertyName::FontFamily => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::FONT_FAMILY);
+                    } else {
+                        style.font_family = parse_keyword(&decl.value);
+                        set_mask.set(InheritMask::FONT_FAMILY);
+                    }
+                }
+                CssPropertyName::TextAlign => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::TEXT_ALIGN);
+                    } else {
+                        style.text_align = parse_keyword(&decl.value);
+                        set_mask.set(InheritMask::TEXT_ALIGN);
+                    }
+                }
                 CssPropertyName::Display => style.display = parse_display(&decl.value),
                 CssPropertyName::Position => style.position = parse_position(&decl.value),
                 CssPropertyName::Overflow => style.overflow = parse_keyword(&decl.value),
-                CssPropertyName::Visibility => style.visibility = parse_keyword(&decl.value),
+                CssPropertyName::Visibility => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::VISIBILITY);
+                    } else {
+                        style.visibility = parse_keyword(&decl.value);
+                        set_mask.set(InheritMask::VISIBILITY);
+                    }
+                }
                 CssPropertyName::Opacity => {
                     style.opacity = match &decl.value {
                         PropertyValue::Number(n) => Some(n.clamp(0.0, 1.0)),
@@ -514,7 +650,12 @@ fn apply_declarations_vp(
                 CssPropertyName::BoxSizing => style.box_sizing = parse_keyword(&decl.value),
 
                 CssPropertyName::LineHeight => {
-                    style.line_height = parse_length_vp(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                        inherit_mask.set(InheritMask::LINE_HEIGHT);
+                    } else {
+                        style.line_height = parse_length_vp(&decl.value, vw, vh);
+                        set_mask.set(InheritMask::LINE_HEIGHT);
+                    }
                 }
                 CssPropertyName::TextDecoration => {
                     style.text_decoration = parse_keyword(&decl.value)

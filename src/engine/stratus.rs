@@ -4,12 +4,12 @@
 //! Re-exports style types from aether_css and provides a new cssparser-based `parse` function.
 
 pub use aether_css::{
-    match_element, match_rules, resolve_style, resolve_style_vp, resolve_style_with_vars,
-    resolve_style_with_vars_and_custom, resolve_styles_for_tree, AlignContent, AlignItems,
-    AlignSelf, CalcTerm, Color, ComputedStyle, CssPropertyName, CustomPropertyMap, Declaration,
-    Display, ElementData, FlexDirection, FlexOptions, FlexWrap, JustifyContent, LengthValue,
-    Position, PropertyValue, Rule, Selector, SimpleSelector, Specificity, Stylesheet, Transform,
-    Transition, Unit,
+    apply_inheritance, match_element, match_rules, resolve_style, resolve_style_vp,
+    resolve_style_with_vars, resolve_style_with_vars_and_custom, resolve_styles_for_tree,
+    AlignContent, AlignItems, AlignSelf, CalcTerm, Color, ComputedStyle, CssPropertyName,
+    CustomPropertyMap, Declaration, Display, ElementData, FlexDirection, FlexOptions, FlexWrap,
+    InheritMask, JustifyContent, LengthValue, Position, PropertyValue, Rule, Selector,
+    SimpleSelector, Specificity, Stylesheet, Transform, Transition, Unit,
 };
 
 use cssparser::{BasicParseErrorKind, Delimiter, ParseError, Parser, ParserInput, Token};

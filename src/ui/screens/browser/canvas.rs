@@ -236,6 +236,9 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                 if el.display == css::Display::None {
                     continue;
                 }
+                if el.visibility.as_deref() == Some("hidden") {
+                    continue;
+                }
 
                 profile.elements_drawn += 1;
 
@@ -478,6 +481,9 @@ impl iced::widget::canvas::Program<BrowserMessage> for PageCanvas {
                         continue;
                     }
                     if el.display == css::Display::None {
+                        continue;
+                    }
+                    if el.visibility.as_deref() == Some("hidden") {
                         continue;
                     }
                     if el.is_link {

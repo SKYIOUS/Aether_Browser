@@ -1,4 +1,4 @@
-﻿use vayu_browser::engine::dom::NodeType;
+use vayu_browser::engine::dom::NodeType;
 use vayu_browser::engine::parser::parse_html;
 
 #[test]
@@ -116,6 +116,7 @@ fn test_extract_and_layout_pipeline() {
         800.0,
         600.0,
         &CustomPropertyMap::new(),
+        None,
     );
 
     assert!(!elements.is_empty(), "should extract elements");
