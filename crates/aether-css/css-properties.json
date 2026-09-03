@@ -48,6 +48,7 @@
     { "name": "flex-wrap", "enum": "FlexWrap", "type": "keyword" },
     { "name": "justify-content", "enum": "JustifyContent", "type": "keyword" },
     { "name": "align-items", "enum": "AlignItems", "type": "keyword" },
+    { "name": "align-content", "enum": "AlignContent", "type": "keyword" },
     { "name": "align-self", "enum": "AlignSelf", "type": "keyword" },
     { "name": "flex", "enum": "Flex", "type": "shorthand" },
     { "name": "flex-grow", "enum": "FlexGrow", "type": "number" },

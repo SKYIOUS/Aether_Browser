@@ -2,7 +2,8 @@ use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::{extract_elements, StyledElement};
 use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 use vayu_browser::engine::stratus::{
-    self, Color, ComputedStyle, CustomPropertyMap, ElementData, PropertyValue,
+    self, AlignContent, AlignItems, Color, ComputedStyle, CustomPropertyMap, ElementData,
+    PropertyValue,
 };
 
 // ── diagnostic ──
@@ -1149,5 +1150,102 @@ fn test_inherit_still_works_after_initial_unset() {
     assert_eq!(
         child.color, parent.color,
         "inherit keyword should still work correctly"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 10. CSS `align-content` support
+// ══════════════════════════════════════════════════════════════
+
+#[test]
+fn test_align_content_center_parses() {
+    let css = "div { align-content: center; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::Center,
+        "align-content: center should resolve to Center"
+    );
+}
+
+#[test]
+fn test_align_content_space_between_parses() {
+    let css = "div { align-content: space-between; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::SpaceBetween,
+        "align-content: space-between should resolve to SpaceBetween"
+    );
+}
+
+#[test]
+fn test_align_content_default_is_stretch() {
+    let css = "div { display: flex; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::Stretch,
+        "align-content default should be Stretch"
+    );
+}
+
+#[test]
+fn test_align_content_explicit_overrides_default() {
+    let css = "div { align-content: flex-end; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::FlexEnd,
+        "explicit align-content should override default"
+    );
+}
+
+#[test]
+fn test_align_content_initial_resets() {
+    let css = "div { align-content: center; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(style.flex.align_content, AlignContent::Center);
+
+    let css2 = "div { align-content: initial; }";
+    let (style2, _) = resolve_with_parent(css2, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style2.flex.align_content,
+        AlignContent::Stretch,
+        "align-content: initial should reset to Stretch"
+    );
+}
+
+#[test]
+fn test_align_content_space_around_parses() {
+    let css = "div { align-content: space-around; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::SpaceAround,
+        "align-content: space-around should resolve to SpaceAround"
+    );
+}
+
+#[test]
+fn test_align_content_case_insensitive() {
+    let css = "div { align-content: CENTER; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.flex.align_content,
+        AlignContent::Center,
+        "align-content should be case-insensitive"
+    );
+}
+
+#[test]
+fn test_align_content_does_not_affect_align_items() {
+    let css = "div { align-content: center; align-items: flex-end; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(style.flex.align_content, AlignContent::Center,);
+    assert_eq!(
+        style.flex.align_items,
+        AlignItems::FlexEnd,
+        "align-content should not affect align-items"
     );
 }

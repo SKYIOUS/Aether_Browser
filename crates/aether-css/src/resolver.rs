@@ -4,8 +4,8 @@
 use super::matcher::{match_rules, ElementData, Specificity};
 use super::parser::{CalcTerm, Declaration, PropertyValue, Stylesheet};
 use super::style_value::{
-    AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexWrap, JustifyContent,
-    LengthValue, Position, Transform, Transition, Unit,
+    AlignContent, AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexWrap,
+    JustifyContent, LengthValue, Position, Transform, Transition, Unit,
 };
 use std::collections::HashMap;
 
@@ -902,6 +902,14 @@ fn apply_declarations_vp(
                         style.flex.align_items = parse_align_items(&decl.value);
                     }
                 }
+                CssPropertyName::AlignContent => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.align_content = AlignContent::Stretch;
+                    } else {
+                        style.flex.align_content = parse_align_content(&decl.value);
+                    }
+                }
                 CssPropertyName::AlignSelf => {
                     if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
                     {
@@ -1241,6 +1249,13 @@ fn parse_align_items(value: &PropertyValue) -> AlignItems {
     match value {
         PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
         _ => AlignItems::Stretch,
+    }
+}
+
+fn parse_align_content(value: &PropertyValue) -> AlignContent {
+    match value {
+        PropertyValue::Keyword(s) => s.parse().unwrap_or_default(),
+        _ => AlignContent::Stretch,
     }
 }
 
