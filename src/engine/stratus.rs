@@ -8,7 +8,7 @@ pub use aether_css::{
     resolve_style_with_vars, resolve_style_with_vars_and_custom, resolve_styles_for_tree,
     AlignContent, AlignItems, AlignSelf, CalcTerm, Color, ComputedStyle, CssPropertyName,
     CustomPropertyMap, Declaration, Display, ElementData, FlexDirection, FlexOptions, FlexWrap,
-    InheritMask, JustifyContent, LengthValue, Position, PropertyValue, Rule, Selector,
+    InheritMask, InitialMask, JustifyContent, LengthValue, Position, PropertyValue, Rule, Selector,
     SimpleSelector, Specificity, Stylesheet, Transform, Transition, Unit,
 };
 

@@ -13,6 +13,7 @@ pub use property_names::CssPropertyName;
 pub use resolver::{
     apply_inheritance, resolve_style, resolve_style_vp, resolve_style_with_vars,
     resolve_style_with_vars_and_custom, resolve_styles_for_tree, CustomPropertyMap, InheritMask,
+    InitialMask,
 };
 pub use style_value::{
     AlignContent, AlignItems, AlignSelf, Color, ComputedStyle, Display, FlexDirection, FlexOptions,

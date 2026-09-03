@@ -10,6 +10,7 @@ use super::style_value::{
 use std::collections::HashMap;
 
 /// Bitmask tracking which inheritable properties were set to `inherit`.
+/// Also used for `unset` on inheritable properties (which behaves like `inherit`).
 /// Exists only until `apply_inheritance()` consumes it.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct InheritMask(u32);
@@ -31,17 +32,69 @@ impl InheritMask {
     }
 }
 
-/// Apply CSS inheritance: for each inheritable property, if the child has no
-/// specified value (None) or the `inherit` keyword was used, copy the parent's
-/// computed value. If no parent exists (root element), use the initial value
-/// from `ComputedStyle::default_style()`.
+/// Bitmask tracking which properties were set to the `initial` keyword,
+/// or `unset` on non-inheritable properties. In both cases the property
+/// resolves to its CSS initial value, ignoring inheritance.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InitialMask(u32);
+
+impl InitialMask {
+    const COLOR: u32 = 1 << 0;
+    const FONT_SIZE: u32 = 1 << 1;
+    const FONT_WEIGHT: u32 = 1 << 2;
+    const FONT_FAMILY: u32 = 1 << 3;
+    const LINE_HEIGHT: u32 = 1 << 4;
+    const TEXT_ALIGN: u32 = 1 << 5;
+    const VISIBILITY: u32 = 1 << 6;
+    const MARGIN_TOP: u32 = 1 << 7;
+    const MARGIN_RIGHT: u32 = 1 << 8;
+    const MARGIN_BOTTOM: u32 = 1 << 9;
+    const MARGIN_LEFT: u32 = 1 << 10;
+    const PADDING_TOP: u32 = 1 << 11;
+    const PADDING_RIGHT: u32 = 1 << 12;
+    const PADDING_BOTTOM: u32 = 1 << 13;
+    const PADDING_LEFT: u32 = 1 << 14;
+    const BORDER_TOP_WIDTH: u32 = 1 << 15;
+    const BORDER_RIGHT_WIDTH: u32 = 1 << 16;
+    const BORDER_BOTTOM_WIDTH: u32 = 1 << 17;
+    const BORDER_LEFT_WIDTH: u32 = 1 << 18;
+    const WIDTH: u32 = 1 << 19;
+    const HEIGHT: u32 = 1 << 20;
+    const MIN_WIDTH: u32 = 1 << 21;
+    const MIN_HEIGHT: u32 = 1 << 22;
+    const MAX_WIDTH: u32 = 1 << 23;
+    const MAX_HEIGHT: u32 = 1 << 24;
+    const TOP: u32 = 1 << 25;
+    const RIGHT: u32 = 1 << 26;
+    const BOTTOM: u32 = 1 << 27;
+    const LEFT: u32 = 1 << 28;
+    const BOX_SIZING: u32 = 1 << 29;
+
+    fn set(&mut self, bit: u32) {
+        self.0 |= bit;
+    }
+    fn has(&self, bit: u32) -> bool {
+        self.0 & bit != 0
+    }
+}
+
+/// Apply CSS inheritance: for each inheritable property, resolve the final value
+/// based on the cascade and CSS keywords.
 ///
-/// `inherit_mask`: tracks properties set to `inherit` keyword
-/// `set_mask`: tracks properties explicitly set by the cascade (non-inherit keyword)
+/// Resolution order per property:
+/// 1. `initial_mask` set → use CSS initial value (from `ComputedStyle::default_style()`)
+/// 2. `inherit_mask` set → copy parent's computed value (or initial if no parent)
+/// 3. `set_mask` set → keep the explicitly set value from the cascade
+/// 4. None of the above → inherit from parent (or initial if no parent)
+///
+/// `inherit_mask`: tracks properties set to `inherit` or `unset` (inheritable)
+/// `initial_mask`: tracks properties set to `initial`, or `unset` (non-inheritable)
+/// `set_mask`: tracks properties explicitly set by the cascade (non-keyword)
 pub fn apply_inheritance(
     child: &mut ComputedStyle,
     parent: Option<&ComputedStyle>,
     inherit_mask: InheritMask,
+    initial_mask: InitialMask,
     set_mask: InheritMask,
 ) {
     let initial = ComputedStyle::default_style();
@@ -49,24 +102,27 @@ pub fn apply_inheritance(
 
     macro_rules! inherit {
         ($field:ident, $bit:expr) => {
-            if inherit_mask.has($bit) {
-                // Explicit `inherit` keyword: always copy from parent
+            if initial_mask.has($bit) {
+                // `initial` keyword: reset to CSS initial value
+                child.$field = initial.$field.clone();
+            } else if inherit_mask.has($bit) {
+                // `inherit` / `unset` keyword: copy from parent
                 child.$field = p.$field.clone();
             } else if !set_mask.has($bit) {
-                // Not set by cascade: use parent's value if available, else initial
+                // Not set by cascade: inherit from parent, or initial if no parent
                 child.$field = p.$field.clone();
             }
             // else: set by cascade — keep child's value
         };
     }
 
-    inherit!(color, InheritMask::COLOR);
-    inherit!(font_size, InheritMask::FONT_SIZE);
-    inherit!(font_weight, InheritMask::FONT_WEIGHT);
-    inherit!(font_family, InheritMask::FONT_FAMILY);
-    inherit!(line_height, InheritMask::LINE_HEIGHT);
-    inherit!(text_align, InheritMask::TEXT_ALIGN);
-    inherit!(visibility, InheritMask::VISIBILITY);
+    inherit!(color, InitialMask::COLOR);
+    inherit!(font_size, InitialMask::FONT_SIZE);
+    inherit!(font_weight, InitialMask::FONT_WEIGHT);
+    inherit!(font_family, InitialMask::FONT_FAMILY);
+    inherit!(line_height, InitialMask::LINE_HEIGHT);
+    inherit!(text_align, InitialMask::TEXT_ALIGN);
+    inherit!(visibility, InitialMask::VISIBILITY);
 }
 
 /// Custom properties map: `--name` → raw value.
@@ -116,6 +172,7 @@ pub fn resolve_style_with_vars(
 
     // 3. Apply standard declarations with var() substitution + calc().
     let mut mask = InheritMask::default();
+    let mut initial_mask = InitialMask::default();
     let mut set_mask = InheritMask::default();
     apply_declarations_with_vars(
         &mut style,
@@ -124,6 +181,7 @@ pub fn resolve_style_with_vars(
         viewport_w,
         viewport_h,
         &mut mask,
+        &mut initial_mask,
         &mut set_mask,
     );
 
@@ -153,6 +211,7 @@ pub fn resolve_style_with_vars_and_custom(
     collect_custom_properties(&mut custom, &all_decls);
 
     let mut inherit_mask = InheritMask::default();
+    let mut initial_mask = InitialMask::default();
     let mut set_mask = InheritMask::default();
     apply_declarations_with_vars(
         &mut style,
@@ -161,10 +220,17 @@ pub fn resolve_style_with_vars_and_custom(
         viewport_w,
         viewport_h,
         &mut inherit_mask,
+        &mut initial_mask,
         &mut set_mask,
     );
 
-    apply_inheritance(&mut style, parent_computed, inherit_mask, set_mask);
+    apply_inheritance(
+        &mut style,
+        parent_computed,
+        inherit_mask,
+        initial_mask,
+        set_mask,
+    );
 
     (style, custom, inherit_mask)
 }
@@ -182,6 +248,7 @@ fn collect_custom_properties(map: &mut CustomPropertyMap, decls: &[Declaration])
 /// Apply declarations with var() substitution and calc() evaluation.
 /// Resolves all var() and calc() in declaration values, then delegates
 /// to the standard property application.
+#[allow(clippy::too_many_arguments)]
 fn apply_declarations_with_vars(
     style: &mut ComputedStyle,
     decls: &[Declaration],
@@ -189,6 +256,7 @@ fn apply_declarations_with_vars(
     viewport_w: f32,
     viewport_h: f32,
     inherit_mask: &mut InheritMask,
+    initial_mask: &mut InitialMask,
     set_mask: &mut InheritMask,
 ) {
     // Resolve all declarations: substitute var(), evaluate calc().
@@ -216,6 +284,7 @@ fn apply_declarations_with_vars(
             viewport_w,
             viewport_h,
             inherit_mask,
+            initial_mask,
             set_mask,
         );
     }
@@ -429,10 +498,12 @@ fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], s
         800.0,
         600.0,
         &mut InheritMask::default(),
+        &mut InitialMask::default(),
         &mut InheritMask::default(),
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_declarations_vp(
     style: &mut ComputedStyle,
     declarations: &[Declaration],
@@ -440,6 +511,7 @@ fn apply_declarations_vp(
     viewport_w: f32,
     viewport_h: f32,
     inherit_mask: &mut InheritMask,
+    initial_mask: &mut InitialMask,
     set_mask: &mut InheritMask,
 ) {
     use super::property_names::CssPropertyName;
@@ -451,8 +523,11 @@ fn apply_declarations_vp(
         if let Ok(prop) = CssPropertyName::from_str(&decl.name) {
             match prop {
                 CssPropertyName::Color => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::COLOR);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::COLOR);
                     } else if let Some(v) = parse_color(&decl.value) {
                         if !v.is_current() {
                             style.color = Some(v);
@@ -461,69 +536,125 @@ fn apply_declarations_vp(
                     }
                 }
                 CssPropertyName::Background => {
-                    style.background_color = parse_background(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.background_color = None;
+                    } else {
+                        style.background_color = parse_background(&decl.value);
+                    }
                 }
                 CssPropertyName::BackgroundColor => {
-                    style.background_color = parse_color(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.background_color = None;
+                    } else {
+                        style.background_color = parse_color(&decl.value);
+                    }
                 }
                 CssPropertyName::FontSize => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::FONT_SIZE);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::FONT_SIZE);
                     } else {
                         style.font_size = parse_length_vp(&decl.value, vw, vh);
                         set_mask.set(InheritMask::FONT_SIZE);
                     }
                 }
                 CssPropertyName::FontWeight => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::FONT_WEIGHT);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::FONT_WEIGHT);
                     } else {
                         style.font_weight = parse_keyword(&decl.value);
                         set_mask.set(InheritMask::FONT_WEIGHT);
                     }
                 }
                 CssPropertyName::FontFamily => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::FONT_FAMILY);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::FONT_FAMILY);
                     } else {
                         style.font_family = parse_keyword(&decl.value);
                         set_mask.set(InheritMask::FONT_FAMILY);
                     }
                 }
                 CssPropertyName::TextAlign => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::TEXT_ALIGN);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::TEXT_ALIGN);
                     } else {
                         style.text_align = parse_keyword(&decl.value);
                         set_mask.set(InheritMask::TEXT_ALIGN);
                     }
                 }
-                CssPropertyName::Display => style.display = parse_display(&decl.value),
-                CssPropertyName::Position => style.position = parse_position(&decl.value),
-                CssPropertyName::Overflow => style.overflow = parse_keyword(&decl.value),
+                CssPropertyName::Display => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.display = Display::Inline;
+                    } else {
+                        style.display = parse_display(&decl.value);
+                    }
+                }
+                CssPropertyName::Position => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.position = Position::Static;
+                    } else {
+                        style.position = parse_position(&decl.value);
+                    }
+                }
+                CssPropertyName::Overflow => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.overflow = None;
+                    } else {
+                        style.overflow = parse_keyword(&decl.value);
+                    }
+                }
                 CssPropertyName::Visibility => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::VISIBILITY);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::VISIBILITY);
                     } else {
                         style.visibility = parse_keyword(&decl.value);
                         set_mask.set(InheritMask::VISIBILITY);
                     }
                 }
                 CssPropertyName::Opacity => {
-                    style.opacity = match &decl.value {
-                        PropertyValue::Number(n) => Some(n.clamp(0.0, 1.0)),
-                        PropertyValue::Keyword(s) => {
-                            s.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0))
-                        }
-                        _ => None,
-                    };
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.opacity = Some(1.0);
+                    } else {
+                        style.opacity = match &decl.value {
+                            PropertyValue::Number(n) => Some(n.clamp(0.0, 1.0)),
+                            PropertyValue::Keyword(s) => {
+                                s.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0))
+                            }
+                            _ => None,
+                        };
+                    }
                 }
                 CssPropertyName::ZIndex => {
-                    style.z_index = match &decl.value {
-                        PropertyValue::Number(n) => Some(*n as i32),
-                        PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v as i32),
-                        _ => None,
-                    };
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.z_index = None;
+                    } else {
+                        style.z_index = match &decl.value {
+                            PropertyValue::Number(n) => Some(*n as i32),
+                            PropertyValue::Keyword(s) => s.parse::<f32>().ok().map(|v| v as i32),
+                            _ => None,
+                        };
+                    }
                 }
 
                 CssPropertyName::Margin
@@ -531,141 +662,376 @@ fn apply_declarations_vp(
                 | CssPropertyName::MarginRight
                 | CssPropertyName::MarginBottom
                 | CssPropertyName::MarginLeft => {
-                    apply_sides_vp(
-                        &mut style.margin_top,
-                        &mut style.margin_right,
-                        &mut style.margin_bottom,
-                        &mut style.margin_left,
-                        &decl.name,
-                        &decl.value,
-                        vw,
-                        vh,
-                    );
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        // initial/unset on non-inheritable = use CSS initial value (auto/None)
+                        match decl.name.as_str() {
+                            "margin-top" => style.margin_top = None,
+                            "margin-right" => style.margin_right = None,
+                            "margin-bottom" => style.margin_bottom = None,
+                            "margin-left" => style.margin_left = None,
+                            "margin" => {
+                                style.margin_top = None;
+                                style.margin_right = None;
+                                style.margin_bottom = None;
+                                style.margin_left = None;
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        apply_sides_vp(
+                            &mut style.margin_top,
+                            &mut style.margin_right,
+                            &mut style.margin_bottom,
+                            &mut style.margin_left,
+                            &decl.name,
+                            &decl.value,
+                            vw,
+                            vh,
+                        );
+                    }
                 }
                 CssPropertyName::Padding
                 | CssPropertyName::PaddingTop
                 | CssPropertyName::PaddingRight
                 | CssPropertyName::PaddingBottom
                 | CssPropertyName::PaddingLeft => {
-                    apply_sides_vp(
-                        &mut style.padding_top,
-                        &mut style.padding_right,
-                        &mut style.padding_bottom,
-                        &mut style.padding_left,
-                        &decl.name,
-                        &decl.value,
-                        vw,
-                        vh,
-                    );
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        match decl.name.as_str() {
+                            "padding-top" => style.padding_top = Some(0.0),
+                            "padding-right" => style.padding_right = Some(0.0),
+                            "padding-bottom" => style.padding_bottom = Some(0.0),
+                            "padding-left" => style.padding_left = Some(0.0),
+                            "padding" => {
+                                style.padding_top = Some(0.0);
+                                style.padding_right = Some(0.0);
+                                style.padding_bottom = Some(0.0);
+                                style.padding_left = Some(0.0);
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        apply_sides_vp(
+                            &mut style.padding_top,
+                            &mut style.padding_right,
+                            &mut style.padding_bottom,
+                            &mut style.padding_left,
+                            &decl.name,
+                            &decl.value,
+                            vw,
+                            vh,
+                        );
+                    }
                 }
                 CssPropertyName::BorderWidth
                 | CssPropertyName::BorderTopWidth
                 | CssPropertyName::BorderRightWidth
                 | CssPropertyName::BorderBottomWidth
                 | CssPropertyName::BorderLeftWidth => {
-                    apply_sides_vp(
-                        &mut style.border_top_width,
-                        &mut style.border_right_width,
-                        &mut style.border_bottom_width,
-                        &mut style.border_left_width,
-                        &decl.name,
-                        &decl.value,
-                        vw,
-                        vh,
-                    );
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        match decl.name.as_str() {
+                            "border-top-width" => style.border_top_width = Some(0.0),
+                            "border-right-width" => style.border_right_width = Some(0.0),
+                            "border-bottom-width" => style.border_bottom_width = Some(0.0),
+                            "border-left-width" => style.border_left_width = Some(0.0),
+                            "border-width" => {
+                                style.border_top_width = Some(0.0);
+                                style.border_right_width = Some(0.0);
+                                style.border_bottom_width = Some(0.0);
+                                style.border_left_width = Some(0.0);
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        apply_sides_vp(
+                            &mut style.border_top_width,
+                            &mut style.border_right_width,
+                            &mut style.border_bottom_width,
+                            &mut style.border_left_width,
+                            &decl.name,
+                            &decl.value,
+                            vw,
+                            vh,
+                        );
+                    }
                 }
                 CssPropertyName::BorderColor
                 | CssPropertyName::BorderTopColor
                 | CssPropertyName::BorderRightColor
                 | CssPropertyName::BorderBottomColor
                 | CssPropertyName::BorderLeftColor => {
-                    apply_border_colors(
-                        &mut style.border_top_color,
-                        &mut style.border_right_color,
-                        &mut style.border_bottom_color,
-                        &mut style.border_left_color,
-                        &decl.name,
-                        &decl.value,
-                    );
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        match decl.name.as_str() {
+                            "border-top-color" => style.border_top_color = None,
+                            "border-right-color" => style.border_right_color = None,
+                            "border-bottom-color" => style.border_bottom_color = None,
+                            "border-left-color" => style.border_left_color = None,
+                            "border-color" => {
+                                style.border_top_color = None;
+                                style.border_right_color = None;
+                                style.border_bottom_color = None;
+                                style.border_left_color = None;
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        apply_border_colors(
+                            &mut style.border_top_color,
+                            &mut style.border_right_color,
+                            &mut style.border_bottom_color,
+                            &mut style.border_left_color,
+                            &decl.name,
+                            &decl.value,
+                        );
+                    }
                 }
 
-                CssPropertyName::Width => style.width = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::Width => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.width = None;
+                    } else {
+                        style.width = parse_length_vp(&decl.value, vw, vh);
+                    }
+                }
                 CssPropertyName::Height => {
-                    style.height = parse_length_vp_vertical(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.height = None;
+                    } else {
+                        style.height = parse_length_vp_vertical(&decl.value, vw, vh);
+                    }
                 }
-                CssPropertyName::MinWidth => style.min_width = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::MinWidth => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.min_width = None;
+                    } else {
+                        style.min_width = parse_length_vp(&decl.value, vw, vh);
+                    }
+                }
                 CssPropertyName::MinHeight => {
-                    style.min_height = parse_length_vp_vertical(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.min_height = None;
+                    } else {
+                        style.min_height = parse_length_vp_vertical(&decl.value, vw, vh);
+                    }
                 }
-                CssPropertyName::MaxWidth => style.max_width = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::MaxWidth => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.max_width = None;
+                    } else {
+                        style.max_width = parse_length_vp(&decl.value, vw, vh);
+                    }
+                }
                 CssPropertyName::MaxHeight => {
-                    style.max_height = parse_length_vp_vertical(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.max_height = None;
+                    } else {
+                        style.max_height = parse_length_vp_vertical(&decl.value, vw, vh);
+                    }
                 }
-                CssPropertyName::Top => style.top = parse_length_vp_vertical(&decl.value, vw, vh),
-                CssPropertyName::Right => style.right = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::Top => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.top = None;
+                    } else {
+                        style.top = parse_length_vp_vertical(&decl.value, vw, vh);
+                    }
+                }
+                CssPropertyName::Right => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.right = None;
+                    } else {
+                        style.right = parse_length_vp(&decl.value, vw, vh);
+                    }
+                }
                 CssPropertyName::Bottom => {
-                    style.bottom = parse_length_vp_vertical(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.bottom = None;
+                    } else {
+                        style.bottom = parse_length_vp_vertical(&decl.value, vw, vh);
+                    }
                 }
-                CssPropertyName::Left => style.left = parse_length_vp(&decl.value, vw, vh),
+                CssPropertyName::Left => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.left = None;
+                    } else {
+                        style.left = parse_length_vp(&decl.value, vw, vh);
+                    }
+                }
 
                 CssPropertyName::FlexDirection => {
-                    style.flex.flex_direction = parse_flex_direction(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_direction = FlexDirection::Row;
+                    } else {
+                        style.flex.flex_direction = parse_flex_direction(&decl.value);
+                    }
                 }
-                CssPropertyName::FlexWrap => style.flex.flex_wrap = parse_flex_wrap(&decl.value),
+                CssPropertyName::FlexWrap => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_wrap = FlexWrap::NoWrap;
+                    } else {
+                        style.flex.flex_wrap = parse_flex_wrap(&decl.value);
+                    }
+                }
                 CssPropertyName::JustifyContent => {
-                    style.flex.justify_content = parse_justify_content(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.justify_content = JustifyContent::FlexStart;
+                    } else {
+                        style.flex.justify_content = parse_justify_content(&decl.value);
+                    }
                 }
                 CssPropertyName::AlignItems => {
-                    style.flex.align_items = parse_align_items(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.align_items = AlignItems::Stretch;
+                    } else {
+                        style.flex.align_items = parse_align_items(&decl.value);
+                    }
                 }
-                CssPropertyName::AlignSelf => style.flex.align_self = parse_align_self(&decl.value),
+                CssPropertyName::AlignSelf => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.align_self = AlignSelf::Auto;
+                    } else {
+                        style.flex.align_self = parse_align_self(&decl.value);
+                    }
+                }
                 CssPropertyName::Flex => {
-                    apply_flex_shorthand(&mut style.flex, &decl.value, vw, vh);
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_grow = 0.0;
+                        style.flex.flex_shrink = 1.0;
+                        style.flex.flex_basis = Some(0.0);
+                    } else {
+                        apply_flex_shorthand(&mut style.flex, &decl.value, vw, vh);
+                    }
                 }
                 CssPropertyName::FlexGrow => {
-                    style.flex.flex_grow = match &decl.value {
-                        PropertyValue::Number(n) => n.max(0.0),
-                        PropertyValue::Keyword(s) => {
-                            s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(0.0)
-                        }
-                        _ => 0.0,
-                    };
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_grow = 0.0;
+                    } else {
+                        style.flex.flex_grow = match &decl.value {
+                            PropertyValue::Number(n) => n.max(0.0),
+                            PropertyValue::Keyword(s) => {
+                                s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(0.0)
+                            }
+                            _ => 0.0,
+                        };
+                    }
                 }
                 CssPropertyName::FlexShrink => {
-                    style.flex.flex_shrink = match &decl.value {
-                        PropertyValue::Number(n) => n.max(0.0),
-                        PropertyValue::Keyword(s) => {
-                            s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0)
-                        }
-                        _ => 1.0,
-                    };
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_shrink = 1.0;
+                    } else {
+                        style.flex.flex_shrink = match &decl.value {
+                            PropertyValue::Number(n) => n.max(0.0),
+                            PropertyValue::Keyword(s) => {
+                                s.parse::<f32>().ok().map(|v| v.max(0.0)).unwrap_or(1.0)
+                            }
+                            _ => 1.0,
+                        };
+                    }
                 }
                 CssPropertyName::FlexBasis => {
-                    style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.flex.flex_basis = Some(0.0);
+                    } else {
+                        style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh);
+                    }
                 }
 
-                CssPropertyName::Transform => style.transform = parse_transform(&decl.value),
-                CssPropertyName::Transition => style.transition = parse_transition(&decl.value),
+                CssPropertyName::Transform => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.transform = None;
+                    } else {
+                        style.transform = parse_transform(&decl.value);
+                    }
+                }
+                CssPropertyName::Transition => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.transition = None;
+                    } else {
+                        style.transition = parse_transition(&decl.value);
+                    }
+                }
 
-                CssPropertyName::BoxSizing => style.box_sizing = parse_keyword(&decl.value),
+                CssPropertyName::BoxSizing => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.box_sizing = Some("content-box".to_string());
+                    } else {
+                        style.box_sizing = parse_keyword(&decl.value);
+                    }
+                }
 
                 CssPropertyName::LineHeight => {
-                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit") {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "inherit" || s == "unset")
+                    {
                         inherit_mask.set(InheritMask::LINE_HEIGHT);
+                    } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
+                        initial_mask.set(InitialMask::LINE_HEIGHT);
                     } else {
                         style.line_height = parse_length_vp(&decl.value, vw, vh);
                         set_mask.set(InheritMask::LINE_HEIGHT);
                     }
                 }
                 CssPropertyName::TextDecoration => {
-                    style.text_decoration = parse_keyword(&decl.value)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.text_decoration = None;
+                    } else {
+                        style.text_decoration = parse_keyword(&decl.value);
+                    }
                 }
-                CssPropertyName::Cursor => style.cursor = parse_keyword(&decl.value),
+                CssPropertyName::Cursor => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.cursor = None;
+                    } else {
+                        style.cursor = parse_keyword(&decl.value);
+                    }
+                }
                 CssPropertyName::BorderRadius => {
-                    style.border_radius = parse_length_vp(&decl.value, vw, vh)
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.border_radius = None;
+                    } else {
+                        style.border_radius = parse_length_vp(&decl.value, vw, vh);
+                    }
                 }
                 CssPropertyName::Border => {
-                    apply_border_shorthand(style, &decl.value);
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.border_top_width = Some(0.0);
+                        style.border_right_width = Some(0.0);
+                        style.border_bottom_width = Some(0.0);
+                        style.border_left_width = Some(0.0);
+                        style.border_top_color = None;
+                        style.border_right_color = None;
+                        style.border_bottom_color = None;
+                        style.border_left_color = None;
+                    } else {
+                        apply_border_shorthand(style, &decl.value);
+                    }
                 }
             }
         }

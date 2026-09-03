@@ -2,7 +2,7 @@ use vayu_browser::engine::parser::parse_html;
 use vayu_browser::engine::pipeline::extractor::{extract_elements, StyledElement};
 use vayu_browser::engine::pipeline::layout::apply_taffy_layout;
 use vayu_browser::engine::stratus::{
-    self, ComputedStyle, CustomPropertyMap, ElementData, PropertyValue,
+    self, Color, ComputedStyle, CustomPropertyMap, ElementData, PropertyValue,
 };
 
 // ── diagnostic ──
@@ -608,7 +608,9 @@ fn test_resolve_with_inherited_parent_vars() {
 // 8. CSS standard property inheritance
 // ══════════════════════════════════════════════════════════════
 
-use aether_css::{apply_inheritance, resolve_style_with_vars_and_custom, InheritMask};
+use aether_css::{
+    apply_inheritance, resolve_style_with_vars_and_custom, Display, InheritMask, InitialMask,
+};
 
 fn resolve_with_parent_computed(
     css: &str,
@@ -847,6 +849,7 @@ fn test_apply_inheritance_fills_none_fields() {
         &mut child,
         Some(&parent),
         InheritMask::default(),
+        InitialMask::default(),
         InheritMask::default(),
     );
 
@@ -869,6 +872,7 @@ fn test_apply_inheritance_uses_initial_when_no_parent() {
         &mut child,
         None,
         InheritMask::default(),
+        InitialMask::default(),
         InheritMask::default(),
     );
 
@@ -925,5 +929,225 @@ fn test_line_height_no_parent_gets_explicit_value() {
         style.line_height,
         Some(24.0),
         "line-height without parent should be the explicit value"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 9. CSS `initial` and `unset` keyword semantics
+// ══════════════════════════════════════════════════════════════
+
+#[test]
+fn test_initial_color_ignores_parent() {
+    let parent_css = "div { color: red; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { color: initial; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        child.color, initial.color,
+        "color: initial should reset to initial value, not inherit red"
+    );
+}
+
+#[test]
+fn test_unset_color_inherits_from_parent() {
+    let parent_css = "div { color: red; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { color: unset; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.color, parent.color,
+        "color: unset on inheritable property should inherit from parent"
+    );
+}
+
+#[test]
+fn test_initial_font_size_ignores_parent() {
+    let parent_css = "div { font-size: 24px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { font-size: initial; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        child.font_size, initial.font_size,
+        "font-size: initial should reset to initial value"
+    );
+}
+
+#[test]
+fn test_unset_font_size_inherits_from_parent() {
+    let parent_css = "div { font-size: 24px; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { font-size: unset; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.font_size, parent.font_size,
+        "font-size: unset should inherit from parent"
+    );
+}
+
+#[test]
+fn test_initial_margin_uses_initial_value() {
+    let css = "div { margin: initial; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.margin_top, None,
+        "margin: initial should use CSS initial value (auto/None)"
+    );
+}
+
+#[test]
+fn test_unset_margin_uses_initial_value() {
+    let css = "div { margin: unset; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.margin_top, None,
+        "margin: unset on non-inheritable should use initial value"
+    );
+}
+
+#[test]
+fn test_initial_padding_uses_initial_value() {
+    let css = "div { padding: initial; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.padding_top,
+        Some(0.0),
+        "padding: initial should use CSS initial value (0)"
+    );
+}
+
+#[test]
+fn test_root_inherit_uses_initial() {
+    let css = "div { color: inherit; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        style.color, initial.color,
+        "root element with inherit should use initial value"
+    );
+}
+
+#[test]
+fn test_root_unset_uses_initial() {
+    let css = "div { color: unset; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        style.color, initial.color,
+        "root element with unset should use initial value"
+    );
+}
+
+#[test]
+fn test_explicit_value_overrides_initial() {
+    let css = "div { color: blue; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    let blue = Color::from_named("blue").unwrap();
+    assert_eq!(
+        style.color,
+        Some(blue),
+        "explicit color should override initial"
+    );
+}
+
+#[test]
+fn test_initial_display_uses_initial_value() {
+    let css = "div { display: initial; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.display,
+        Display::Inline,
+        "display: initial should use CSS initial value (inline)"
+    );
+}
+
+#[test]
+fn test_unset_display_uses_initial_value() {
+    let css = "div { display: unset; }";
+    let (style, _) = resolve_with_parent(css, "div", &[], &CustomPropertyMap::new());
+    assert_eq!(
+        style.display,
+        aether_css::Display::Inline,
+        "display: unset on non-inheritable should use initial value"
+    );
+}
+
+#[test]
+fn test_initial_visibility_ignores_parent() {
+    let parent_css = "div { visibility: hidden; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { visibility: initial; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    let initial = ComputedStyle::default_style();
+    assert_eq!(
+        child.visibility, initial.visibility,
+        "visibility: initial should reset to initial value, not inherit hidden"
+    );
+}
+
+#[test]
+fn test_unset_visibility_inherits_from_parent() {
+    let parent_css = "div { visibility: hidden; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { visibility: unset; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.visibility, parent.visibility,
+        "visibility: unset should inherit from parent"
+    );
+}
+
+#[test]
+fn test_inherit_still_works_after_initial_unset() {
+    let parent_css = "div { color: green; }";
+    let (parent, _) = resolve_with_parent(parent_css, "div", &[], &CustomPropertyMap::new());
+    let child_css = "span { color: inherit; }";
+    let (child, _) = resolve_with_parent_computed(
+        child_css,
+        "span",
+        &[],
+        &CustomPropertyMap::new(),
+        Some(&parent),
+    );
+    assert_eq!(
+        child.color, parent.color,
+        "inherit keyword should still work correctly"
     );
 }
