@@ -395,7 +395,7 @@ impl JsBridge {
             NodeType::Text(text) => {
                 nodes.push(FlatNode::text(text));
             }
-            NodeType::Comment(_) => {}
+            NodeType::Comment(_) => return 0,
             NodeType::Element(elem) => {
                 let mut fn_ = FlatNode::element(&elem.tag_name);
                 fn_.attrs = elem.attributes.clone();

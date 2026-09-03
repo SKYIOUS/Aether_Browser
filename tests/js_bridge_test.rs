@@ -753,3 +753,112 @@ fn test_load_dom_idempotent() {
         bridge2.to_dom().text_content()
     );
 }
+
+#[test]
+fn test_load_dom_comment_between_elements() {
+    let dom = Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![
+            Node::new_comment("between".to_string()),
+            Node::new_element("span".to_string(), HashMap::new(), vec![]),
+            Node::new_comment("between2".to_string()),
+        ],
+    );
+    let bridge = JsBridge::load_dom(&dom, "https://test.com");
+    let root = bridge.query_selector(0, "div").expect("div not found");
+    let children = bridge.get_children(root);
+    assert_eq!(
+        children.len(),
+        1,
+        "comments between elements should be skipped"
+    );
+    assert_eq!(bridge.get_tag_name(children[0]), Some("span".to_string()));
+}
+
+#[test]
+fn test_load_dom_comment_first_child() {
+    let dom = Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![
+            Node::new_comment("first".to_string()),
+            Node::new_element("p".to_string(), HashMap::new(), vec![]),
+        ],
+    );
+    let bridge = JsBridge::load_dom(&dom, "https://test.com");
+    let root = bridge.query_selector(0, "div").expect("div not found");
+    let children = bridge.get_children(root);
+    assert_eq!(
+        children.len(),
+        1,
+        "comment as first child should be skipped"
+    );
+    assert_eq!(bridge.get_tag_name(children[0]), Some("p".to_string()));
+}
+
+#[test]
+fn test_load_dom_comment_last_child() {
+    let dom = Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![
+            Node::new_element("p".to_string(), HashMap::new(), vec![]),
+            Node::new_comment("last".to_string()),
+        ],
+    );
+    let bridge = JsBridge::load_dom(&dom, "https://test.com");
+    let root = bridge.query_selector(0, "div").expect("div not found");
+    let children = bridge.get_children(root);
+    assert_eq!(children.len(), 1, "comment as last child should be skipped");
+    assert_eq!(bridge.get_tag_name(children[0]), Some("p".to_string()));
+}
+
+#[test]
+fn test_load_dom_multiple_consecutive_comments() {
+    let dom = Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![
+            Node::new_comment("c1".to_string()),
+            Node::new_comment("c2".to_string()),
+            Node::new_comment("c3".to_string()),
+            Node::new_element("span".to_string(), HashMap::new(), vec![]),
+            Node::new_comment("c4".to_string()),
+            Node::new_comment("c5".to_string()),
+        ],
+    );
+    let bridge = JsBridge::load_dom(&dom, "https://test.com");
+    let root = bridge.query_selector(0, "div").expect("div not found");
+    let children = bridge.get_children(root);
+    assert_eq!(children.len(), 1, "all comments should be skipped");
+    assert_eq!(bridge.get_tag_name(children[0]), Some("span".to_string()));
+}
+
+#[test]
+fn test_load_dom_comment_after_existing_nodes() {
+    let mut child_attrs = HashMap::new();
+    child_attrs.insert("class".to_string(), "child".to_string());
+    let dom = Node::new_element(
+        "div".to_string(),
+        HashMap::new(),
+        vec![
+            Node::new_element(
+                "span".to_string(),
+                child_attrs,
+                vec![Node::new_text("Hello".to_string())],
+            ),
+            Node::new_comment("after text".to_string()),
+        ],
+    );
+    let bridge = JsBridge::load_dom(&dom, "https://test.com");
+    let root = bridge.query_selector(0, "div").expect("div not found");
+    let children = bridge.get_children(root);
+    assert_eq!(
+        children.len(),
+        1,
+        "comment after existing node should be skipped"
+    );
+    assert_eq!(bridge.get_tag_name(children[0]), Some("span".to_string()));
+    assert_eq!(bridge.get_text_content(children[0]), "Hello");
+}
