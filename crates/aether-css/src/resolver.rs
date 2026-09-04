@@ -193,6 +193,7 @@ pub fn resolve_style_with_vars(
 /// Resolve style and return both ComputedStyle + element's custom properties.
 /// Used by the extraction pipeline to thread inheritance.
 /// `parent_computed` is the parent element's resolved style (None for root).
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_style_with_vars_and_custom(
     element: &ElementData,
     stylesheet: &Stylesheet,
@@ -1061,6 +1062,41 @@ fn apply_declarations_vp(
                         apply_border_shorthand(style, &decl.value);
                     }
                 }
+                CssPropertyName::RowGap => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.row_gap = None;
+                    } else {
+                        style.row_gap = parse_length_vp(&decl.value, vw, vh, cb_w);
+                    }
+                }
+                CssPropertyName::ColumnGap => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.column_gap = None;
+                    } else {
+                        style.column_gap = parse_length_vp(&decl.value, vw, vh, cb_w);
+                    }
+                }
+                CssPropertyName::Gap => {
+                    if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial" || s == "unset")
+                    {
+                        style.row_gap = None;
+                        style.column_gap = None;
+                    } else {
+                        match &decl.value {
+                            PropertyValue::Shorthand(parts) if parts.len() == 2 => {
+                                style.row_gap = parse_length_vp(&parts[0], vw, vh, cb_w);
+                                style.column_gap = parse_length_vp(&parts[1], vw, vh, cb_w);
+                            }
+                            _ => {
+                                let v = parse_length_vp(&decl.value, vw, vh, cb_w);
+                                style.row_gap = v;
+                                style.column_gap = v;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1464,7 +1500,7 @@ fn parse_length_from_pv_vp(
     vw: f32,
     vh: f32,
     cb_w: f32,
-    cb_h: f32,
+    _cb_h: f32,
 ) -> Option<f32> {
     match value {
         PropertyValue::Length(lv) => {

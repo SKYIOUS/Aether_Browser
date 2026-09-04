@@ -9,7 +9,8 @@ mod diff_tests {
         BoxSizing, LayoutElementInput, LayoutEngine, LayoutInput, LayoutOutput, TaffyLayoutEngine,
     };
     use aether_css::{
-        AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent, Position,
+        AlignContent, AlignItems, AlignSelf, Display, FlexDirection, FlexWrap, JustifyContent,
+        Position,
     };
 
     /// Create a test LayoutInput with typical elements
@@ -1714,5 +1715,324 @@ mod f6_grid {
         let b = n.compute_layout(&inp);
         assert!(a.elements[1].width >= 0.0);
         assert!(b.elements[1].width >= 100.0);
+    }
+
+    // ── Flex gap tests ──────────────────────────────────────────────
+
+    /// Helper: flex container with gap, n children with explicit sizes
+    fn flex_gap_input(
+        n: usize,
+        dir: FlexDirection,
+        wrap: FlexWrap,
+        gap: Option<(f32, f32)>,
+        child_main: f32,
+    ) -> LayoutInput {
+        let mut els = Vec::new();
+        els.push(LayoutElementInput {
+            display: Display::Flex,
+            position: Position::Relative,
+            flex_direction: Some(dir),
+            flex_wrap: Some(wrap),
+            align_items: Some(AlignItems::FlexStart),
+            align_self: Some(AlignSelf::Auto),
+            justify_content: Some(JustifyContent::FlexStart),
+            align_content: Some(AlignContent::FlexStart),
+            box_sizing: BoxSizing::ContentBox,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: None,
+            width: Some(800.0),
+            height: Some(400.0),
+            has_content: false,
+            grid_template_columns: None,
+            grid_template_rows: None,
+            grid_column: None,
+            grid_row: None,
+            grid_auto_flow: None,
+            gap,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
+            margin: [Some(0.0); 4],
+            padding: [0.0; 4],
+            border_width: [0.0; 4],
+            inset: [0.0; 4],
+            parent_index: None,
+            is_text: false,
+            text: String::new(),
+            font_size: 16.0,
+            line_height: 1.4,
+        });
+        for i in 0..n {
+            els.push(LayoutElementInput {
+                display: Display::Block,
+                position: Position::Relative,
+                flex_direction: None,
+                flex_wrap: None,
+                align_items: None,
+                align_self: None,
+                justify_content: None,
+                align_content: None,
+                box_sizing: BoxSizing::ContentBox,
+                flex_grow: 0.0,
+                flex_shrink: 1.0,
+                flex_basis: Some(child_main),
+                width: None,
+                height: Some(50.0),
+                has_content: false,
+                grid_template_columns: None,
+                grid_template_rows: None,
+                grid_column: None,
+                grid_row: None,
+                grid_auto_flow: None,
+                gap: None,
+                min_width: None,
+                max_width: None,
+                min_height: None,
+                max_height: None,
+                margin: [Some(0.0); 4],
+                padding: [0.0; 4],
+                border_width: [0.0; 4],
+                inset: [0.0; 4],
+                parent_index: Some(0),
+                is_text: false,
+                text: format!("item{}", i),
+                font_size: 14.0,
+                line_height: 1.2,
+            });
+        }
+        LayoutInput {
+            container_width: 800.0,
+            viewport_height: 400.0,
+            elements: els,
+        }
+    }
+
+    #[test]
+    fn gap1_row_gap_20px_single_line() {
+        // 3 items, 200px each, gap=20 → positions: 0, 220, 440
+        let inp = flex_gap_input(
+            3,
+            FlexDirection::Row,
+            FlexWrap::NoWrap,
+            Some((20.0, 20.0)),
+            200.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // elements[0]=container, elements[1..3]=children
+        assert!(
+            (out.elements[1].x).abs() < 2.0,
+            "item0 x should be ~0, got {}",
+            out.elements[1].x
+        );
+        assert!(
+            (out.elements[2].x - 220.0).abs() < 2.0,
+            "item1 x should be ~220 (200+20 gap), got {}",
+            out.elements[2].x
+        );
+        assert!(
+            (out.elements[3].x - 440.0).abs() < 2.0,
+            "item2 x should be ~440 (200+20+200+20), got {}",
+            out.elements[3].x
+        );
+    }
+
+    #[test]
+    fn gap2_column_gap_10px_single_line() {
+        // Column flex: 3 items, 50px each, gap=10 → y positions: 0, 60, 120
+        let inp = flex_gap_input(
+            3,
+            FlexDirection::Column,
+            FlexWrap::NoWrap,
+            Some((10.0, 10.0)),
+            50.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        assert!(
+            (out.elements[1].y).abs() < 2.0,
+            "item0 y should be ~0, got {}",
+            out.elements[1].y
+        );
+        assert!(
+            (out.elements[2].y - 60.0).abs() < 2.0,
+            "item1 y should be ~60 (50+10 gap), got {}",
+            out.elements[2].y
+        );
+        assert!(
+            (out.elements[3].y - 120.0).abs() < 2.0,
+            "item2 y should be ~120 (50+10+50+10), got {}",
+            out.elements[3].y
+        );
+    }
+
+    #[test]
+    fn gap3_row_wrap_cross_axis_gap() {
+        // Row wrap: 4 items, 300px each in 400px container → 2 lines
+        // Line 1: items 0,1 at y=0; Line 2: items 2,3 at y=50+20=70
+        let inp = flex_gap_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            Some((20.0, 20.0)),
+            300.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // Items 0,1 on line 1 (y ≈ 0)
+        assert!(
+            out.elements[1].y < 5.0,
+            "line1 item0 y should be ~0, got {}",
+            out.elements[1].y
+        );
+        assert!(
+            out.elements[2].y < 5.0,
+            "line1 item1 y should be ~0, got {}",
+            out.elements[2].y
+        );
+        // Items 2,3 on line 2 (y ≈ 50 height + 20 gap = 70)
+        assert!(
+            (out.elements[3].y - 70.0).abs() < 5.0,
+            "line2 item2 y should be ~70, got {}",
+            out.elements[3].y
+        );
+        assert!(
+            (out.elements[4].y - 70.0).abs() < 5.0,
+            "line2 item3 y should be ~70, got {}",
+            out.elements[4].y
+        );
+    }
+
+    #[test]
+    fn gap4_zero_gap_same_as_no_gap() {
+        let with_gap = flex_gap_input(
+            3,
+            FlexDirection::Row,
+            FlexWrap::NoWrap,
+            Some((0.0, 0.0)),
+            200.0,
+        );
+        let no_gap = flex_gap_input(3, FlexDirection::Row, FlexWrap::NoWrap, None, 200.0);
+        let n = NativeLayoutEngine::new();
+        let a = n.compute_layout(&with_gap);
+        let b = n.compute_layout(&no_gap);
+        for i in 1..=3 {
+            assert!(
+                (a.elements[i].x - b.elements[i].x).abs() < 1.0,
+                "zero gap should match no gap: item{} x: {} vs {}",
+                i,
+                a.elements[i].x,
+                b.elements[i].x
+            );
+        }
+    }
+
+    #[test]
+    fn gap5_single_item_no_gap_effect() {
+        // Single item: gap shouldn't affect position
+        let inp = flex_gap_input(
+            1,
+            FlexDirection::Row,
+            FlexWrap::NoWrap,
+            Some((20.0, 20.0)),
+            200.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        assert!(
+            (out.elements[1].x).abs() < 2.0,
+            "single item x should be ~0, got {}",
+            out.elements[1].x
+        );
+    }
+
+    #[test]
+    fn gap6_row_vs_column_axis_swap() {
+        // row gap=30, col gap=10
+        // Row flex: main-axis gap = col_gap=10, cross-axis gap = row_gap=30
+        let row_inp = flex_gap_input(
+            3,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            Some((30.0, 10.0)),
+            300.0,
+        );
+        // Column flex: main-axis gap = row_gap=30, cross-axis gap = col_gap=10
+        let col_inp = flex_gap_input(
+            3,
+            FlexDirection::Column,
+            FlexWrap::Wrap,
+            Some((30.0, 10.0)),
+            50.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let row_out = n.compute_layout(&row_inp);
+        let col_out = n.compute_layout(&col_inp);
+        // Row: items spread by col_gap=10 on main axis
+        assert!(
+            (row_out.elements[2].x - 310.0).abs() < 5.0,
+            "row flex: item1 x should be ~310 (300+10), got {}",
+            row_out.elements[2].x
+        );
+        // Column: items spread by row_gap=30 on main axis
+        assert!(
+            (col_out.elements[2].y - 80.0).abs() < 5.0,
+            "col flex: item1 y should be ~80 (50+30), got {}",
+            col_out.elements[2].y
+        );
+    }
+
+    #[test]
+    fn gap7_justify_space_between_with_gap() {
+        // 3 items, 100px each in 800px container (flex_gap_input default), gap=20
+        // used_main=300, total_gap=40, main_free=800-300-40=460
+        // SpaceBetween distributes 460/2=230 between items; gap adds 20 per item
+        // item0 at 0, item1 at 100+20+230=350, item2 at 350+100+20+230=700
+        let mut inp = flex_gap_input(
+            3,
+            FlexDirection::Row,
+            FlexWrap::NoWrap,
+            Some((20.0, 20.0)),
+            100.0,
+        );
+        inp.elements[0].justify_content = Some(JustifyContent::SpaceBetween);
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        assert!(
+            (out.elements[2].x - 350.0).abs() < 5.0,
+            "space-between with gap: item1 x should be ~350, got {}",
+            out.elements[2].x
+        );
+        assert!(
+            (out.elements[3].x - 700.0).abs() < 5.0,
+            "space-between with gap: item2 x should be ~700, got {}",
+            out.elements[3].x
+        );
+    }
+
+    #[test]
+    fn gap8_only_row_gap_column_flex() {
+        // Column flex with only row_gap set
+        let inp = flex_gap_input(
+            3,
+            FlexDirection::Column,
+            FlexWrap::NoWrap,
+            Some((25.0, 0.0)),
+            50.0,
+        );
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        assert!(
+            (out.elements[2].y - 75.0).abs() < 2.0,
+            "item1 y should be ~75 (50+25), got {}",
+            out.elements[2].y
+        );
+        assert!(
+            (out.elements[3].y - 150.0).abs() < 2.0,
+            "item2 y should be ~150 (50+25+50+25), got {}",
+            out.elements[3].y
+        );
     }
 }

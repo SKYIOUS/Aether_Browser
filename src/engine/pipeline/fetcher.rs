@@ -287,6 +287,8 @@ fn newtab_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         inset_right: 0.0,
         inset_bottom: 0.0,
         inset_left: 0.0,
+        row_gap: 0.0,
+        column_gap: 0.0,
     };
     vec![
         se(
@@ -405,6 +407,8 @@ fn history_page(
         inset_right: 0.0,
         inset_bottom: 0.0,
         inset_left: 0.0,
+        row_gap: 0.0,
+        column_gap: 0.0,
     };
     let mut out = vec![se("History", 60.0, fg, 22.0, "bold", false, None)];
     if session_history.is_empty() {
@@ -518,6 +522,8 @@ fn bookmarks_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         inset_right: 0.0,
         inset_bottom: 0.0,
         inset_left: 0.0,
+        row_gap: 0.0,
+        column_gap: 0.0,
     };
     vec![
         se(
@@ -619,6 +625,8 @@ fn settings_page(content_width: f32, viewport_h: f32) -> Vec<StyledElement> {
         inset_right: 0.0,
         inset_bottom: 0.0,
         inset_left: 0.0,
+        row_gap: 0.0,
+        column_gap: 0.0,
     };
     vec![
         se(
@@ -748,6 +756,8 @@ fn error_page(
         inset_right: 0.0,
         inset_bottom: 0.0,
         inset_left: 0.0,
+        row_gap: 0.0,
+        column_gap: 0.0,
     };
     vec![
         se(

@@ -65,7 +65,7 @@ fn styled_to_layout_input(el: &StyledElement, _container_width: f32) -> LayoutEl
         grid_column: None,
         grid_row: None,
         grid_auto_flow: None,
-        gap: None,
+        gap: Some((el.row_gap, el.column_gap)),
     }
 }
 

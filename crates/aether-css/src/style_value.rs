@@ -1246,6 +1246,8 @@ pub struct ComputedStyle {
     pub text_decoration: Option<String>,
     pub cursor: Option<String>,
     pub border_radius: Option<f32>,
+    pub row_gap: Option<f32>,
+    pub column_gap: Option<f32>,
 }
 
 impl ComputedStyle {
@@ -1308,6 +1310,8 @@ impl ComputedStyle {
             text_decoration: None,
             cursor: None,
             border_radius: None,
+            row_gap: None,
+            column_gap: None,
         }
     }
 }

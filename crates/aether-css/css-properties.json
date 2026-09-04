@@ -60,6 +60,9 @@
     { "name": "line-height", "enum": "LineHeight", "type": "length" },
     { "name": "text-decoration", "enum": "TextDecoration", "type": "keyword" },
     { "name": "cursor", "enum": "Cursor", "type": "keyword" },
-    { "name": "border-radius", "enum": "BorderRadius", "type": "length" }
+    { "name": "border-radius", "enum": "BorderRadius", "type": "length" },
+    { "name": "gap", "enum": "Gap", "type": "shorthand" },
+    { "name": "row-gap", "enum": "RowGap", "type": "length" },
+    { "name": "column-gap", "enum": "ColumnGap", "type": "length" }
   ]
 }

@@ -113,6 +113,8 @@ pub struct FullStyle {
     pub inset_right: f32,
     pub inset_bottom: f32,
     pub inset_left: f32,
+    pub row_gap: f32,
+    pub column_gap: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -174,6 +176,8 @@ pub struct StyledElement {
     pub inset_right: f32,
     pub inset_bottom: f32,
     pub inset_left: f32,
+    pub row_gap: f32,
+    pub column_gap: f32,
 }
 
 fn stratus_color(c: &stratus::Color) -> Color {
@@ -625,6 +629,8 @@ fn compute_full_style_inner(
         inset_right: cs.right.unwrap_or(0.0),
         inset_bottom: cs.bottom.unwrap_or(0.0),
         inset_left: cs.left.unwrap_or(0.0),
+        row_gap: cs.row_gap.unwrap_or(0.0),
+        column_gap: cs.column_gap.unwrap_or(0.0),
     };
     (fs, custom, cs_for_return)
 }
@@ -694,6 +700,8 @@ fn make_element(
         inset_right: fs.inset_right,
         inset_bottom: fs.inset_bottom,
         inset_left: fs.inset_left,
+        row_gap: fs.row_gap,
+        column_gap: fs.column_gap,
     }
 }
 
