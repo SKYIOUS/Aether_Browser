@@ -1553,7 +1553,8 @@ mod native_impl {
         available_main: f32,
         available_cross: f32,
         is_row: bool,
-        _is_wrap: bool,
+        is_wrap: bool,
+        is_wrap_reverse: bool,
     }
 
     impl<'a> FlexLayoutContext<'a> {
@@ -1571,6 +1572,7 @@ mod native_impl {
                 CssFlexDirection::Row | CssFlexDirection::RowReverse
             );
             let is_wrap = matches!(flex_wrap, CssFlexWrap::Wrap | CssFlexWrap::WrapReverse);
+            let is_wrap_reverse = matches!(flex_wrap, CssFlexWrap::WrapReverse);
 
             Self {
                 _container_width: ctx.container_width,
@@ -1583,7 +1585,8 @@ mod native_impl {
                 available_main,
                 available_cross: available_cross.max(0.0),
                 is_row,
-                _is_wrap: is_wrap,
+                is_wrap,
+                is_wrap_reverse,
             }
         }
 
@@ -1677,12 +1680,132 @@ mod native_impl {
                 return;
             }
 
+            // Single-line path: unchanged from original
+            if !self.is_wrap {
+                self.layout_flex_line(&mut flex_items, 0.0, self.available_cross);
+                return;
+            }
+
+            // Multi-line path: break into lines, layout each, distribute along cross-axis
+            let mut lines: Vec<Vec<FlexItem>> = Vec::new();
+            let mut current_line: Vec<FlexItem> = Vec::new();
+            let mut current_main: f32 = 0.0;
+
+            for item in flex_items {
+                let outer_main = item.main_size + item.margin_main_start + item.margin_main_end;
+                if !current_line.is_empty()
+                    && (current_main + outer_main > self.available_main
+                        || current_main > 0.0 && current_main + outer_main > self.available_main)
+                {
+                    lines.push(std::mem::take(&mut current_line));
+                    current_main = 0.0;
+                }
+                current_main += outer_main;
+                current_line.push(item);
+            }
+            if !current_line.is_empty() {
+                lines.push(current_line);
+            }
+
+            // Calculate per-line cross sizes
+            let line_count = lines.len();
+            let mut line_cross_sizes: Vec<f32> = Vec::with_capacity(line_count);
+            for line in &lines {
+                let max_cross = line
+                    .iter()
+                    .map(|i| i.cross_size + i.margin_cross_start + i.margin_cross_end)
+                    .fold(0.0f32, f32::max);
+                line_cross_sizes.push(max_cross);
+            }
+
+            // align-content: stretch distributes extra cross-space across lines
+            let align_content = self.elements[self.flex_container_idx]
+                .align_content
+                .unwrap_or(CssAlignContent::Stretch);
+            let total_line_cross: f32 = line_cross_sizes.iter().sum();
+            let extra_cross = (self.available_cross - total_line_cross).max(0.0);
+
+            if matches!(align_content, CssAlignContent::Stretch) && line_count > 0 {
+                let extra_per_line = extra_cross / line_count as f32;
+                for size in &mut line_cross_sizes {
+                    *size += extra_per_line;
+                }
+            }
+
+            // Calculate line cross positions
+            let remaining_cross = if matches!(align_content, CssAlignContent::Stretch) {
+                0.0
+            } else {
+                extra_cross
+            };
+            let mut line_cross_starts: Vec<f32> = Vec::with_capacity(line_count);
+            let mut cross_cursor = match align_content {
+                CssAlignContent::FlexEnd => remaining_cross,
+                CssAlignContent::Center => remaining_cross / 2.0,
+                CssAlignContent::SpaceBetween => 0.0,
+                CssAlignContent::SpaceAround => remaining_cross / (line_count * 2) as f32,
+                CssAlignContent::Stretch => 0.0,
+                CssAlignContent::FlexStart => 0.0,
+            };
+            for &size in &line_cross_sizes {
+                line_cross_starts.push(cross_cursor);
+                if remaining_cross > 0.0 && line_count > 1 {
+                    match align_content {
+                        CssAlignContent::SpaceBetween => {
+                            cross_cursor += size + remaining_cross / (line_count - 1) as f32;
+                        }
+                        CssAlignContent::SpaceAround => {
+                            cross_cursor += size + remaining_cross / line_count as f32;
+                        }
+                        _ => {
+                            cross_cursor += size;
+                        }
+                    }
+                } else {
+                    cross_cursor += size;
+                }
+            }
+
+            // wrap-reverse: first line at bottom, lines stack upward
+            if self.is_wrap_reverse {
+                let container_cross = self.available_cross;
+                // line_cross_starts currently has normal top-to-bottom positions.
+                // Rewrite: line 0 at bottom, each subsequent line above.
+                let mut pos = container_cross - line_cross_sizes[0];
+                for i in 0..line_count {
+                    line_cross_starts[i] = pos;
+                    if i + 1 < line_count {
+                        pos -= line_cross_sizes[i + 1];
+                    }
+                }
+            }
+
+            // Layout each line
+            for (line_idx, line) in lines.into_iter().enumerate() {
+                let line_cross_start = line_cross_starts[line_idx];
+                let line_cross_size = line_cross_sizes[line_idx];
+                let mut items = line;
+                self.layout_flex_line(&mut items, line_cross_start, line_cross_size);
+            }
+        }
+
+        fn layout_flex_line(
+            &mut self,
+            flex_items: &mut Vec<FlexItem>,
+            line_cross_offset: f32,
+            line_cross_size: f32,
+        ) {
+            let item_count = flex_items.len();
+            if item_count == 0 {
+                return;
+            }
+
             // Calculate base sizes and free space
             let mut total_basis = 0.0;
             let mut total_grow = 0.0;
             let mut total_shrink_weighted = 0.0;
 
-            for item in &flex_items {
+            for item in flex_items.iter() {
                 total_basis += item.main_size;
                 total_grow += item.flex_grow;
                 total_shrink_weighted += item.flex_shrink * item.main_size;
@@ -1693,25 +1816,22 @@ mod native_impl {
             // Apply flex grow/shrink
             let mut final_main_sizes = Vec::with_capacity(flex_items.len());
             if free_space > 0.0 && total_grow > 0.0 {
-                // Distribute free space proportionally to flex-grow
-                for item in &mut flex_items {
+                for item in flex_items.iter() {
                     let grow_share = (item.flex_grow / total_grow) * free_space;
-                    item.main_size += grow_share;
-                    final_main_sizes.push(item.main_size);
+                    final_main_sizes.push(item.main_size + grow_share);
                 }
             } else if free_space < 0.0 && total_shrink_weighted > 0.0 {
-                // Shrink items proportionally to flex-shrink * base size
-                for item in &mut flex_items {
+                for item in flex_items.iter() {
                     let shrink_share =
                         (item.flex_shrink * item.main_size / total_shrink_weighted) * (-free_space);
-                    item.main_size = (item.main_size - shrink_share)
-                        .max(item.main_min)
-                        .min(item.main_max);
-                    final_main_sizes.push(item.main_size);
+                    final_main_sizes.push(
+                        (item.main_size - shrink_share)
+                            .max(item.main_min)
+                            .min(item.main_max),
+                    );
                 }
             } else {
-                // No free space to distribute, just use base sizes
-                for item in &flex_items {
+                for item in flex_items.iter() {
                     final_main_sizes.push(item.main_size.clamp(item.main_min, item.main_max));
                 }
             }
@@ -1723,18 +1843,22 @@ mod native_impl {
             }
 
             // Handle cross-axis sizing
-            for item in &mut flex_items {
-                // Cross size: use explicit size or content-based
-                if item.cross_size > 0.0 {
+            let align_items = self.elements[self.flex_container_idx]
+                .align_items
+                .unwrap_or(CssAlignItems::Stretch);
+            for item in flex_items.iter_mut() {
+                if matches!(align_items, CssAlignItems::Stretch) {
+                    // Stretch: fill line cross-size, clamped to max
+                    item.cross_size = line_cross_size.clamp(item.cross_min, item.cross_max);
+                } else if item.cross_size > 0.0 {
                     item.cross_size = item.cross_size.clamp(item.cross_min, item.cross_max);
                 } else {
-                    // Auto cross size - use available cross size for stretch
-                    item.cross_size = self.available_cross.clamp(item.cross_min, item.cross_max);
+                    item.cross_size = line_cross_size.clamp(item.cross_min, item.cross_max);
                 }
             }
 
             // Apply alignment
-            let cross_start = if self.is_row {
+            let container_cross_start = if self.is_row {
                 self.outputs[self.flex_container_idx].y
             } else {
                 self.outputs[self.flex_container_idx].x
@@ -1742,9 +1866,6 @@ mod native_impl {
             let align_items = self.elements[self.flex_container_idx]
                 .align_items
                 .unwrap_or(CssAlignItems::Stretch);
-            let _align_content = self.elements[self.flex_container_idx]
-                .align_content
-                .unwrap_or(CssAlignContent::Stretch);
             let justify_content = self.elements[self.flex_container_idx]
                 .justify_content
                 .unwrap_or(CssJustifyContent::FlexStart);
@@ -1764,7 +1885,6 @@ mod native_impl {
                 CssJustifyContent::SpaceBetween => {
                     if item_count > 1 {
                         main_pos = 0.0;
-                        // Space will be distributed between items
                     }
                 }
                 CssJustifyContent::SpaceAround => {
@@ -1777,19 +1897,21 @@ mod native_impl {
 
             // Layout each item
             let mut current_main = main_pos;
-            for item in &mut flex_items {
-                let main_start = current_main + item.margin_main_start;
-                let cross_start = self.calculate_cross_start(item, cross_start, align_items);
+            for item in flex_items.iter_mut() {
+                let item_main_start = current_main + item.margin_main_start;
+                let item_cross = self.calculate_cross_start(item, align_items);
 
                 if self.is_row {
                     self.outputs[item.idx].x = self.outputs[self.flex_container_idx].x
                         + self.computed_styles[self.flex_container_idx].padding[3]
                         + self.computed_styles[self.flex_container_idx].border[3]
-                        + main_start;
+                        + item_main_start;
                     self.outputs[item.idx].y = self.outputs[self.flex_container_idx].y
                         + self.computed_styles[self.flex_container_idx].padding[0]
                         + self.computed_styles[self.flex_container_idx].border[0]
-                        + cross_start
+                        + container_cross_start
+                        + line_cross_offset
+                        + item_cross
                         + item.margin_cross_start;
                     self.outputs[item.idx].width = item.main_size;
                     self.outputs[item.idx].height = item.cross_size;
@@ -1797,57 +1919,45 @@ mod native_impl {
                     self.outputs[item.idx].x = self.outputs[self.flex_container_idx].x
                         + self.computed_styles[self.flex_container_idx].padding[3]
                         + self.computed_styles[self.flex_container_idx].border[3]
-                        + cross_start
+                        + container_cross_start
+                        + line_cross_offset
+                        + item_cross
                         + item.margin_cross_start;
                     self.outputs[item.idx].y = self.outputs[self.flex_container_idx].y
                         + self.computed_styles[self.flex_container_idx].padding[0]
                         + self.computed_styles[self.flex_container_idx].border[0]
-                        + main_start;
+                        + item_main_start;
                     self.outputs[item.idx].width = item.cross_size;
                     self.outputs[item.idx].height = item.main_size;
                 }
 
                 // Update position for next item
                 current_main += item.main_size + item.margin_main_start + item.margin_main_end;
-                if matches!(
-                    justify_content,
-                    CssJustifyContent::SpaceBetween
-                        | CssJustifyContent::SpaceAround
-                        | CssJustifyContent::SpaceEvenly
-                ) {
-                    if justify_content == CssJustifyContent::SpaceBetween && item_count > 1 {
+                match justify_content {
+                    CssJustifyContent::SpaceBetween if item_count > 1 => {
                         current_main += main_free / (item_count - 1) as f32;
-                    } else if justify_content == CssJustifyContent::SpaceAround {
+                    }
+                    CssJustifyContent::SpaceAround => {
                         current_main += main_free / item_count as f32;
-                    } else if justify_content == CssJustifyContent::SpaceEvenly {
+                    }
+                    CssJustifyContent::SpaceEvenly => {
                         current_main += main_free / (item_count + 1) as f32;
                     }
+                    _ => {}
                 }
             }
         }
 
-        fn calculate_cross_start(
-            &self,
-            item: &FlexItem,
-            _container_cross_start: f32,
-            align_items: CssAlignItems,
-        ) -> f32 {
+        fn calculate_cross_start(&self, item: &FlexItem, align_items: CssAlignItems) -> f32 {
             let container_cross = self.available_cross;
             let item_cross = item.cross_size + item.margin_cross_start + item.margin_cross_end;
 
-            let _align = match item.margin_cross_start > 0.0 || item.margin_cross_end > 0.0 {
-                true => align_items, // If explicit margins, respect them
-                false => align_items,
-            };
-
-            let item_align = align_items;
-
-            match item_align {
+            match align_items {
                 CssAlignItems::FlexStart => 0.0,
                 CssAlignItems::FlexEnd => container_cross - item_cross,
                 CssAlignItems::Center => (container_cross - item_cross) / 2.0,
-                CssAlignItems::Stretch => 0.0, // Will be stretched to fill
-                CssAlignItems::Baseline => 0.0, // Baseline alignment not implemented yet
+                CssAlignItems::Stretch => 0.0,
+                CssAlignItems::Baseline => 0.0,
             }
         }
     }

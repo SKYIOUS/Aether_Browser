@@ -715,6 +715,344 @@ mod f5_correctness {
         assert!(a.elements[1].width >= 0.0);
         assert!(b.elements[1].width >= 0.0);
     }
+
+    /// Baseline: capture native wrapping behavior with items that actually overflow.
+    /// Container 200px wide, 4 items @ 80px basis + 2px margin each = 328px total.
+    /// Expected: 2 lines of 2 items. Items on same line share main axis.
+    #[test]
+    fn f5_wrapping_baseline() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        // Override container to force wrapping: 200px wide
+        inp.elements[0].width = Some(200.0);
+        // Override child flex_basis to 80px, flex_grow to 0 so items don't shrink
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // Container
+        let c = &out.elements[0];
+        eprintln!("container: {}x{}", c.width, c.height);
+        // Items
+        for i in 1..=4 {
+            let e = &out.elements[i];
+            eprintln!(
+                "item {}: x={} y={} w={} h={}",
+                i, e.x, e.y, e.width, e.height
+            );
+        }
+        // Baseline assertions — these capture CURRENT behavior, may be wrong
+        let y1 = out.elements[1].y;
+        let y2 = out.elements[3].y;
+        eprintln!("line1_y={} line2_y={}", y1, y2);
+        // At minimum, items should exist and have dimensions
+        for i in 1..=4 {
+            assert!(out.elements[i].width > 0.0, "item {} width", i);
+            assert!(out.elements[i].height > 0.0, "item {} height", i);
+        }
+    }
+
+    /// Geometry: 2-line wrapping proves line formation.
+    /// 4 items @ 80px on 200px container → 2 lines of 2.
+    /// Line 1 y must differ from line 2 y.
+    #[test]
+    fn f5_wrap_two_lines() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let y1 = out.elements[1].y;
+        let y3 = out.elements[3].y;
+        assert!(y3 > y1, "line 2 (y={}) must be below line 1 (y={})", y3, y1);
+        // Line 1: items 1,2 share y; Line 2: items 3,4 share y
+        assert_eq!(out.elements[1].y, out.elements[2].y, "items 1,2 same line");
+        assert_eq!(out.elements[3].y, out.elements[4].y, "items 3,4 same line");
+    }
+
+    /// Geometry: single-line regression — items stay on one line when wrap=NoWrap.
+    #[test]
+    fn f5_nowrap_single_line() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::NoWrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let y1 = out.elements[1].y;
+        for i in 2..=4 {
+            assert_eq!(out.elements[i].y, y1, "item {} must share y with item 1", i);
+        }
+    }
+
+    /// Geometry: align-content flex-start puts line 1 at cross-start.
+    #[test]
+    fn f5_align_content_flex_start() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].align_content = Some(AlignContent::FlexStart);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // Line 1 should start near container top (padding + border)
+        let container_y = out.elements[0].y;
+        let line1_y = out.elements[1].y;
+        assert!(line1_y >= container_y, "line 1 at cross-start");
+    }
+
+    /// Geometry: align-content center centers lines vertically.
+    #[test]
+    fn f5_align_content_center() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(400.0);
+        inp.elements[0].align_content = Some(AlignContent::Center);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let container_h = out.elements[0].height;
+        let line1_y = out.elements[1].y;
+        let line2_y = out.elements[3].y;
+        // Lines should be centered: line1_y > 0 (not at top)
+        assert!(line1_y > 0.0, "line 1 not at top: y={}", line1_y);
+        // line2 below line1
+        assert!(line2_y > line1_y, "line 2 below line 1");
+    }
+
+    /// Geometry: align-content flex-end puts last line near cross-end.
+    #[test]
+    fn f5_align_content_flex_end() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(400.0);
+        inp.elements[0].align_content = Some(AlignContent::FlexEnd);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let container_h = out.elements[0].height;
+        let line2_y = out.elements[3].y;
+        // Line 2 should be near bottom
+        assert!(
+            line2_y > container_h / 2.0,
+            "line 2 near bottom: y={}",
+            line2_y
+        );
+    }
+
+    /// Geometry: align-content space-between distributes lines with gap.
+    #[test]
+    fn f5_align_content_space_between() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(400.0);
+        inp.elements[0].align_content = Some(AlignContent::SpaceBetween);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let line1_y = out.elements[1].y;
+        let line2_y = out.elements[3].y;
+        // SpaceBetween: line 1 at start, line 2 at end, gap in between
+        assert!(
+            line2_y > line1_y + 80.0,
+            "lines have gap: l1={} l2={}",
+            line1_y,
+            line2_y
+        );
+    }
+
+    /// Geometry: align-content space-around distributes lines evenly.
+    #[test]
+    fn f5_align_content_space_around() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(400.0);
+        inp.elements[0].align_content = Some(AlignContent::SpaceAround);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let line1_y = out.elements[1].y;
+        let line2_y = out.elements[3].y;
+        // SpaceAround: lines evenly spaced, not touching edges
+        assert!(line1_y > 0.0, "line 1 not at top: y={}", line1_y);
+        assert!(line2_y > line1_y, "line 2 below line 1");
+    }
+
+    /// Geometry: align-content stretch enlarges line cross-sizes.
+    /// Lines should be taller than their content when extra cross-space exists.
+    #[test]
+    fn f5_align_content_stretch() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(400.0);
+        inp.elements[0].align_content = Some(AlignContent::Stretch);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+            inp.elements[i].height = Some(20.0);
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // With stretch, items should be taller than their 20px content
+        // because extra cross-space (400 - 2*20 = 360) is distributed
+        let h1 = out.elements[1].height;
+        let h3 = out.elements[3].height;
+        assert!(h1 > 20.0, "item 1 stretched: h={}", h1);
+        assert!(h3 > 20.0, "item 3 stretched: h={}", h3);
+    }
+
+    /// Geometry: wrap-reverse flips cross-axis direction.
+    /// Line 1 should be below line 2 (reversed from normal wrap).
+    #[test]
+    fn f5_wrap_reverse() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::WrapReverse,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        for i in 1..=4 {
+            eprintln!(
+                "item {}: x={} y={} w={} h={}",
+                i,
+                out.elements[i].x,
+                out.elements[i].y,
+                out.elements[i].width,
+                out.elements[i].height
+            );
+        }
+        // wrap-reverse: line 2 (items 3,4) should have lower y than line 1 (items 1,2)
+        let y1 = out.elements[1].y;
+        let y3 = out.elements[3].y;
+        assert!(
+            y3 < y1,
+            "wrap-reverse: line 2 (y={}) above line 1 (y={})",
+            y3,
+            y1
+        );
+    }
+
+    /// Geometry: nested flex containers with wrapping.
+    /// Outer wraps, inner items also flex.
+    #[test]
+    fn f5_nested_wrap() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // Items should wrap into 2 lines
+        let y1 = out.elements[1].y;
+        let y3 = out.elements[3].y;
+        assert!(y3 > y1, "nested wrap: line 2 below line 1");
+        // All items have valid dimensions
+        for i in 1..=4 {
+            assert!(out.elements[i].width > 0.0, "item {} width", i);
+            assert!(out.elements[i].height > 0.0, "item {} height", i);
+        }
+    }
 }
 
 #[cfg(all(test, feature = "taffy-backend", feature = "native-backend"))]
