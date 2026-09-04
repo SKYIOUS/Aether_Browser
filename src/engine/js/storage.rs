@@ -84,23 +84,33 @@ impl JsBridge {
         super::js_bridge::local_storage_store()
             .read()
             .ok()
-            .and_then(|guard| guard.get(&origin).and_then(|m| m.get(key)).cloned())
+            .and_then(|guard| guard.get(&origin).and_then(|od| od.data.get(key).cloned()))
     }
 
     pub fn local_storage_set_item(&mut self, key: String, value: String) {
+        let new_entry_size = key.len() + value.len();
         if let Ok(mut guard) = super::js_bridge::local_storage_store().write() {
-            guard
-                .entry(self.current_origin())
-                .or_default()
-                .insert(key, value);
+            let origin_data = guard.entry(self.current_origin()).or_default();
+            let old_size = origin_data
+                .data
+                .get(&key)
+                .map_or(0, |v| key.len() + v.len());
+            let new_used = origin_data.used_bytes - old_size + new_entry_size;
+            if new_used > super::js_bridge::LOCAL_STORAGE_QUOTA {
+                return;
+            }
+            origin_data.data.insert(key, value);
+            origin_data.used_bytes = new_used;
         }
         super::js_bridge::save_local_storage();
     }
 
     pub fn local_storage_remove_item(&mut self, key: &str) {
         if let Ok(mut guard) = super::js_bridge::local_storage_store().write() {
-            if let Some(origin) = guard.get_mut(&self.current_origin()) {
-                origin.remove(key);
+            if let Some(origin_data) = guard.get_mut(&self.current_origin()) {
+                if let Some(removed) = origin_data.data.remove(key) {
+                    origin_data.used_bytes -= key.len() + removed.len();
+                }
             }
         }
         super::js_bridge::save_local_storage();
@@ -123,7 +133,7 @@ impl JsBridge {
             .and_then(|guard| {
                 guard
                     .get(&self.current_origin())
-                    .and_then(|m| m.keys().nth(index as usize).cloned())
+                    .and_then(|od| od.data.keys().nth(index as usize).cloned())
             })
     }
 
@@ -131,7 +141,19 @@ impl JsBridge {
         super::js_bridge::local_storage_store()
             .read()
             .ok()
-            .and_then(|guard| guard.get(&self.current_origin()).map(|m| m.len() as i32))
+            .and_then(|guard| {
+                guard
+                    .get(&self.current_origin())
+                    .map(|od| od.data.len() as i32)
+            })
+            .unwrap_or(0)
+    }
+
+    pub fn local_storage_used_bytes(&self) -> usize {
+        super::js_bridge::local_storage_store()
+            .read()
+            .ok()
+            .and_then(|guard| guard.get(&self.current_origin()).map(|od| od.used_bytes))
             .unwrap_or(0)
     }
 }

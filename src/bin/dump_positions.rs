@@ -271,6 +271,8 @@ fn main() {
                 inset_right: 0.0,
                 inset_bottom: 0.0,
                 inset_left: 0.0,
+                row_gap: 0.0,
+                column_gap: 0.0,
             }
         }
         let els = vec![

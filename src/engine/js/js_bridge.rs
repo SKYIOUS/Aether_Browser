@@ -100,7 +100,19 @@ pub(crate) struct CookieEntry {
 }
 
 pub(crate) type CookieOriginStore = HashMap<String, HashMap<String, CookieEntry>>;
-pub(crate) type OriginStore = HashMap<String, HashMap<String, String>>;
+
+/// Per-origin localStorage data with byte accounting.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) struct OriginData {
+    pub data: HashMap<String, String>,
+    #[serde(skip)]
+    pub used_bytes: usize,
+}
+
+/// 5 MB per origin — standard browser-compatible quota.
+pub const LOCAL_STORAGE_QUOTA: usize = 5 * 1024 * 1024;
+
+pub(crate) type OriginStore = HashMap<String, OriginData>;
 
 pub(crate) fn is_expired(entry: &CookieEntry) -> bool {
     entry.expires.is_some_and(|exp| Instant::now() >= exp)
@@ -203,7 +215,14 @@ pub(crate) fn save_local_storage() {
 
 pub(crate) fn load_local_storage() {
     if let Ok(data) = std::fs::read_to_string("vayu_local_storage.json") {
-        if let Ok(parsed) = serde_json::from_str::<OriginStore>(&data) {
+        if let Ok(mut parsed) = serde_json::from_str::<OriginStore>(&data) {
+            for origin_data in parsed.values_mut() {
+                origin_data.used_bytes = origin_data
+                    .data
+                    .iter()
+                    .map(|(k, v)| k.len() + v.len())
+                    .sum();
+            }
             if let Ok(mut store) = local_storage_store().write() {
                 *store = parsed;
             }
