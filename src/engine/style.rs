@@ -37,6 +37,8 @@ pub fn compute_style_vp_with_vars(
     stylesheet: &crate::engine::stratus::Stylesheet,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
     parent_vars: &CustomPropertyMap,
     parent_computed: Option<&ComputedStyle>,
 ) -> (ComputedStyle, CustomPropertyMap) {
@@ -51,6 +53,8 @@ pub fn compute_style_vp_with_vars(
         stylesheet,
         vw,
         vh,
+        cb_w,
+        cb_h,
         parent_vars,
         parent_computed,
     );

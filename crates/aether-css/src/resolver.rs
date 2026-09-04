@@ -180,6 +180,8 @@ pub fn resolve_style_with_vars(
         &custom,
         viewport_w,
         viewport_h,
+        viewport_w,
+        viewport_h,
         &mut mask,
         &mut initial_mask,
         &mut set_mask,
@@ -196,6 +198,8 @@ pub fn resolve_style_with_vars_and_custom(
     stylesheet: &Stylesheet,
     viewport_w: f32,
     viewport_h: f32,
+    cb_w: f32,
+    cb_h: f32,
     parent_vars: &CustomPropertyMap,
     parent_computed: Option<&ComputedStyle>,
 ) -> (ComputedStyle, CustomPropertyMap, InheritMask) {
@@ -219,6 +223,8 @@ pub fn resolve_style_with_vars_and_custom(
         &custom,
         viewport_w,
         viewport_h,
+        cb_w,
+        cb_h,
         &mut inherit_mask,
         &mut initial_mask,
         &mut set_mask,
@@ -255,6 +261,8 @@ fn apply_declarations_with_vars(
     custom: &CustomPropertyMap,
     viewport_w: f32,
     viewport_h: f32,
+    cb_w: f32,
+    cb_h: f32,
     inherit_mask: &mut InheritMask,
     initial_mask: &mut InitialMask,
     set_mask: &mut InheritMask,
@@ -283,6 +291,8 @@ fn apply_declarations_with_vars(
             (0, 0, 0),
             viewport_w,
             viewport_h,
+            cb_w,
+            cb_h,
             inherit_mask,
             initial_mask,
             set_mask,
@@ -497,6 +507,8 @@ fn apply_declarations(style: &mut ComputedStyle, declarations: &[Declaration], s
         spec,
         800.0,
         600.0,
+        800.0,
+        600.0,
         &mut InheritMask::default(),
         &mut InitialMask::default(),
         &mut InheritMask::default(),
@@ -510,6 +522,8 @@ fn apply_declarations_vp(
     _specificity: Specificity,
     viewport_w: f32,
     viewport_h: f32,
+    cb_w: f32,
+    cb_h: f32,
     inherit_mask: &mut InheritMask,
     initial_mask: &mut InitialMask,
     set_mask: &mut InheritMask,
@@ -558,7 +572,7 @@ fn apply_declarations_vp(
                     } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
                         initial_mask.set(InitialMask::FONT_SIZE);
                     } else {
-                        style.font_size = parse_length_vp(&decl.value, vw, vh);
+                        style.font_size = parse_length_vp(&decl.value, vw, vh, cb_w);
                         set_mask.set(InheritMask::FONT_SIZE);
                     }
                 }
@@ -688,6 +702,8 @@ fn apply_declarations_vp(
                             &decl.value,
                             vw,
                             vh,
+                            cb_w,
+                            cb_h,
                         );
                     }
                 }
@@ -721,6 +737,8 @@ fn apply_declarations_vp(
                             &decl.value,
                             vw,
                             vh,
+                            cb_w,
+                            cb_h,
                         );
                     }
                 }
@@ -754,6 +772,8 @@ fn apply_declarations_vp(
                             &decl.value,
                             vw,
                             vh,
+                            cb_w,
+                            cb_h,
                         );
                     }
                 }
@@ -794,7 +814,7 @@ fn apply_declarations_vp(
                     {
                         style.width = None;
                     } else {
-                        style.width = parse_length_vp(&decl.value, vw, vh);
+                        style.width = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
                 CssPropertyName::Height => {
@@ -802,7 +822,7 @@ fn apply_declarations_vp(
                     {
                         style.height = None;
                     } else {
-                        style.height = parse_length_vp_vertical(&decl.value, vw, vh);
+                        style.height = parse_length_vp_vertical(&decl.value, vw, vh, cb_h);
                     }
                 }
                 CssPropertyName::MinWidth => {
@@ -810,7 +830,7 @@ fn apply_declarations_vp(
                     {
                         style.min_width = None;
                     } else {
-                        style.min_width = parse_length_vp(&decl.value, vw, vh);
+                        style.min_width = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
                 CssPropertyName::MinHeight => {
@@ -818,7 +838,7 @@ fn apply_declarations_vp(
                     {
                         style.min_height = None;
                     } else {
-                        style.min_height = parse_length_vp_vertical(&decl.value, vw, vh);
+                        style.min_height = parse_length_vp_vertical(&decl.value, vw, vh, cb_h);
                     }
                 }
                 CssPropertyName::MaxWidth => {
@@ -826,7 +846,7 @@ fn apply_declarations_vp(
                     {
                         style.max_width = None;
                     } else {
-                        style.max_width = parse_length_vp(&decl.value, vw, vh);
+                        style.max_width = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
                 CssPropertyName::MaxHeight => {
@@ -834,7 +854,7 @@ fn apply_declarations_vp(
                     {
                         style.max_height = None;
                     } else {
-                        style.max_height = parse_length_vp_vertical(&decl.value, vw, vh);
+                        style.max_height = parse_length_vp_vertical(&decl.value, vw, vh, cb_h);
                     }
                 }
                 CssPropertyName::Top => {
@@ -842,7 +862,7 @@ fn apply_declarations_vp(
                     {
                         style.top = None;
                     } else {
-                        style.top = parse_length_vp_vertical(&decl.value, vw, vh);
+                        style.top = parse_length_vp_vertical(&decl.value, vw, vh, cb_h);
                     }
                 }
                 CssPropertyName::Right => {
@@ -850,7 +870,7 @@ fn apply_declarations_vp(
                     {
                         style.right = None;
                     } else {
-                        style.right = parse_length_vp(&decl.value, vw, vh);
+                        style.right = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
                 CssPropertyName::Bottom => {
@@ -858,7 +878,7 @@ fn apply_declarations_vp(
                     {
                         style.bottom = None;
                     } else {
-                        style.bottom = parse_length_vp_vertical(&decl.value, vw, vh);
+                        style.bottom = parse_length_vp_vertical(&decl.value, vw, vh, cb_h);
                     }
                 }
                 CssPropertyName::Left => {
@@ -866,7 +886,7 @@ fn apply_declarations_vp(
                     {
                         style.left = None;
                     } else {
-                        style.left = parse_length_vp(&decl.value, vw, vh);
+                        style.left = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
 
@@ -925,7 +945,7 @@ fn apply_declarations_vp(
                         style.flex.flex_shrink = 1.0;
                         style.flex.flex_basis = Some(0.0);
                     } else {
-                        apply_flex_shorthand(&mut style.flex, &decl.value, vw, vh);
+                        apply_flex_shorthand(&mut style.flex, &decl.value, vw, vh, cb_w, cb_h);
                     }
                 }
                 CssPropertyName::FlexGrow => {
@@ -961,7 +981,7 @@ fn apply_declarations_vp(
                     {
                         style.flex.flex_basis = Some(0.0);
                     } else {
-                        style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh);
+                        style.flex.flex_basis = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
 
@@ -998,7 +1018,7 @@ fn apply_declarations_vp(
                     } else if matches!(&decl.value, PropertyValue::Keyword(s) if s == "initial") {
                         initial_mask.set(InitialMask::LINE_HEIGHT);
                     } else {
-                        style.line_height = parse_length_vp(&decl.value, vw, vh);
+                        style.line_height = parse_length_vp(&decl.value, vw, vh, cb_w);
                         set_mask.set(InheritMask::LINE_HEIGHT);
                     }
                 }
@@ -1023,7 +1043,7 @@ fn apply_declarations_vp(
                     {
                         style.border_radius = None;
                     } else {
-                        style.border_radius = parse_length_vp(&decl.value, vw, vh);
+                        style.border_radius = parse_length_vp(&decl.value, vw, vh, cb_w);
                     }
                 }
                 CssPropertyName::Border => {
@@ -1118,43 +1138,86 @@ fn lv_to_px_font(lv: &LengthValue, vw: f32, vh: f32, font_size: f32) -> f32 {
     }
 }
 
+/// Resolve a horizontal CSS value (width, left, right, margin-left/right, padding-left/right).
+/// `cb_w` = containing-block width for percentage resolution.
+fn lv_to_px_h(lv: &LengthValue, vw: f32, vh: f32, font_size: f32, cb_w: f32) -> f32 {
+    let vw_val = lv.value * vw / 100.0;
+    let vh_val = lv.value * vh / 100.0;
+    match lv.unit {
+        Unit::Px => lv.value,
+        Unit::Vw => vw_val,
+        Unit::Vh => vh_val,
+        Unit::Vmin => vw_val.min(vh_val),
+        Unit::Vmax => vw_val.max(vh_val),
+        Unit::Percent => lv.value * cb_w / 100.0,
+        Unit::Em | Unit::Rem => lv.value * font_size,
+        Unit::In => lv.value * 96.0,
+        Unit::Cm => lv.value * 96.0 / 2.54,
+        Unit::Mm => lv.value * 96.0 / 25.4,
+        Unit::Pt => lv.value * 96.0 / 72.0,
+        Unit::Pc => lv.value * 96.0 / 6.0,
+        Unit::Ch => lv.value * 8.0,
+        Unit::Ex => lv.value * 7.0,
+    }
+}
+
+/// Resolve a vertical CSS value (height, top, bottom, margin-top/bottom, padding-top/bottom).
+/// `cb_h` = containing-block height for percentage resolution.
+fn lv_to_px_v(lv: &LengthValue, vw: f32, vh: f32, font_size: f32, cb_h: f32) -> f32 {
+    let vw_val = lv.value * vw / 100.0;
+    let vh_val = lv.value * vh / 100.0;
+    match lv.unit {
+        Unit::Px => lv.value,
+        Unit::Vw => vw_val,
+        Unit::Vh => vh_val,
+        Unit::Vmin => vw_val.min(vh_val),
+        Unit::Vmax => vw_val.max(vh_val),
+        Unit::Percent => lv.value * cb_h / 100.0,
+        Unit::Em | Unit::Rem => lv.value * font_size,
+        Unit::In => lv.value * 96.0,
+        Unit::Cm => lv.value * 96.0 / 2.54,
+        Unit::Mm => lv.value * 96.0 / 25.4,
+        Unit::Pt => lv.value * 96.0 / 72.0,
+        Unit::Pc => lv.value * 96.0 / 6.0,
+        Unit::Ch => lv.value * 8.0,
+        Unit::Ex => lv.value * 7.0,
+    }
+}
+
 #[allow(dead_code)]
 fn resolve_length_for_unit(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
     lv_to_px(lv, vw, vh)
 }
 
-fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
+/// Parse a horizontal CSS length (width, left, right, margin-left/right, padding-left/right).
+/// `cb_w` = containing-block width for percentage resolution.
+fn parse_length_vp(value: &PropertyValue, vw: f32, vh: f32, cb_w: f32) -> Option<f32> {
     match value {
-        PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
+        PropertyValue::Length(lv) => Some(lv_to_px_h(lv, vw, vh, 16.0, cb_w)),
         PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
 }
 
-fn lv_to_px_vertical(lv: &LengthValue, vw: f32, vh: f32) -> f32 {
-    if lv.unit == Unit::Percent {
-        return lv.value * vh / 100.0;
-    }
-    lv_to_px(lv, vw, vh)
-}
-
-fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
+/// Parse a vertical CSS length (height, top, bottom, margin-top/bottom, padding-top/bottom).
+/// `cb_h` = containing-block height for percentage resolution.
+fn parse_length_vp_vertical(value: &PropertyValue, vw: f32, vh: f32, cb_h: f32) -> Option<f32> {
     match value {
-        PropertyValue::Length(lv) => {
-            let mut p = lv_to_px(lv, vw, vh);
-            if lv.unit == Unit::Percent {
-                p = lv.value * vh / 100.0;
-            }
-            Some(p)
-        }
+        PropertyValue::Length(lv) => Some(lv_to_px_v(lv, vw, vh, 16.0, cb_h)),
         PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
     }
 }
 
-fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[Option<f32>; 4]> {
+fn parse_side_shorthand_vp(
+    value: &PropertyValue,
+    vw: f32,
+    vh: f32,
+    cb_w: f32,
+    cb_h: f32,
+) -> Option<[Option<f32>; 4]> {
     let parts: Vec<PropertyValue> = match value {
         PropertyValue::Shorthand(parts) => parts.clone(),
         PropertyValue::Keyword(s) => s
@@ -1186,9 +1249,9 @@ fn parse_side_shorthand_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<[O
             continue;
         }
         let px = if i % 2 == 0 && len >= 2 {
-            parse_length_vp_vertical(part, vw, vh)
+            parse_length_vp_vertical(part, vw, vh, cb_h)
         } else {
-            parse_length_vp(part, vw, vh)
+            parse_length_vp(part, vw, vh, cb_w)
         };
         let v = px?;
         vals.push(Some(v));
@@ -1323,6 +1386,8 @@ fn apply_flex_shorthand(
     value: &PropertyValue,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
 ) {
     match value {
         PropertyValue::Keyword(s) => match s.as_str() {
@@ -1387,16 +1452,28 @@ fn apply_flex_shorthand(
     flex.flex_basis = if len >= 3 {
         match parts[2] {
             PropertyValue::Keyword(s) if s == "auto" => None,
-            other => parse_length_from_pv_vp(other, vw, vh),
+            other => parse_length_from_pv_vp(other, vw, vh, cb_w, cb_h),
         }
     } else {
         Some(0.0)
     };
 }
 
-fn parse_length_from_pv_vp(value: &PropertyValue, vw: f32, vh: f32) -> Option<f32> {
+fn parse_length_from_pv_vp(
+    value: &PropertyValue,
+    vw: f32,
+    vh: f32,
+    cb_w: f32,
+    cb_h: f32,
+) -> Option<f32> {
     match value {
-        PropertyValue::Length(lv) => Some(lv_to_px(lv, vw, vh)),
+        PropertyValue::Length(lv) => {
+            if lv.unit == Unit::Percent {
+                Some(lv.value * cb_w / 100.0)
+            } else {
+                Some(lv_to_px(lv, vw, vh))
+            }
+        }
         PropertyValue::Number(n) => Some(*n),
         PropertyValue::Keyword(s) => s.parse().ok(),
         _ => None,
@@ -1413,6 +1490,8 @@ fn apply_sides_vp(
     value: &PropertyValue,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
 ) {
     // Determine if this is a vertical or horizontal property
     let is_vertical = matches!(
@@ -1426,9 +1505,9 @@ fn apply_sides_vp(
     );
     // First try single length
     let maybe_len = if is_vertical {
-        parse_length_vp_vertical(value, vw, vh)
+        parse_length_vp_vertical(value, vw, vh, cb_h)
     } else {
-        parse_length_vp(value, vw, vh)
+        parse_length_vp(value, vw, vh, cb_w)
     };
     if let Some(len) = maybe_len {
         match name {
@@ -1468,7 +1547,7 @@ fn apply_sides_vp(
     }
 
     // Try shorthand (e.g. "5em auto" → [5em, auto, 5em, auto])
-    if let Some(quads) = parse_side_shorthand_vp(value, vw, vh) {
+    if let Some(quads) = parse_side_shorthand_vp(value, vw, vh, cb_w, cb_h) {
         let is_shorthand = matches!(name, "margin" | "padding" | "border-width");
         if is_shorthand
             || name == "margin-top"
@@ -2757,6 +2836,294 @@ mod tests {
                 b: 0x99,
                 a: 255
             })
+        );
+    }
+
+    // ── percentage resolution against containing block ───────────────
+
+    #[test]
+    fn test_pct_width_50_of_400px_parent() {
+        let stylesheet = make_stylesheet(&[(
+            "width",
+            PropertyValue::Length(LengthValue {
+                value: 50.0,
+                unit: Unit::Percent,
+            }),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            400.0,
+            300.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.width,
+            Some(200.0),
+            "50% of 400px containing block = 200px"
+        );
+    }
+
+    #[test]
+    fn test_pct_width_25_of_600px_parent() {
+        let stylesheet = make_stylesheet(&[(
+            "width",
+            PropertyValue::Length(LengthValue {
+                value: 25.0,
+                unit: Unit::Percent,
+            }),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            600.0,
+            400.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.width,
+            Some(150.0),
+            "25% of 600px containing block = 150px"
+        );
+    }
+
+    #[test]
+    fn test_pct_height_of_containing_block() {
+        let stylesheet = make_stylesheet(&[(
+            "height",
+            PropertyValue::Length(LengthValue {
+                value: 50.0,
+                unit: Unit::Percent,
+            }),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            400.0,
+            300.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.height,
+            Some(150.0),
+            "50% of 300px containing-block height = 150px"
+        );
+    }
+
+    #[test]
+    fn test_pct_min_max_width() {
+        let stylesheet = make_stylesheet(&[
+            (
+                "min-width",
+                PropertyValue::Length(LengthValue {
+                    value: 30.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+            (
+                "max-width",
+                PropertyValue::Length(LengthValue {
+                    value: 80.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            1000.0,
+            800.0,
+            500.0,
+            400.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(cs.min_width, Some(150.0), "30% of 500px = 150px");
+        assert_eq!(cs.max_width, Some(400.0), "80% of 500px = 400px");
+    }
+
+    #[test]
+    fn test_pct_margin_and_padding() {
+        let stylesheet = make_stylesheet(&[
+            (
+                "margin-top",
+                PropertyValue::Length(LengthValue {
+                    value: 10.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+            (
+                "margin-bottom",
+                PropertyValue::Length(LengthValue {
+                    value: 10.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+            (
+                "padding-left",
+                PropertyValue::Length(LengthValue {
+                    value: 25.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            400.0,
+            300.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.margin_top,
+            Some(30.0),
+            "10% of 300px containing-block height = 30px"
+        );
+        assert_eq!(
+            cs.margin_bottom,
+            Some(30.0),
+            "10% of 300px containing-block height = 30px"
+        );
+        assert_eq!(
+            cs.padding_left,
+            Some(100.0),
+            "25% of 400px containing-block width = 100px"
+        );
+    }
+
+    #[test]
+    fn test_pct_position() {
+        let stylesheet = make_stylesheet(&[
+            (
+                "left",
+                PropertyValue::Length(LengthValue {
+                    value: 50.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+            (
+                "right",
+                PropertyValue::Length(LengthValue {
+                    value: 25.0,
+                    unit: Unit::Percent,
+                }),
+            ),
+        ]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            400.0,
+            300.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.left,
+            Some(200.0),
+            "50% of 400px containing-block width = 200px"
+        );
+        assert_eq!(
+            cs.right,
+            Some(100.0),
+            "25% of 400px containing-block width = 100px"
+        );
+    }
+
+    #[test]
+    fn test_vw_unit_unaffected_by_containing_block() {
+        let stylesheet = make_stylesheet(&[(
+            "width",
+            PropertyValue::Length(LengthValue {
+                value: 50.0,
+                unit: Unit::Vw,
+            }),
+        )]);
+        let element = ElementData::new("div".to_string());
+        let (cs, _, _) = resolve_style_with_vars_and_custom(
+            &element,
+            &stylesheet,
+            800.0,
+            600.0,
+            400.0,
+            300.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            cs.width,
+            Some(400.0),
+            "50vw still resolves against viewport width (800px), not containing block"
+        );
+    }
+
+    #[test]
+    fn test_pct_nested_parent_to_child() {
+        let parent_ss = make_stylesheet(&[(
+            "width",
+            PropertyValue::Length(LengthValue {
+                value: 400.0,
+                unit: Unit::Px,
+            }),
+        )]);
+        let child_ss = make_stylesheet(&[(
+            "width",
+            PropertyValue::Length(LengthValue {
+                value: 50.0,
+                unit: Unit::Percent,
+            }),
+        )]);
+        let parent_el = ElementData::new("div".to_string());
+        let child_el = ElementData::new("div".to_string());
+        let (parent_cs, _, _) = resolve_style_with_vars_and_custom(
+            &parent_el,
+            &parent_ss,
+            1000.0,
+            800.0,
+            1000.0,
+            800.0,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        let parent_w = parent_cs.width.unwrap_or(1000.0);
+        let (child_cs, _, _) = resolve_style_with_vars_and_custom(
+            &child_el,
+            &child_ss,
+            1000.0,
+            800.0,
+            parent_w,
+            parent_w,
+            &CustomPropertyMap::new(),
+            None,
+        );
+        assert_eq!(
+            parent_cs.width,
+            Some(400.0),
+            "parent explicit width = 400px"
+        );
+        assert_eq!(
+            child_cs.width,
+            Some(200.0),
+            "child 50% of parent 400px = 200px"
         );
     }
 }

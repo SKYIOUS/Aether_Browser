@@ -403,6 +403,8 @@ fn compute_full_style(
     ss: &Stylesheet,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
     parent_vars: &CustomPropertyMap,
     parent_computed: Option<&ComputedStyle>,
 ) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
@@ -418,6 +420,8 @@ fn compute_full_style(
         ss,
         vw,
         vh,
+        cb_w,
+        cb_h,
         parent_vars,
         parent_computed,
     )
@@ -428,6 +432,8 @@ fn compute_full_style_flat(
     ss: &Stylesheet,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
     parent_vars: &CustomPropertyMap,
     parent_computed: Option<&ComputedStyle>,
 ) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
@@ -439,6 +445,8 @@ fn compute_full_style_flat(
         ss,
         vw,
         vh,
+        cb_w,
+        cb_h,
         parent_vars,
         parent_computed,
     )
@@ -453,6 +461,8 @@ fn compute_full_style_inner(
     ss: &Stylesheet,
     vw: f32,
     vh: f32,
+    cb_w: f32,
+    cb_h: f32,
     parent_vars: &CustomPropertyMap,
     parent_computed: Option<&ComputedStyle>,
 ) -> (FullStyle, CustomPropertyMap, ComputedStyle) {
@@ -462,6 +472,8 @@ fn compute_full_style_inner(
             ss,
             vw,
             vh,
+            cb_w,
+            cb_h,
             parent_vars,
             parent_computed,
         ),
@@ -481,6 +493,8 @@ fn compute_full_style_inner(
                 ss,
                 vw,
                 vh,
+                cb_w,
+                cb_h,
                 parent_vars,
                 parent_computed,
             );
@@ -701,6 +715,17 @@ pub fn extract_elements(
         return;
     }
 
+    // Containing-block dimensions for percentage resolution.
+    // Root element uses viewport; children use parent's resolved dimensions.
+    let (cb_w, cb_h) = match parent_idx {
+        Some(pi) if pi < elements.len() => {
+            let pw = elements[pi].css_width.unwrap_or(viewport_w);
+            let ph = elements[pi].css_height.unwrap_or(viewport_h);
+            (pw, ph)
+        }
+        _ => (viewport_w, viewport_h),
+    };
+
     match &node.node_type {
         NodeType::Document => {
             for child in &node.children {
@@ -736,6 +761,8 @@ pub fn extract_elements(
                         ss,
                         viewport_w,
                         viewport_h,
+                        cb_w,
+                        cb_h,
                         parent_vars,
                         parent_computed,
                     );
@@ -780,6 +807,8 @@ pub fn extract_elements(
                 ss,
                 viewport_w,
                 viewport_h,
+                cb_w,
+                cb_h,
                 parent_vars,
                 parent_computed,
             );
@@ -1195,6 +1224,16 @@ pub(crate) fn extract_elements_flat(
             None => return,
         };
 
+        // Containing-block dimensions for percentage resolution
+        let (cb_w, cb_h) = match parent_idx {
+            Some(pi) if pi < elements.len() => {
+                let pw = elements[pi].css_width.unwrap_or(vw);
+                let ph = elements[pi].css_height.unwrap_or(vh);
+                (pw, ph)
+            }
+            _ => (vw, vh),
+        };
+
         if node.is_document {
             for (ci, &child_id) in node.children.iter().enumerate() {
                 dom_path.push(ci);
@@ -1228,8 +1267,16 @@ pub(crate) fn extract_elements_flat(
                     el.background_color = None;
                     elements.push(el);
                 } else {
-                    let (fs, _custom, _cs) =
-                        compute_full_style_flat(node, ss, vw, vh, parent_vars, parent_computed);
+                    let (fs, _custom, _cs) = compute_full_style_flat(
+                        node,
+                        ss,
+                        vw,
+                        vh,
+                        cb_w,
+                        cb_h,
+                        parent_vars,
+                        parent_computed,
+                    );
                     let mut el = make_element("text", txt, &fs, parent_idx, dom_path.clone());
                     el.background_color = None;
                     elements.push(el);
@@ -1264,7 +1311,7 @@ pub(crate) fn extract_elements_flat(
         }
 
         let (fs, element_custom_vars, element_computed) =
-            compute_full_style_flat(node, ss, vw, vh, parent_vars, parent_computed);
+            compute_full_style_flat(node, ss, vw, vh, cb_w, cb_h, parent_vars, parent_computed);
         let uses_default_margins = uses_default_margins(tag);
 
         let (
