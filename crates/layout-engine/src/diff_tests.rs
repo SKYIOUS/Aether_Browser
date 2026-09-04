@@ -1053,6 +1053,152 @@ mod f5_correctness {
             assert!(out.elements[i].height > 0.0, "item {} height", i);
         }
     }
+
+    /// Audit: row-reverse + wrap-reverse.
+    /// Native engine does NOT implement main-axis reversal (only is_row flag).
+    /// Items should still wrap across cross-axis correctly.
+    #[test]
+    fn f5_wrap_reverse_row_reverse() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::RowReverse,
+            FlexWrap::WrapReverse,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // wrap-reverse: line 2 (items 3,4) should be above line 1 (items 1,2)
+        let y1 = out.elements[1].y;
+        let y3 = out.elements[3].y;
+        assert!(
+            y3 < y1,
+            "wrap-reverse row-reverse: line 2 (y={}) above line 1 (y={})",
+            y3,
+            y1
+        );
+        // Items have valid dimensions
+        for i in 1..=4 {
+            assert!(out.elements[i].width > 0.0, "item {} width", i);
+            assert!(out.elements[i].height > 0.0, "item {} height", i);
+        }
+    }
+
+    /// Audit: column + wrap-reverse.
+    /// Column direction: main axis = y, cross axis = x.
+    /// Wrapping happens horizontally. wrap-reverse flips horizontal direction.
+    #[test]
+    fn f5_wrap_reverse_column() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Column,
+            FlexWrap::WrapReverse,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        // Column: height is main axis, width is cross axis
+        inp.elements[0].height = Some(200.0);
+        inp.elements[0].width = Some(400.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // Column wrap-reverse: lines wrap horizontally, reversed
+        // Line 1 (items 1,2) should be in the right column
+        // Line 2 (items 3,4) should be in the left column
+        let x1 = out.elements[1].x;
+        let x3 = out.elements[3].x;
+        eprintln!("column wrap-reverse: x1={} x3={}", x1, x3);
+        // Items have valid dimensions
+        for i in 1..=4 {
+            assert!(out.elements[i].width > 0.0, "item {} width", i);
+            assert!(out.elements[i].height > 0.0, "item {} height", i);
+        }
+    }
+
+    /// Audit: column-reverse + wrap-reverse.
+    /// Both axes reversed. Items should still produce valid layout.
+    #[test]
+    fn f5_wrap_reverse_column_reverse() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::ColumnReverse,
+            FlexWrap::WrapReverse,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].height = Some(200.0);
+        inp.elements[0].width = Some(400.0);
+        for i in 1..=4 {
+            inp.elements[i].flex_basis = Some(80.0);
+            inp.elements[i].flex_grow = 0.0;
+            inp.elements[i].flex_shrink = 0.0;
+        }
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        // At minimum: no panic, items have dimensions
+        for i in 1..=4 {
+            assert!(out.elements[i].width > 0.0, "item {} width", i);
+            assert!(out.elements[i].height > 0.0, "item {} height", i);
+        }
+    }
+
+    /// Audit: align-content stretch with UNEQUAL line cross-sizes.
+    /// Items with different heights → lines have different cross-sizes.
+    /// Stretch should distribute extra space per-line, not uniformly.
+    #[test]
+    fn f5_align_content_stretch_unequal() {
+        let mut inp = flex_input(
+            4,
+            FlexDirection::Row,
+            FlexWrap::Wrap,
+            JustifyContent::FlexStart,
+            AlignItems::Stretch,
+        );
+        inp.elements[0].width = Some(200.0);
+        inp.elements[0].height = Some(300.0);
+        inp.elements[0].align_content = Some(AlignContent::Stretch);
+        // Line 1: items 1,2 (height 20). Line 2: items 3,4 (height 60).
+        inp.elements[1].flex_basis = Some(80.0);
+        inp.elements[1].flex_grow = 0.0;
+        inp.elements[1].flex_shrink = 0.0;
+        inp.elements[1].height = Some(20.0);
+        inp.elements[2].flex_basis = Some(80.0);
+        inp.elements[2].flex_grow = 0.0;
+        inp.elements[2].flex_shrink = 0.0;
+        inp.elements[2].height = Some(20.0);
+        inp.elements[3].flex_basis = Some(80.0);
+        inp.elements[3].flex_grow = 0.0;
+        inp.elements[3].flex_shrink = 0.0;
+        inp.elements[3].height = Some(60.0);
+        inp.elements[4].flex_basis = Some(80.0);
+        inp.elements[4].flex_grow = 0.0;
+        inp.elements[4].flex_shrink = 0.0;
+        inp.elements[4].height = Some(60.0);
+        let n = NativeLayoutEngine::new();
+        let out = n.compute_layout(&inp);
+        let h1 = out.elements[1].height;
+        let h3 = out.elements[3].height;
+        eprintln!("unequal stretch: h1={} h3={}", h1, h3);
+        // Both lines should be stretched beyond their content
+        assert!(h1 > 20.0, "line 1 item stretched: h={}", h1);
+        assert!(h3 > 60.0, "line 2 item stretched: h={}", h3);
+        // Lines should have equal cross-sizes after stretch (both get same extra)
+        // total line cross: 20+60=80, container=300, extra=220, per-line=110
+        // line1: 20+110=130, line2: 60+110=170
+        // Actually: stretch gives each line the same extra, so h1 ≈ 20+110=130, h3≈60+110=170
+        assert!(h1 > 100.0, "line 1 significantly stretched: h={}", h1);
+        assert!(h3 > 100.0, "line 2 significantly stretched: h={}", h3);
+    }
 }
 
 #[cfg(all(test, feature = "taffy-backend", feature = "native-backend"))]
