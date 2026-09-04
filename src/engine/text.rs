@@ -246,6 +246,8 @@ mod tests {
                 inset_right: 0.0,
                 inset_bottom: 0.0,
                 inset_left: 0.0,
+                row_gap: 0.0,
+                column_gap: 0.0,
             }
         }
 
@@ -390,6 +392,8 @@ mod e2_invalidation_tests {
             inset_right: 0.0,
             inset_bottom: 0.0,
             inset_left: 0.0,
+            row_gap: 0.0,
+            column_gap: 0.0,
         }
     }
 
@@ -523,6 +527,8 @@ mod e3_large_page_validation {
             inset_right: 0.0,
             inset_bottom: 0.0,
             inset_left: 0.0,
+            row_gap: 0.0,
+            column_gap: 0.0,
         }
     }
 

@@ -1808,8 +1808,8 @@ mod size_probe {
     fn styled_element_stays_slim() {
         let size = std::mem::size_of::<StyledElement>();
         assert!(
-            size <= 616,
-            "StyledElement grew to {} bytes; baseline is 616",
+            size <= 624,
+            "StyledElement grew to {} bytes; baseline is 624",
             size
         );
     }

@@ -334,6 +334,7 @@ pub struct JsBridge {
     pub(crate) timers: Vec<TimerEntry>,
     pub(crate) event_listeners: Vec<EventListenerEntry>,
     pub(crate) js_errors: Vec<String>,
+    pub(crate) element_geometry: HashMap<u32, (f32, f32, f32, f32)>,
 }
 
 impl Default for JsBridge {
@@ -361,6 +362,7 @@ impl JsBridge {
             timers: vec![],
             event_listeners: vec![],
             js_errors: vec![],
+            element_geometry: HashMap::new(),
         }
     }
 
@@ -450,6 +452,7 @@ impl JsBridge {
             timers: vec![],
             event_listeners: vec![],
             js_errors: vec![],
+            element_geometry: HashMap::new(),
         };
         bridge.body_id = bridge.find_body();
         bridge
@@ -1183,6 +1186,17 @@ impl JsBridge {
         Some(current)
     }
 
+    pub fn get_element_geometry(&self, node_id: u32) -> (f32, f32, f32, f32) {
+        self.element_geometry
+            .get(&node_id)
+            .copied()
+            .unwrap_or((0.0, 0.0, 0.0, 0.0))
+    }
+
+    pub fn set_element_geometry_map(&mut self, map: HashMap<u32, (f32, f32, f32, f32)>) {
+        self.element_geometry = map;
+    }
+
     fn find_node_by_tag_position(&self, tag: &str, _x: f32, _y: f32) -> u32 {
         if let Some(body) = self.body_id {
             let candidates = self.query_selector_all(body, tag);
@@ -1289,12 +1303,13 @@ const SHIM_JS: &str = r#"
                 __dom_setInnerHTML(id, String(val));
             },
             getBoundingClientRect: function() {
-                var rect = __dom_getBoundingClientRect(id);
+                var p = __dom_getBoundingClientRect(id).split(' ');
+                var x = parseFloat(p[0]) || 0, y = parseFloat(p[1]) || 0;
+                var w = parseFloat(p[2]) || 0, h = parseFloat(p[3]) || 0;
                 return {
-                    x: rect.x, y: rect.y,
-                    width: rect.width, height: rect.height,
-                    top: rect.y, left: rect.x,
-                    right: rect.x + rect.width, bottom: rect.y + rect.height
+                    x: x, y: y, width: w, height: h,
+                    top: y, left: x,
+                    right: x + w, bottom: y + h
                 };
             },
             get children() {
@@ -2457,6 +2472,21 @@ pub fn register_browser_api(
         globals.set("__reportError", fn_report)?;
     }
 
+    // ── getBoundingClientRect ────────────────────────────────────────
+    {
+        let b1 = Arc::clone(bridge);
+        let fn_gbr = Function::new(ctx.clone(), move |node_id: i32| -> String {
+            let (x, y, w, h) = if let Ok(b) = b1.lock() {
+                b.get_element_geometry(node_id as u32)
+            } else {
+                (0.0, 0.0, 0.0, 0.0)
+            };
+            format!("{} {} {} {}", x, y, w, h)
+        })?;
+        fn_gbr.set_name("__dom_getBoundingClientRect")?;
+        globals.set("__dom_getBoundingClientRect", fn_gbr)?;
+    }
+
     // ── Inject JS shim ──────────────────────────────────────────────
     if let Err(e) = ctx.eval::<(), _>(SHIM_JS) {
         plog!("JS", "SHIM_JS eval failed: {:?}", e);
@@ -2471,4 +2501,50 @@ pub fn register_browser_api(
 
     // ponytail: __vault_savePassword removed — would need encrypted storage, add when login forms are supported
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_element_geometry_defaults_to_zero() {
+        let bridge = JsBridge::new();
+        assert_eq!(bridge.get_element_geometry(999), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn get_element_geometry_returns_set_values() {
+        let mut bridge = JsBridge::new();
+        let mut map = HashMap::new();
+        map.insert(5, (10.0, 20.0, 100.0, 50.0));
+        bridge.set_element_geometry_map(map);
+        assert_eq!(bridge.get_element_geometry(5), (10.0, 20.0, 100.0, 50.0));
+        assert_eq!(bridge.get_element_geometry(6), (0.0, 0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn get_element_geometry_after_find_node_by_path() {
+        let mut bridge = JsBridge::new();
+        let root = bridge.create_element("div");
+        let child = bridge.create_element("span");
+        bridge.append_child(root, child);
+        let path = vec![0usize];
+        let node_id = bridge.find_node_by_path(&path).unwrap();
+        let mut map = HashMap::new();
+        map.insert(node_id, (5.0, 10.0, 200.0, 40.0));
+        bridge.set_element_geometry_map(map);
+        assert_eq!(
+            bridge.get_element_geometry(node_id),
+            (5.0, 10.0, 200.0, 40.0)
+        );
+    }
+
+    #[test]
+    fn get_element_geometry_does_not_panic() {
+        let bridge = JsBridge::new();
+        for id in 0..100 {
+            let _ = bridge.get_element_geometry(id);
+        }
+    }
 }

@@ -1292,6 +1292,17 @@ fn do_fetch_page_content_sync(
     apply_taffy_layout(&mut elements, 800.0, 600.0);
     plog!("CAELUM", "Layout computed for {} elements", elements.len());
 
+    {
+        let mut guard = bridge.lock().unwrap_or_else(|e| e.into_inner());
+        let mut geo = HashMap::new();
+        for el in elements.iter() {
+            if let Some(node_id) = guard.find_node_by_path(&el.dom_path) {
+                geo.insert(node_id, (el.x, el.y, el.width, el.height));
+            }
+        }
+        guard.set_element_geometry_map(geo);
+    }
+
     plog!("FINAL", "Done. URL={} elements={}", url, elements.len());
 
     (url, elements, Some(bridge))
@@ -1602,6 +1613,8 @@ mod b3_history_tests {
             inset_right: 0.0,
             inset_bottom: 0.0,
             inset_left: 0.0,
+            row_gap: 0.0,
+            column_gap: 0.0,
         };
 
         let mut elements = vec![
